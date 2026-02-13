@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { useAppStore } from "@/components/store-provider";
+import { patterns } from "@/data";
 import {
   Brain,
   Library,
@@ -17,21 +17,11 @@ import {
   ArrowRight,
 } from "lucide-react";
 
+const totalPatterns = patterns.length;
+const totalChecklist = patterns.length * 16;
+
 export default function DashboardPage() {
   const { getStats, loaded } = useAppStore();
-  const [totalPatterns, setTotalPatterns] = useState(0);
-  const [totalChecklist, setTotalChecklist] = useState(0);
-
-  // Fetch total counts from server (read-only data)
-  useEffect(() => {
-    fetch("/api/patterns")
-      .then((r) => r.json())
-      .then((patterns) => setTotalPatterns(patterns.length));
-    // Count total checklist templates from the first pattern to estimate
-    fetch("/api/patterns")
-      .then((r) => r.json())
-      .then((patterns) => setTotalChecklist(patterns.length * 16));
-  }, []);
 
   if (!loaded) {
     return (

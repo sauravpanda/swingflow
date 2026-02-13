@@ -1,0 +1,62 @@
+[
+  {
+    "id": "cmlhlds2h001sg3kadmf9l91w",
+    "name": "Body Roll Anchor",
+    "slug": "body-roll-anchor",
+    "description": "Replace the triple step with a body roll that flows from chest to hips. Dramatic and sensual styling.",
+    "execution": "[\"Beat 5: Initiate roll from chest\",\"Beat &: Roll passes through torso\",\"Beat 6: Complete roll through hips, grounding into the floor\",\"Keep feet planted — the movement is in the body\",\"Arms maintain connection while body rolls\",\"Don't force it — it should flow naturally\"]",
+    "musicality": "Perfect for slow, sultry music. R&B, blues, or any music with a strong groove. Use on dramatic moments.",
+    "difficulty": "advanced",
+    "imageUrl": null
+  },
+  {
+    "id": "cmlhlds2i001tg3ka8lj0hzvq",
+    "name": "Musical Anchor",
+    "slug": "musical-anchor",
+    "description": "Freestyle anchor that responds directly to what you hear in the music. No fixed footwork — pure interpretation.",
+    "execution": "[\"Listen to the music — what does it call for?\",\"Match your movement to the specific sounds you hear\",\"Could be a hit, a slide, a pause, a roll — anything\",\"Maintain connection and stretch with partner\",\"Stay grounded — don't lose the anchor function\",\"The goal is to make the music visible through your body\"]",
+    "musicality": "For any music — this is about listening and responding. Best used when you really know a song or feel a strong musical impulse.",
+    "difficulty": "advanced",
+    "imageUrl": null
+  },
+  {
+    "id": "cmlhlds2e001pg3kacio5qdfm",
+    "name": "Sailing Anchor",
+    "slug": "sailing-anchor",
+    "description": "Smooth, elongated anchor that glides through the beats. Like sailing through water — no sharp stops.",
+    "execution": "[\"Beat 5: Begin long step back with smooth transfer\",\"Beat &: Glide through — no sharp step, just flow\",\"Beat 6: Complete the smooth weight transfer\",\"Everything is legato — connected and flowing\",\"Think of pulling taffy — slow, smooth, continuous\"]",
+    "musicality": "Perfect for slow, smooth songs. R&B, ballads, or any music with sustained notes and long phrases.",
+    "difficulty": "intermediate",
+    "imageUrl": null
+  },
+  {
+    "id": "cmlhlds2d001og3ka61tsf64b",
+    "name": "Standard Anchor",
+    "slug": "standard-anchor",
+    "description": "The fundamental anchor step. Triple step in place with stretch and compression creating an elastic connection with your partner.",
+    "execution": "[\"Beat 5: Step back with right foot (follower) or left foot (leader), creating stretch\",\"Beat &: Close with opposite foot\",\"Beat 6: Step in place, settling into the connection\",\"Maintain resistance — don't collapse toward partner\",\"Arms should have tone but not rigidity\"]",
+    "musicality": "Use for everything — it's the default. Works with any tempo or mood. The bread and butter of WCS.",
+    "difficulty": "beginner",
+    "imageUrl": null
+  },
+  {
+    "id": "cmlhlds2e001qg3ka5o4mvq65",
+    "name": "Stutter Anchor",
+    "slug": "stutter-anchor",
+    "description": "Quick, choppy anchor with extra steps squeezed in. Adds rhythmic interest and energy to the end of a pattern.",
+    "execution": "[\"Beat 5: Quick step back\",\"Beat &: Quick step (extra stutter)\",\"Beat a: Another quick step (the stutter)\",\"Beat 6: Final step — grounding\",\"Keep it small — the extra steps are in place, not traveling\",\"Stay grounded — the energy is rhythmic, not vertical\"]",
+    "musicality": "Best for uptempo songs with lots of rhythmic detail. Funk, pop, or when the music has staccato elements.",
+    "difficulty": "intermediate",
+    "imageUrl": null
+  },
+  {
+    "id": "cmlhlds2f001rg3kak3ata794",
+    "name": "Syncopated Anchor",
+    "slug": "syncopated-anchor",
+    "description": "Plays with off-beat timing for the anchor steps. Creates rhythmic tension that resolves satisfyingly.",
+    "execution": "[\"Break the standard timing — delay or anticipate steps\",\"Beat 5: Hold or delay the first step\",\"Beat &: Sharp step on the off-beat\",\"Beat 6: Resolve into the ground\",\"The key is intentional timing shifts, not being late\",\"Must be musical — the syncopation should match the music\"]",
+    "musicality": "For music with syncopated rhythms, jazz elements, or when you hear something interesting in the off-beats.",
+    "difficulty": "advanced",
+    "imageUrl": null
+  }
+]

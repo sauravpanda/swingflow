@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
+import { useState, useMemo } from "react";
 import Link from "next/link";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -8,16 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { DifficultyBadge } from "@/components/difficulty-badge";
 import { CategoryBadge } from "@/components/category-badge";
 import { Search, Music } from "lucide-react";
-
-type Pattern = {
-  id: string;
-  name: string;
-  slug: string;
-  beats: number;
-  difficulty: string;
-  category: string;
-  description: string;
-};
+import { patterns } from "@/data";
 
 const difficulties = ["all", "beginner", "intermediate", "advanced"];
 const categories = [
@@ -41,20 +32,9 @@ const categoryLabels: Record<string, string> = {
 };
 
 export default function PatternsPage() {
-  const [patterns, setPatterns] = useState<Pattern[]>([]);
   const [search, setSearch] = useState("");
   const [difficulty, setDifficulty] = useState("all");
   const [category, setCategory] = useState("all");
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    fetch("/api/patterns")
-      .then((r) => r.json())
-      .then((data) => {
-        setPatterns(data);
-        setLoading(false);
-      });
-  }, []);
 
   const filtered = useMemo(() => {
     return patterns.filter((p) => {
@@ -68,17 +48,7 @@ export default function PatternsPage() {
         return false;
       return true;
     });
-  }, [patterns, search, difficulty, category]);
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-pulse text-muted-foreground">
-          Loading patterns...
-        </div>
-      </div>
-    );
-  }
+  }, [search, difficulty, category]);
 
   return (
     <div className="space-y-6">

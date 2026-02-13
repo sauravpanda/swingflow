@@ -8,18 +8,7 @@ import { CategoryBadge } from "@/components/category-badge";
 import { useAppStore } from "@/components/store-provider";
 import { sm2 } from "@/lib/sm2";
 import { Brain, RotateCcw, Check, Music, ArrowRight } from "lucide-react";
-
-type Pattern = {
-  id: string;
-  name: string;
-  slug: string;
-  beats: number;
-  difficulty: string;
-  category: string;
-  description: string;
-  mechanics: string;
-  commonMistakes: string;
-};
+import { patterns, type Pattern } from "@/data";
 
 type DueReview = {
   patternId: string;
@@ -67,31 +56,21 @@ export default function ReviewPage() {
   const [flipped, setFlipped] = useState(false);
   const [completed, setCompleted] = useState(0);
   const [sessionComplete, setSessionComplete] = useState(false);
-  const [loading, setLoading] = useState(true);
 
-  // Load due reviews and fetch their pattern data
+  // Load due reviews and match with pattern data
   useEffect(() => {
     if (!loaded) return;
     const due = getDueReviews();
-    if (due.length === 0) {
-      setLoading(false);
-      return;
-    }
+    if (due.length === 0) return;
 
-    // Fetch all patterns at once and match
-    fetch("/api/patterns")
-      .then((r) => r.json())
-      .then((patterns: Pattern[]) => {
-        const patternMap = new Map(patterns.map((p) => [p.id, p]));
-        const withPatterns = due
-          .map((r) => ({
-            ...r,
-            pattern: patternMap.get(r.patternId) ?? null,
-          }))
-          .filter((r) => r.pattern !== null);
-        setReviews(withPatterns);
-        setLoading(false);
-      });
+    const patternMap = new Map(patterns.map((p) => [p.id, p]));
+    const withPatterns = due
+      .map((r) => ({
+        ...r,
+        pattern: patternMap.get(r.patternId) ?? null,
+      }))
+      .filter((r) => r.pattern !== null);
+    setReviews(withPatterns);
   }, [loaded, getDueReviews]);
 
   const handleRate = useCallback(
@@ -120,7 +99,7 @@ export default function ReviewPage() {
     [reviews, currentIndex, submitReview]
   );
 
-  if (loading) {
+  if (!loaded) {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="animate-pulse text-muted-foreground">
