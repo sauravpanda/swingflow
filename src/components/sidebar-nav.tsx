@@ -8,6 +8,7 @@ import {
   Anchor,
   Brain,
   Timer,
+  Music,
   Settings,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -18,6 +19,7 @@ const navItems = [
   { href: "/anchors", label: "Anchors", icon: Anchor },
   { href: "/review", label: "Review", icon: Brain },
   { href: "/practice", label: "Practice", icon: Timer },
+  { href: "/rhythm", label: "Rhythm", icon: Music },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 
