@@ -15,6 +15,7 @@ type TapAreaProps = {
   accuracyPercent: number;
   targetSubdivision?: SubdivisionIndex | null;
   onTargetHit?: (result: TapResult) => void;
+  challengeLabel?: string;
 };
 
 export function TapArea({
@@ -23,6 +24,7 @@ export function TapArea({
   accuracyPercent,
   targetSubdivision,
   onTargetHit,
+  challengeLabel,
 }: TapAreaProps) {
   const handleTap = useCallback(() => {
     const result = onTap();
@@ -46,10 +48,23 @@ export function TapArea({
   const lastResult = results[0];
   const recentTaps = results.slice(0, 10);
 
+  const formatSignedDelta = (result: TapResult) => {
+    const ms = Math.abs(result.signedDeltaMs).toFixed(0);
+    if (result.signedDeltaMs < -1) return `-${ms}ms (early)`;
+    if (result.signedDeltaMs > 1) return `+${ms}ms (late)`;
+    return `${ms}ms`;
+  };
+
   return (
     <div className="space-y-3">
-      {/* Target indicator for challenge mode */}
-      {targetSubdivision != null && (
+      {/* Challenge label or target indicator */}
+      {challengeLabel ? (
+        <div className="text-center">
+          <span className="text-lg font-bold text-primary">
+            {challengeLabel}
+          </span>
+        </div>
+      ) : targetSubdivision != null ? (
         <div className="text-center">
           <span className="text-sm text-muted-foreground">
             Tap on the{" "}
@@ -58,7 +73,7 @@ export function TapArea({
             &ldquo;{SUBDIVISION_LABELS[targetSubdivision]}&rdquo;
           </span>
         </div>
-      )}
+      ) : null}
 
       {/* Tap target */}
       <button
@@ -86,7 +101,7 @@ export function TapArea({
               {lastResult.rating}
             </span>
             <span className="text-sm text-muted-foreground font-mono">
-              {lastResult.deltaMs.toFixed(0)}ms
+              {formatSignedDelta(lastResult)}
             </span>
           </>
         ) : (

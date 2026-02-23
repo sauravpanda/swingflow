@@ -4,9 +4,11 @@ import { useState, useCallback, type RefObject } from "react";
 import {
   type TapResult,
   type TapRating,
+  type TimingDot,
   TAP_THRESHOLD_PERFECT_MS,
   TAP_THRESHOLD_GOOD_MS,
   TAP_THRESHOLD_OK_MS,
+  HAPTIC_PATTERNS,
 } from "@/lib/rhythm-constants";
 import type { ScheduledBeat } from "@/hooks/use-metronome";
 
@@ -73,18 +75,25 @@ export function useTapTracker(
     }
 
     const deltaMs = minDelta * 1000;
+    const signedDeltaMs = (tapTime - nearestBeat.time) * 1000; // negative = early
     const rating = rateDelta(deltaMs);
 
     playFeedback(rating);
 
+    // Haptic feedback
+    if (typeof navigator !== "undefined" && navigator.vibrate) {
+      navigator.vibrate(HAPTIC_PATTERNS[rating]);
+    }
+
     const result: TapResult = {
       rating,
       deltaMs,
+      signedDeltaMs,
       subdivisionIndex: nearestBeat.subdivisionIndex,
       timestamp: tapTime,
     };
 
-    setResults((prev) => [result, ...prev].slice(0, 20));
+    setResults((prev) => [result, ...prev].slice(0, 50));
 
     return result;
   }, [audioContextRef, scheduledBeatsRef, playFeedback]);
@@ -99,6 +108,14 @@ export function useTapTracker(
     return Math.round((sum / results.length) * 100);
   }, [results]);
 
+  const getTimingDots = useCallback((): TimingDot[] => {
+    return results.map((r) => ({
+      beatIndex: Math.floor(r.subdivisionIndex / 4),
+      signedDeltaMs: r.signedDeltaMs,
+      rating: r.rating,
+    }));
+  }, [results]);
+
   const reset = useCallback(() => {
     setResults([]);
   }, []);
@@ -107,6 +124,7 @@ export function useTapTracker(
     results,
     handleTap,
     getAccuracyPercent,
+    getTimingDots,
     reset,
   };
 }

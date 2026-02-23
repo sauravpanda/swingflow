@@ -7,7 +7,9 @@ import { Slider } from "@/components/ui/slider";
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
@@ -15,7 +17,9 @@ import { Play, Square, Minus, Plus } from "lucide-react";
 import {
   type Feel,
   type AccentPattern,
+  type WCSPatternPreset,
   ACCENT_PATTERNS,
+  WCS_PATTERN_PRESETS,
   BPM_MIN,
   BPM_MAX,
 } from "@/lib/rhythm-constants";
@@ -30,7 +34,16 @@ type RhythmControlsProps = {
   onBpmChange: (bpm: number) => void;
   onFeelChange: (feel: Feel) => void;
   onAccentChange: (pattern: AccentPattern) => void;
+  selectedPattern: WCSPatternPreset | null;
+  onPatternChange: (pattern: WCSPatternPreset | null) => void;
+  phrasePosition: number;
+  isRampMode: boolean;
+  onRampModeToggle: () => void;
 };
+
+const basicPatterns = WCS_PATTERN_PRESETS.filter((p) => p.category === "basic");
+const intermediatePatterns = WCS_PATTERN_PRESETS.filter((p) => p.category === "intermediate");
+const advancedPatterns = WCS_PATTERN_PRESETS.filter((p) => p.category === "advanced");
 
 export function RhythmControls({
   isPlaying,
@@ -42,10 +55,85 @@ export function RhythmControls({
   onBpmChange,
   onFeelChange,
   onAccentChange,
+  selectedPattern,
+  onPatternChange,
+  phrasePosition,
+  isRampMode,
+  onRampModeToggle,
 }: RhythmControlsProps) {
+  const beatCount = selectedPattern?.beatCount ?? 0;
+
   return (
     <Card>
       <CardContent className="space-y-4 pt-6">
+        {/* Pattern Selector */}
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-muted-foreground shrink-0">Pattern:</span>
+          <Select
+            value={selectedPattern?.id ?? "free"}
+            onValueChange={(id) => {
+              if (id === "free") {
+                onPatternChange(null);
+              } else {
+                const p = WCS_PATTERN_PRESETS.find((pat) => pat.id === id);
+                if (p) onPatternChange(p);
+              }
+            }}
+          >
+            <SelectTrigger className="flex-1">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="free">Free Practice</SelectItem>
+              {basicPatterns.length > 0 && (
+                <SelectGroup>
+                  <SelectLabel>Basic</SelectLabel>
+                  {basicPatterns.map((p) => (
+                    <SelectItem key={p.id} value={p.id}>
+                      {p.name} ({p.beatCount}-count)
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
+              )}
+              {intermediatePatterns.length > 0 && (
+                <SelectGroup>
+                  <SelectLabel>Intermediate</SelectLabel>
+                  {intermediatePatterns.map((p) => (
+                    <SelectItem key={p.id} value={p.id}>
+                      {p.name} ({p.beatCount}-count)
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
+              )}
+              {advancedPatterns.length > 0 && (
+                <SelectGroup>
+                  <SelectLabel>Advanced</SelectLabel>
+                  {advancedPatterns.map((p) => (
+                    <SelectItem key={p.id} value={p.id}>
+                      {p.name} ({p.beatCount}-count)
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
+              )}
+            </SelectContent>
+          </Select>
+        </div>
+
+        {/* Phrase counter when pattern selected and playing */}
+        {selectedPattern && isPlaying && phrasePosition > 0 && (
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-muted-foreground">Beat</span>
+            <span className="text-lg font-mono font-bold">{phrasePosition}</span>
+            <span className="text-sm text-muted-foreground">of {beatCount}</span>
+            <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden ml-2">
+              <div
+                className="h-full bg-primary rounded-full transition-all duration-75"
+                style={{ width: `${(phrasePosition / beatCount) * 100}%` }}
+              />
+            </div>
+          </div>
+        )}
+
         {/* Play/Stop + BPM */}
         <div className="flex items-center gap-4">
           <Button
@@ -103,7 +191,7 @@ export function RhythmControls({
           </div>
         </div>
 
-        {/* Feel + Accent Pattern */}
+        {/* Feel + Accent/Ramp */}
         <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
           <div className="flex items-center gap-2">
             <span className="text-sm text-muted-foreground">Feel:</span>
@@ -121,29 +209,39 @@ export function RhythmControls({
             >
               Swung
             </Badge>
+            <Badge
+              variant={isRampMode ? "default" : "outline"}
+              className="cursor-pointer ml-1"
+              onClick={onRampModeToggle}
+            >
+              Ramp
+            </Badge>
           </div>
 
-          <div className="flex items-center gap-2 sm:ml-auto">
-            <span className="text-sm text-muted-foreground">Accents:</span>
-            <Select
-              value={accentPattern.label}
-              onValueChange={(label) => {
-                const pattern = ACCENT_PATTERNS.find((p) => p.label === label);
-                if (pattern) onAccentChange(pattern);
-              }}
-            >
-              <SelectTrigger className="w-[130px]">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {ACCENT_PATTERNS.map((p) => (
-                  <SelectItem key={p.label} value={p.label}>
-                    {p.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+          {/* Only show accent dropdown when no pattern is selected */}
+          {!selectedPattern && (
+            <div className="flex items-center gap-2 sm:ml-auto">
+              <span className="text-sm text-muted-foreground">Accents:</span>
+              <Select
+                value={accentPattern.label}
+                onValueChange={(label) => {
+                  const pattern = ACCENT_PATTERNS.find((p) => p.label === label);
+                  if (pattern) onAccentChange(pattern);
+                }}
+              >
+                <SelectTrigger className="w-[130px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {ACCENT_PATTERNS.map((p) => (
+                    <SelectItem key={p.label} value={p.label}>
+                      {p.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
         </div>
       </CardContent>
     </Card>

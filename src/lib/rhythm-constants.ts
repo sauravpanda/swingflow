@@ -7,6 +7,7 @@ export type TapRating = "perfect" | "good" | "ok" | "miss";
 export type TapResult = {
   rating: TapRating;
   deltaMs: number;
+  signedDeltaMs: number;
   subdivisionIndex: number;
   timestamp: number;
 };
@@ -16,6 +17,60 @@ export type SubdivisionIndex = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7;
 export type AccentPattern = {
   label: string;
   beats: boolean[];
+};
+
+// --- WCS Pattern Types ---
+
+export type StepType = "walk" | "triple" | "anchor";
+
+export type PatternStep = {
+  beat: number;
+  type: StepType;
+  label: string;
+};
+
+export type WCSPatternPreset = {
+  id: string;
+  name: string;
+  category: "basic" | "intermediate" | "advanced";
+  beatCount: 6 | 8;
+  totalSubdivisions: number;
+  steps: PatternStep[];
+  accentBeats: boolean[];
+  stepLabels: string[];
+};
+
+export type ChallengeType = "tap-walks" | "tap-triples" | "tap-anchors" | "cycle-pattern" | "random-subdivision";
+
+export type RhythmSession = {
+  id: string;
+  patternId: string | null;
+  bpm: number;
+  feel: Feel;
+  totalTaps: number;
+  results: TapResult[];
+  accuracy: number;
+  timestamp: number;
+};
+
+export type SubdivisionAccuracy = {
+  subdivisionIndex: number;
+  totalTaps: number;
+  hits: number;
+  accuracy: number;
+};
+
+export type TempoRampConfig = {
+  startBpm: number;
+  incrementBpm: number;
+  intervalSeconds: number;
+  maxMisses: number;
+};
+
+export type TimingDot = {
+  beatIndex: number;
+  signedDeltaMs: number;
+  rating: TapRating;
 };
 
 // --- Constants ---
@@ -68,4 +123,189 @@ export const RATING_COLORS: Record<TapRating, string> = {
   good: "text-blue-400",
   ok: "text-yellow-400",
   miss: "text-red-400",
+};
+
+// --- Helpers ---
+
+export function getSubdivisionLabelsForBeatCount(n: number): string[] {
+  const labels: string[] = [];
+  for (let beat = 1; beat <= n; beat++) {
+    labels.push(String(beat), "e", "&", "a");
+  }
+  return labels;
+}
+
+export function buildAccentArray(length: number, activeIndices: number[]): boolean[] {
+  const arr = new Array(length).fill(false);
+  for (const idx of activeIndices) {
+    if (idx >= 0 && idx < length) arr[idx] = true;
+  }
+  return arr;
+}
+
+// --- WCS Pattern Presets ---
+
+const SIX_COUNT_STEPS_SUGAR_PUSH: PatternStep[] = [
+  { beat: 1, type: "walk", label: "Walk" },
+  { beat: 2, type: "walk", label: "Walk" },
+  { beat: 3, type: "triple", label: "Triple" },
+  { beat: 4, type: "triple", label: "Triple" },
+  { beat: 5, type: "anchor", label: "Anchor" },
+  { beat: 6, type: "anchor", label: "Anchor" },
+];
+
+const EIGHT_COUNT_STEPS_WHIP: PatternStep[] = [
+  { beat: 1, type: "walk", label: "Walk" },
+  { beat: 2, type: "walk", label: "Walk" },
+  { beat: 3, type: "triple", label: "Triple" },
+  { beat: 4, type: "triple", label: "Triple" },
+  { beat: 5, type: "walk", label: "Walk" },
+  { beat: 6, type: "walk", label: "Walk" },
+  { beat: 7, type: "anchor", label: "Anchor" },
+  { beat: 8, type: "anchor", label: "Anchor" },
+];
+
+export const WCS_PATTERN_PRESETS: WCSPatternPreset[] = [
+  {
+    id: "sugar-push",
+    name: "Sugar Push",
+    category: "basic",
+    beatCount: 6,
+    totalSubdivisions: 24,
+    steps: SIX_COUNT_STEPS_SUGAR_PUSH,
+    accentBeats: buildAccentArray(24, [0, 4, 8, 10, 16, 18]),
+    stepLabels: ["Walk", "Walk", "Triple", "Triple", "Anchor", "Anchor"],
+  },
+  {
+    id: "left-side-pass",
+    name: "Left Side Pass",
+    category: "basic",
+    beatCount: 6,
+    totalSubdivisions: 24,
+    steps: SIX_COUNT_STEPS_SUGAR_PUSH,
+    accentBeats: buildAccentArray(24, [0, 4, 8, 10, 16, 18]),
+    stepLabels: ["Walk", "Walk", "Triple", "Triple", "Anchor", "Anchor"],
+  },
+  {
+    id: "right-side-pass",
+    name: "Right Side Pass",
+    category: "basic",
+    beatCount: 6,
+    totalSubdivisions: 24,
+    steps: SIX_COUNT_STEPS_SUGAR_PUSH,
+    accentBeats: buildAccentArray(24, [0, 4, 8, 10, 16, 18]),
+    stepLabels: ["Walk", "Walk", "Triple", "Triple", "Anchor", "Anchor"],
+  },
+  {
+    id: "push-break",
+    name: "Push Break",
+    category: "basic",
+    beatCount: 6,
+    totalSubdivisions: 24,
+    steps: SIX_COUNT_STEPS_SUGAR_PUSH,
+    accentBeats: buildAccentArray(24, [0, 4, 8, 10, 16, 18]),
+    stepLabels: ["Walk", "Walk", "Triple", "Triple", "Anchor", "Anchor"],
+  },
+  {
+    id: "starter-step",
+    name: "Starter Step",
+    category: "basic",
+    beatCount: 6,
+    totalSubdivisions: 24,
+    steps: SIX_COUNT_STEPS_SUGAR_PUSH,
+    accentBeats: buildAccentArray(24, [0, 4, 8, 10, 16, 18]),
+    stepLabels: ["Walk", "Walk", "Triple", "Triple", "Anchor", "Anchor"],
+  },
+  {
+    id: "change-of-places",
+    name: "Change of Places",
+    category: "intermediate",
+    beatCount: 6,
+    totalSubdivisions: 24,
+    steps: SIX_COUNT_STEPS_SUGAR_PUSH,
+    accentBeats: buildAccentArray(24, [0, 4, 8, 10, 16, 18]),
+    stepLabels: ["Walk", "Walk", "Triple", "Triple", "Anchor", "Anchor"],
+  },
+  {
+    id: "tuck-turn",
+    name: "Tuck Turn",
+    category: "intermediate",
+    beatCount: 6,
+    totalSubdivisions: 24,
+    steps: SIX_COUNT_STEPS_SUGAR_PUSH,
+    accentBeats: buildAccentArray(24, [0, 4, 8, 10, 16, 18]),
+    stepLabels: ["Walk", "Walk", "Triple", "Triple", "Anchor", "Anchor"],
+  },
+  {
+    id: "underarm-pass",
+    name: "Underarm Pass",
+    category: "intermediate",
+    beatCount: 8,
+    totalSubdivisions: 32,
+    steps: EIGHT_COUNT_STEPS_WHIP,
+    accentBeats: buildAccentArray(32, [0, 4, 8, 10, 16, 20, 24, 26]),
+    stepLabels: ["Walk", "Walk", "Triple", "Triple", "Walk", "Walk", "Anchor", "Anchor"],
+  },
+  {
+    id: "basic-whip",
+    name: "Basic Whip",
+    category: "intermediate",
+    beatCount: 8,
+    totalSubdivisions: 32,
+    steps: EIGHT_COUNT_STEPS_WHIP,
+    accentBeats: buildAccentArray(32, [0, 4, 8, 10, 16, 20, 24, 26]),
+    stepLabels: ["Walk", "Walk", "Triple", "Triple", "Walk", "Walk", "Anchor", "Anchor"],
+  },
+  {
+    id: "reverse-whip",
+    name: "Reverse Whip",
+    category: "advanced",
+    beatCount: 8,
+    totalSubdivisions: 32,
+    steps: EIGHT_COUNT_STEPS_WHIP,
+    accentBeats: buildAccentArray(32, [0, 4, 8, 10, 16, 20, 24, 26]),
+    stepLabels: ["Walk", "Walk", "Triple", "Triple", "Walk", "Walk", "Anchor", "Anchor"],
+  },
+];
+
+// --- Challenge Types ---
+
+export const CHALLENGE_TYPES: { id: ChallengeType; label: string; description: string }[] = [
+  { id: "tap-walks", label: "Tap Walks", description: "Tap on the walk steps" },
+  { id: "tap-triples", label: "Tap Triples", description: "Tap on the triple steps" },
+  { id: "tap-anchors", label: "Tap Anchors", description: "Tap on the anchor steps" },
+  { id: "cycle-pattern", label: "Cycle Pattern", description: "Tap through the full pattern" },
+  { id: "random-subdivision", label: "Random Subdivision", description: "Tap the highlighted subdivision" },
+];
+
+// --- Haptic Feedback Patterns ---
+
+export const HAPTIC_PATTERNS: Record<TapRating, number[]> = {
+  perfect: [10],
+  good: [15, 10],
+  ok: [20, 10, 20],
+  miss: [50, 30, 50],
+};
+
+// --- Tempo Ramp Defaults ---
+
+export const TEMPO_RAMP_DEFAULTS: TempoRampConfig = {
+  startBpm: 80,
+  incrementBpm: 5,
+  intervalSeconds: 30,
+  maxMisses: 3,
+};
+
+// --- Step Type Colors ---
+
+export const STEP_TYPE_COLORS: Record<StepType, string> = {
+  walk: "bg-blue-500",
+  triple: "bg-green-500",
+  anchor: "bg-orange-500",
+};
+
+export const STEP_TYPE_TEXT_COLORS: Record<StepType, string> = {
+  walk: "text-blue-500",
+  triple: "text-green-500",
+  anchor: "text-orange-500",
 };

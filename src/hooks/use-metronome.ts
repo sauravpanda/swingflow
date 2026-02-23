@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import {
   type Feel,
   type AccentPattern,
@@ -21,6 +21,7 @@ export function useMetronome() {
   const [feel, setFeel] = useState<Feel>("straight");
   const [accentPattern, setAccentPattern] = useState<AccentPattern>(ACCENT_PATTERNS[0]);
   const [currentSubdivision, setCurrentSubdivision] = useState(-1);
+  const [totalSubdivisions, setTotalSubdivisions] = useState(8);
 
   const audioContextRef = useRef<AudioContext | null>(null);
   const schedulerTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -33,10 +34,18 @@ export function useMetronome() {
   const bpmRef = useRef(bpm);
   const feelRef = useRef(feel);
   const accentPatternRef = useRef(accentPattern);
+  const totalSubdivisionsRef = useRef(totalSubdivisions);
 
   useEffect(() => { bpmRef.current = bpm; }, [bpm]);
   useEffect(() => { feelRef.current = feel; }, [feel]);
   useEffect(() => { accentPatternRef.current = accentPattern; }, [accentPattern]);
+  useEffect(() => { totalSubdivisionsRef.current = totalSubdivisions; }, [totalSubdivisions]);
+
+  // Derive phrase position (1-based beat number)
+  const phrasePosition = useMemo(() => {
+    if (currentSubdivision < 0) return 0;
+    return Math.floor(currentSubdivision / 4) + 1;
+  }, [currentSubdivision]);
 
   const getSubdivisionDuration = useCallback((index: number) => {
     const sixteenthBase = 60 / (bpmRef.current * 4); // duration of one 16th note in seconds
@@ -59,7 +68,8 @@ export function useMetronome() {
     const isAccented = accentPatternRef.current.beats[subdivisionIndex];
     if (!isAccented) return; // Don't play non-accented beats
 
-    const isDownbeat = subdivisionIndex === 0 || subdivisionIndex === 4;
+    // Downbeat = first subdivision of any beat (every 4th subdivision)
+    const isDownbeat = subdivisionIndex % 4 === 0;
     const frequency = isDownbeat ? 1000 : 880;
     const gain = isDownbeat ? 0.5 : 0.3;
 
@@ -95,15 +105,15 @@ export function useMetronome() {
         time: nextNoteTimeRef.current,
         subdivisionIndex: subIndex,
       });
-      // Keep only last 16 beats
-      if (scheduledBeatsRef.current.length > 16) {
+      // Keep only last 64 beats (enough for 8-count patterns)
+      if (scheduledBeatsRef.current.length > 64) {
         scheduledBeatsRef.current.shift();
       }
 
       // Advance to next subdivision
       const duration = getSubdivisionDuration(subIndex);
       nextNoteTimeRef.current += duration;
-      currentSubRef.current = (subIndex + 1) % 8;
+      currentSubRef.current = (subIndex + 1) % totalSubdivisionsRef.current;
     }
   }, [scheduleClick, getSubdivisionDuration]);
 
@@ -177,6 +187,9 @@ export function useMetronome() {
     accentPattern,
     setAccentPattern,
     currentSubdivision,
+    totalSubdivisions,
+    setTotalSubdivisions,
+    phrasePosition,
     start,
     stop,
     audioContextRef,
