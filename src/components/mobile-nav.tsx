@@ -7,7 +7,7 @@ import {
   Library,
   Brain,
   Timer,
-  MoreHorizontal,
+  Music,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -16,7 +16,7 @@ const mobileNavItems = [
   { href: "/patterns", label: "Patterns", icon: Library },
   { href: "/review", label: "Review", icon: Brain },
   { href: "/practice", label: "Practice", icon: Timer },
-  { href: "/settings", label: "More", icon: MoreHorizontal },
+  { href: "/rhythm", label: "Rhythm", icon: Music },
 ];
 
 export function MobileNav() {
