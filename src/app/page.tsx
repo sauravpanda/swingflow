@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { Brain, Library, Timer, CheckCircle2 } from "lucide-react";
+import { Brain, Library, Timer, CheckCircle2, Github } from "lucide-react";
 
 export default function HomePage() {
   return (
@@ -15,9 +15,19 @@ export default function HomePage() {
             </div>
             <span className="text-lg font-semibold">SwingFlow</span>
           </div>
-          <Button asChild>
-            <Link href="/dashboard">Open App</Link>
-          </Button>
+          <div className="flex items-center gap-2">
+            <a
+              href="https://github.com/sauravpanda/swingflow"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center justify-center h-9 w-9 rounded-md border border-border hover:bg-accent transition-colors"
+            >
+              <Github className="h-4 w-4" />
+            </a>
+            <Button asChild>
+              <Link href="/dashboard">Open App</Link>
+            </Button>
+          </div>
         </div>
       </header>
 
@@ -101,7 +111,15 @@ export default function HomePage() {
 
       <footer className="border-t border-border py-8">
         <div className="container mx-auto px-4 text-center text-sm text-muted-foreground">
-          SwingFlow — Your West Coast Swing companion
+          Created by{" "}
+          <a
+            href="https://github.com/sauravpanda"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline hover:text-foreground transition-colors"
+          >
+            Saurav Panda
+          </a>
         </div>
       </footer>
     </div>

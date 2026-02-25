@@ -16,7 +16,7 @@ export default function AppLayout({
         <footer className="py-4 pb-20 md:pb-4 text-center text-xs text-muted-foreground">
           Created by{" "}
           <a
-            href="https://sauravpanda.com"
+            href="https://github.com/sauravpanda"
             target="_blank"
             rel="noopener noreferrer"
             className="underline hover:text-foreground transition-colors"
