@@ -40,27 +40,20 @@ function getTargetForChallenge(
 ): SubdivisionIndex | null {
   if (!pattern) return getRandomSubdivision(totalSubs);
 
-  const stepBeats: number[] = [];
-  for (let i = 0; i < pattern.steps.length; i++) {
-    const step = pattern.steps[i];
+  const targetSubs: number[] = [];
+  for (const ev of pattern.stepEvents) {
     if (
-      (challengeType === "tap-walks" && step.type === "walk") ||
-      (challengeType === "tap-triples" && step.type === "triple") ||
-      (challengeType === "tap-anchors" && step.type === "anchor")
+      (challengeType === "tap-walks" && ev.type === "walk") ||
+      (challengeType === "tap-triples" && ev.type === "triple") ||
+      (challengeType === "tap-anchors" && ev.type === "anchor") ||
+      challengeType === "cycle-pattern"
     ) {
-      stepBeats.push(i * 4); // downbeat of that beat
+      targetSubs.push(ev.subdivisionIndex);
     }
   }
 
-  if (challengeType === "cycle-pattern") {
-    // Target all downbeats
-    for (let i = 0; i < pattern.beatCount; i++) {
-      stepBeats.push(i * 4);
-    }
-  }
-
-  if (stepBeats.length === 0) return getRandomSubdivision(totalSubs);
-  return stepBeats[Math.floor(Math.random() * stepBeats.length)] as SubdivisionIndex;
+  if (targetSubs.length === 0) return getRandomSubdivision(totalSubs);
+  return targetSubs[Math.floor(Math.random() * targetSubs.length)] as SubdivisionIndex;
 }
 
 function getChallengeLabel(
