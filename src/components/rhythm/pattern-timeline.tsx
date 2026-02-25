@@ -34,17 +34,20 @@ export function PatternTimeline({
       <CardContent className="space-y-2">
         {/* Timeline bar */}
         <div className="relative h-10 bg-muted rounded-lg overflow-hidden">
-          {/* Step blocks */}
-          {pattern.steps.map((step, i) => {
-            const startPct = (i / pattern.beatCount) * 100;
-            const widthPct = (1 / pattern.beatCount) * 100;
+          {/* Step event blocks — widths proportional to gap between consecutive events */}
+          {pattern.stepEvents.map((ev, i) => {
+            const startPct = (ev.subdivisionIndex / totalSubs) * 100;
+            const nextSub = i + 1 < pattern.stepEvents.length
+              ? pattern.stepEvents[i + 1].subdivisionIndex
+              : totalSubs;
+            const widthPct = ((nextSub - ev.subdivisionIndex) / totalSubs) * 100;
 
             return (
               <div
                 key={i}
                 className={cn(
                   "absolute top-0 bottom-0 flex items-center justify-center border-r border-background/50",
-                  STEP_TYPE_COLORS[step.type],
+                  STEP_TYPE_COLORS[ev.type],
                   "opacity-70"
                 )}
                 style={{
@@ -53,16 +56,8 @@ export function PatternTimeline({
                 }}
               >
                 <span className="text-[10px] font-medium text-white truncate px-0.5">
-                  {step.label}
+                  {ev.countLabel}
                 </span>
-                {/* Triple step dots */}
-                {step.type === "triple" && (
-                  <div className="absolute bottom-0.5 left-1/2 -translate-x-1/2 flex gap-0.5">
-                    <span className="h-1 w-1 rounded-full bg-white/60" />
-                    <span className="h-1 w-1 rounded-full bg-white/60" />
-                    <span className="h-1 w-1 rounded-full bg-white/60" />
-                  </div>
-                )}
               </div>
             );
           })}
@@ -79,11 +74,11 @@ export function PatternTimeline({
         {/* Body action labels */}
         <div
           className="grid text-center"
-          style={{ gridTemplateColumns: `repeat(${pattern.beatCount}, minmax(0, 1fr))` }}
+          style={{ gridTemplateColumns: `repeat(${pattern.stepEvents.length}, minmax(0, 1fr))` }}
         >
-          {pattern.steps.map((step, i) => (
+          {pattern.stepEvents.map((ev, i) => (
             <span key={i} className="text-[10px] text-muted-foreground truncate">
-              {BODY_ACTIONS[step.type]}
+              {BODY_ACTIONS[ev.type]}
             </span>
           ))}
         </div>

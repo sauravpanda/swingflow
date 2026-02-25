@@ -41,9 +41,8 @@ type RhythmControlsProps = {
   onRampModeToggle: () => void;
 };
 
-const basicPatterns = WCS_PATTERN_PRESETS.filter((p) => p.category === "basic");
-const intermediatePatterns = WCS_PATTERN_PRESETS.filter((p) => p.category === "intermediate");
-const advancedPatterns = WCS_PATTERN_PRESETS.filter((p) => p.category === "advanced");
+const countsPatterns = WCS_PATTERN_PRESETS.filter((p) => p.difficulty === "counts");
+const eighthsPatterns = WCS_PATTERN_PRESETS.filter((p) => p.difficulty === "eighths");
 
 export function RhythmControls({
   isPlaying,
@@ -85,30 +84,20 @@ export function RhythmControls({
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="free">Free Practice</SelectItem>
-              {basicPatterns.length > 0 && (
+              {countsPatterns.length > 0 && (
                 <SelectGroup>
-                  <SelectLabel>Basic</SelectLabel>
-                  {basicPatterns.map((p) => (
+                  <SelectLabel>Counts</SelectLabel>
+                  {countsPatterns.map((p) => (
                     <SelectItem key={p.id} value={p.id}>
                       {p.name} ({p.beatCount}-count)
                     </SelectItem>
                   ))}
                 </SelectGroup>
               )}
-              {intermediatePatterns.length > 0 && (
+              {eighthsPatterns.length > 0 && (
                 <SelectGroup>
-                  <SelectLabel>Intermediate</SelectLabel>
-                  {intermediatePatterns.map((p) => (
-                    <SelectItem key={p.id} value={p.id}>
-                      {p.name} ({p.beatCount}-count)
-                    </SelectItem>
-                  ))}
-                </SelectGroup>
-              )}
-              {advancedPatterns.length > 0 && (
-                <SelectGroup>
-                  <SelectLabel>Advanced</SelectLabel>
-                  {advancedPatterns.map((p) => (
+                  <SelectLabel>8th Notes</SelectLabel>
+                  {eighthsPatterns.map((p) => (
                     <SelectItem key={p.id} value={p.id}>
                       {p.name} ({p.beatCount}-count)
                     </SelectItem>

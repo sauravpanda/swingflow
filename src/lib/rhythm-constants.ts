@@ -23,21 +23,21 @@ export type AccentPattern = {
 
 export type StepType = "walk" | "triple" | "anchor";
 
-export type PatternStep = {
-  beat: number;
+export type StepEvent = {
+  subdivisionIndex: number;
+  countLabel: string;
   type: StepType;
-  label: string;
 };
 
 export type WCSPatternPreset = {
   id: string;
   name: string;
   category: "basic" | "intermediate" | "advanced";
+  difficulty: "counts" | "eighths";
   beatCount: 6 | 8;
   totalSubdivisions: number;
-  steps: PatternStep[];
+  stepEvents: StepEvent[];
   accentBeats: boolean[];
-  stepLabels: string[];
 };
 
 export type ChallengeType = "tap-walks" | "tap-triples" | "tap-anchors" | "cycle-pattern" | "random-subdivision";
@@ -143,128 +143,217 @@ export function buildAccentArray(length: number, activeIndices: number[]): boole
   return arr;
 }
 
+// --- WCS Step Event Helpers ---
+
+export function buildAccentFromEvents(totalSubs: number, events: StepEvent[]): boolean[] {
+  const arr = new Array(totalSubs).fill(false);
+  for (const ev of events) {
+    if (ev.subdivisionIndex >= 0 && ev.subdivisionIndex < totalSubs) {
+      arr[ev.subdivisionIndex] = true;
+    }
+  }
+  return arr;
+}
+
+// --- Shared Step-Event Arrays ---
+
+// 6-count basic: 1, 2, 3&4, 5&6 → 8 weight changes
+const SIX_COUNT_BASIC_EVENTS: StepEvent[] = [
+  { subdivisionIndex: 0,  countLabel: "1", type: "walk" },
+  { subdivisionIndex: 4,  countLabel: "2", type: "walk" },
+  { subdivisionIndex: 8,  countLabel: "3", type: "triple" },
+  { subdivisionIndex: 10, countLabel: "&", type: "triple" },
+  { subdivisionIndex: 12, countLabel: "4", type: "triple" },
+  { subdivisionIndex: 16, countLabel: "5", type: "anchor" },
+  { subdivisionIndex: 18, countLabel: "&", type: "anchor" },
+  { subdivisionIndex: 20, countLabel: "6", type: "anchor" },
+];
+
+// 6-count eighths: 1&, 2&, 3&4&, 5&6& → 12 weight changes
+const SIX_COUNT_EIGHTHS_EVENTS: StepEvent[] = [
+  { subdivisionIndex: 0,  countLabel: "1", type: "walk" },
+  { subdivisionIndex: 2,  countLabel: "&", type: "walk" },
+  { subdivisionIndex: 4,  countLabel: "2", type: "walk" },
+  { subdivisionIndex: 6,  countLabel: "&", type: "walk" },
+  { subdivisionIndex: 8,  countLabel: "3", type: "triple" },
+  { subdivisionIndex: 10, countLabel: "&", type: "triple" },
+  { subdivisionIndex: 12, countLabel: "4", type: "triple" },
+  { subdivisionIndex: 14, countLabel: "&", type: "triple" },
+  { subdivisionIndex: 16, countLabel: "5", type: "anchor" },
+  { subdivisionIndex: 18, countLabel: "&", type: "anchor" },
+  { subdivisionIndex: 20, countLabel: "6", type: "anchor" },
+  { subdivisionIndex: 22, countLabel: "&", type: "anchor" },
+];
+
+// 8-count basic: 1, 2, 3&4, 5, 6, 7&8 → 10 weight changes
+const EIGHT_COUNT_BASIC_EVENTS: StepEvent[] = [
+  { subdivisionIndex: 0,  countLabel: "1", type: "walk" },
+  { subdivisionIndex: 4,  countLabel: "2", type: "walk" },
+  { subdivisionIndex: 8,  countLabel: "3", type: "triple" },
+  { subdivisionIndex: 10, countLabel: "&", type: "triple" },
+  { subdivisionIndex: 12, countLabel: "4", type: "triple" },
+  { subdivisionIndex: 16, countLabel: "5", type: "walk" },
+  { subdivisionIndex: 20, countLabel: "6", type: "walk" },
+  { subdivisionIndex: 24, countLabel: "7", type: "anchor" },
+  { subdivisionIndex: 26, countLabel: "&", type: "anchor" },
+  { subdivisionIndex: 28, countLabel: "8", type: "anchor" },
+];
+
+// 8-count eighths: 1&, 2&, 3&4&, 5&, 6&, 7&8& → 16 weight changes
+const EIGHT_COUNT_EIGHTHS_EVENTS: StepEvent[] = [
+  { subdivisionIndex: 0,  countLabel: "1", type: "walk" },
+  { subdivisionIndex: 2,  countLabel: "&", type: "walk" },
+  { subdivisionIndex: 4,  countLabel: "2", type: "walk" },
+  { subdivisionIndex: 6,  countLabel: "&", type: "walk" },
+  { subdivisionIndex: 8,  countLabel: "3", type: "triple" },
+  { subdivisionIndex: 10, countLabel: "&", type: "triple" },
+  { subdivisionIndex: 12, countLabel: "4", type: "triple" },
+  { subdivisionIndex: 14, countLabel: "&", type: "triple" },
+  { subdivisionIndex: 16, countLabel: "5", type: "walk" },
+  { subdivisionIndex: 18, countLabel: "&", type: "walk" },
+  { subdivisionIndex: 20, countLabel: "6", type: "walk" },
+  { subdivisionIndex: 22, countLabel: "&", type: "walk" },
+  { subdivisionIndex: 24, countLabel: "7", type: "anchor" },
+  { subdivisionIndex: 26, countLabel: "&", type: "anchor" },
+  { subdivisionIndex: 28, countLabel: "8", type: "anchor" },
+  { subdivisionIndex: 30, countLabel: "&", type: "anchor" },
+];
+
 // --- WCS Pattern Presets ---
 
-const SIX_COUNT_STEPS_SUGAR_PUSH: PatternStep[] = [
-  { beat: 1, type: "walk", label: "Walk" },
-  { beat: 2, type: "walk", label: "Walk" },
-  { beat: 3, type: "triple", label: "Triple" },
-  { beat: 4, type: "triple", label: "Triple" },
-  { beat: 5, type: "anchor", label: "Anchor" },
-  { beat: 6, type: "anchor", label: "Anchor" },
-];
-
-const EIGHT_COUNT_STEPS_WHIP: PatternStep[] = [
-  { beat: 1, type: "walk", label: "Walk" },
-  { beat: 2, type: "walk", label: "Walk" },
-  { beat: 3, type: "triple", label: "Triple" },
-  { beat: 4, type: "triple", label: "Triple" },
-  { beat: 5, type: "walk", label: "Walk" },
-  { beat: 6, type: "walk", label: "Walk" },
-  { beat: 7, type: "anchor", label: "Anchor" },
-  { beat: 8, type: "anchor", label: "Anchor" },
-];
-
 export const WCS_PATTERN_PRESETS: WCSPatternPreset[] = [
+  // --- 6-count Counts ---
   {
     id: "sugar-push",
     name: "Sugar Push",
     category: "basic",
+    difficulty: "counts",
     beatCount: 6,
     totalSubdivisions: 24,
-    steps: SIX_COUNT_STEPS_SUGAR_PUSH,
-    accentBeats: buildAccentArray(24, [0, 4, 8, 10, 16, 18]),
-    stepLabels: ["Walk", "Walk", "Triple", "Triple", "Anchor", "Anchor"],
+    stepEvents: SIX_COUNT_BASIC_EVENTS,
+    accentBeats: buildAccentFromEvents(24, SIX_COUNT_BASIC_EVENTS),
   },
   {
     id: "left-side-pass",
     name: "Left Side Pass",
     category: "basic",
+    difficulty: "counts",
     beatCount: 6,
     totalSubdivisions: 24,
-    steps: SIX_COUNT_STEPS_SUGAR_PUSH,
-    accentBeats: buildAccentArray(24, [0, 4, 8, 10, 16, 18]),
-    stepLabels: ["Walk", "Walk", "Triple", "Triple", "Anchor", "Anchor"],
+    stepEvents: SIX_COUNT_BASIC_EVENTS,
+    accentBeats: buildAccentFromEvents(24, SIX_COUNT_BASIC_EVENTS),
   },
   {
     id: "right-side-pass",
     name: "Right Side Pass",
     category: "basic",
+    difficulty: "counts",
     beatCount: 6,
     totalSubdivisions: 24,
-    steps: SIX_COUNT_STEPS_SUGAR_PUSH,
-    accentBeats: buildAccentArray(24, [0, 4, 8, 10, 16, 18]),
-    stepLabels: ["Walk", "Walk", "Triple", "Triple", "Anchor", "Anchor"],
+    stepEvents: SIX_COUNT_BASIC_EVENTS,
+    accentBeats: buildAccentFromEvents(24, SIX_COUNT_BASIC_EVENTS),
   },
   {
     id: "push-break",
     name: "Push Break",
     category: "basic",
+    difficulty: "counts",
     beatCount: 6,
     totalSubdivisions: 24,
-    steps: SIX_COUNT_STEPS_SUGAR_PUSH,
-    accentBeats: buildAccentArray(24, [0, 4, 8, 10, 16, 18]),
-    stepLabels: ["Walk", "Walk", "Triple", "Triple", "Anchor", "Anchor"],
+    stepEvents: SIX_COUNT_BASIC_EVENTS,
+    accentBeats: buildAccentFromEvents(24, SIX_COUNT_BASIC_EVENTS),
   },
   {
     id: "starter-step",
     name: "Starter Step",
     category: "basic",
+    difficulty: "counts",
     beatCount: 6,
     totalSubdivisions: 24,
-    steps: SIX_COUNT_STEPS_SUGAR_PUSH,
-    accentBeats: buildAccentArray(24, [0, 4, 8, 10, 16, 18]),
-    stepLabels: ["Walk", "Walk", "Triple", "Triple", "Anchor", "Anchor"],
+    stepEvents: SIX_COUNT_BASIC_EVENTS,
+    accentBeats: buildAccentFromEvents(24, SIX_COUNT_BASIC_EVENTS),
   },
   {
     id: "change-of-places",
     name: "Change of Places",
     category: "intermediate",
+    difficulty: "counts",
     beatCount: 6,
     totalSubdivisions: 24,
-    steps: SIX_COUNT_STEPS_SUGAR_PUSH,
-    accentBeats: buildAccentArray(24, [0, 4, 8, 10, 16, 18]),
-    stepLabels: ["Walk", "Walk", "Triple", "Triple", "Anchor", "Anchor"],
+    stepEvents: SIX_COUNT_BASIC_EVENTS,
+    accentBeats: buildAccentFromEvents(24, SIX_COUNT_BASIC_EVENTS),
   },
   {
     id: "tuck-turn",
     name: "Tuck Turn",
     category: "intermediate",
+    difficulty: "counts",
     beatCount: 6,
     totalSubdivisions: 24,
-    steps: SIX_COUNT_STEPS_SUGAR_PUSH,
-    accentBeats: buildAccentArray(24, [0, 4, 8, 10, 16, 18]),
-    stepLabels: ["Walk", "Walk", "Triple", "Triple", "Anchor", "Anchor"],
+    stepEvents: SIX_COUNT_BASIC_EVENTS,
+    accentBeats: buildAccentFromEvents(24, SIX_COUNT_BASIC_EVENTS),
   },
+  // --- 8-count Counts ---
   {
     id: "underarm-pass",
     name: "Underarm Pass",
     category: "intermediate",
+    difficulty: "counts",
     beatCount: 8,
     totalSubdivisions: 32,
-    steps: EIGHT_COUNT_STEPS_WHIP,
-    accentBeats: buildAccentArray(32, [0, 4, 8, 10, 16, 20, 24, 26]),
-    stepLabels: ["Walk", "Walk", "Triple", "Triple", "Walk", "Walk", "Anchor", "Anchor"],
+    stepEvents: EIGHT_COUNT_BASIC_EVENTS,
+    accentBeats: buildAccentFromEvents(32, EIGHT_COUNT_BASIC_EVENTS),
   },
   {
     id: "basic-whip",
     name: "Basic Whip",
     category: "intermediate",
+    difficulty: "counts",
     beatCount: 8,
     totalSubdivisions: 32,
-    steps: EIGHT_COUNT_STEPS_WHIP,
-    accentBeats: buildAccentArray(32, [0, 4, 8, 10, 16, 20, 24, 26]),
-    stepLabels: ["Walk", "Walk", "Triple", "Triple", "Walk", "Walk", "Anchor", "Anchor"],
+    stepEvents: EIGHT_COUNT_BASIC_EVENTS,
+    accentBeats: buildAccentFromEvents(32, EIGHT_COUNT_BASIC_EVENTS),
   },
   {
     id: "reverse-whip",
     name: "Reverse Whip",
     category: "advanced",
+    difficulty: "counts",
     beatCount: 8,
     totalSubdivisions: 32,
-    steps: EIGHT_COUNT_STEPS_WHIP,
-    accentBeats: buildAccentArray(32, [0, 4, 8, 10, 16, 20, 24, 26]),
-    stepLabels: ["Walk", "Walk", "Triple", "Triple", "Walk", "Walk", "Anchor", "Anchor"],
+    stepEvents: EIGHT_COUNT_BASIC_EVENTS,
+    accentBeats: buildAccentFromEvents(32, EIGHT_COUNT_BASIC_EVENTS),
+  },
+  // --- 8th Note Variants ---
+  {
+    id: "sugar-push-eighths",
+    name: "Sugar Push (8ths)",
+    category: "advanced",
+    difficulty: "eighths",
+    beatCount: 6,
+    totalSubdivisions: 24,
+    stepEvents: SIX_COUNT_EIGHTHS_EVENTS,
+    accentBeats: buildAccentFromEvents(24, SIX_COUNT_EIGHTHS_EVENTS),
+  },
+  {
+    id: "left-side-pass-eighths",
+    name: "Left Side Pass (8ths)",
+    category: "advanced",
+    difficulty: "eighths",
+    beatCount: 6,
+    totalSubdivisions: 24,
+    stepEvents: SIX_COUNT_EIGHTHS_EVENTS,
+    accentBeats: buildAccentFromEvents(24, SIX_COUNT_EIGHTHS_EVENTS),
+  },
+  {
+    id: "basic-whip-eighths",
+    name: "Basic Whip (8ths)",
+    category: "advanced",
+    difficulty: "eighths",
+    beatCount: 8,
+    totalSubdivisions: 32,
+    stepEvents: EIGHT_COUNT_EIGHTHS_EVENTS,
+    accentBeats: buildAccentFromEvents(32, EIGHT_COUNT_EIGHTHS_EVENTS),
   },
 ];
 

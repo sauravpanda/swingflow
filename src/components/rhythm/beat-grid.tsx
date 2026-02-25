@@ -25,26 +25,34 @@ export function BeatGrid({
   targetSubdivision,
   pattern,
 }: BeatGridProps) {
-  // Pattern mode: render beatCount columns
+  // Pattern mode: render one column per step event
   if (pattern) {
-    const activeBeat = currentSubdivision >= 0
-      ? Math.floor(currentSubdivision / 4)
-      : -1;
+    const events = pattern.stepEvents;
+
+    // Find active step: the event whose subdivisionIndex range contains currentSubdivision
+    let activeIdx = -1;
+    if (currentSubdivision >= 0) {
+      for (let i = 0; i < events.length; i++) {
+        const start = events[i].subdivisionIndex;
+        const end = i + 1 < events.length ? events[i + 1].subdivisionIndex : pattern.totalSubdivisions;
+        if (currentSubdivision >= start && currentSubdivision < end) {
+          activeIdx = i;
+          break;
+        }
+      }
+    }
 
     return (
       <div className="space-y-2">
         <div
-          className="grid gap-1.5 sm:gap-2"
-          style={{ gridTemplateColumns: `repeat(${pattern.beatCount}, minmax(0, 1fr))` }}
+          className="grid gap-1 sm:gap-1.5"
+          style={{ gridTemplateColumns: `repeat(${events.length}, minmax(0, 1fr))` }}
         >
-          {Array.from({ length: pattern.beatCount }, (_, i) => {
-            const step = pattern.steps[i];
-            const isActive = activeBeat === i;
-            const colorClass = step ? STEP_TYPE_COLORS[step.type] : "bg-muted";
-            const beatSubStart = i * 4;
+          {events.map((ev, i) => {
+            const isActive = activeIdx === i;
+            const colorClass = STEP_TYPE_COLORS[ev.type];
             const isTarget = targetSubdivision != null &&
-              targetSubdivision >= beatSubStart &&
-              targetSubdivision < beatSubStart + 4;
+              targetSubdivision === ev.subdivisionIndex;
 
             return (
               <div
@@ -63,24 +71,25 @@ export function BeatGrid({
                     isActive && "text-white"
                   )}
                 >
-                  {i + 1}
+                  {ev.countLabel}
                 </span>
               </div>
             );
           })}
         </div>
-        {/* Step labels row */}
+        {/* Step type labels row */}
         <div
-          className="grid gap-1.5 sm:gap-2"
-          style={{ gridTemplateColumns: `repeat(${pattern.beatCount}, minmax(0, 1fr))` }}
+          className="grid gap-1 sm:gap-1.5"
+          style={{ gridTemplateColumns: `repeat(${events.length}, minmax(0, 1fr))` }}
         >
-          {pattern.stepLabels.map((label, i) => {
-            const step = pattern.steps[i];
-            const textColor = step ? STEP_TYPE_TEXT_COLORS[step.type] : "text-muted-foreground";
+          {events.map((ev, i) => {
+            const textColor = STEP_TYPE_TEXT_COLORS[ev.type];
+            // Capitalize first letter of type
+            const label = ev.type.charAt(0).toUpperCase() + ev.type.slice(1);
             return (
               <span
                 key={i}
-                className={cn("text-xs text-center font-medium", textColor)}
+                className={cn("text-[10px] sm:text-xs text-center font-medium", textColor)}
               >
                 {label}
               </span>
