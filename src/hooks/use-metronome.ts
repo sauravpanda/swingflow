@@ -22,6 +22,7 @@ export function useMetronome() {
   const [accentPattern, setAccentPattern] = useState<AccentPattern>(ACCENT_PATTERNS[0]);
   const [currentSubdivision, setCurrentSubdivision] = useState(-1);
   const [totalSubdivisions, setTotalSubdivisions] = useState(8);
+  const [muteClicks, setMuteClicks] = useState(false);
 
   const audioContextRef = useRef<AudioContext | null>(null);
   const schedulerTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -29,6 +30,7 @@ export function useMetronome() {
   const currentSubRef = useRef(0);
   const scheduledBeatsRef = useRef<ScheduledBeat[]>([]);
   const rafRef = useRef<number | null>(null);
+  const muteClicksRef = useRef(false);
 
   // Refs that stay in sync with state for use inside scheduler
   const bpmRef = useRef(bpm);
@@ -40,6 +42,7 @@ export function useMetronome() {
   useEffect(() => { feelRef.current = feel; }, [feel]);
   useEffect(() => { accentPatternRef.current = accentPattern; }, [accentPattern]);
   useEffect(() => { totalSubdivisionsRef.current = totalSubdivisions; }, [totalSubdivisions]);
+  useEffect(() => { muteClicksRef.current = muteClicks; }, [muteClicks]);
 
   // Derive phrase position (1-based beat number)
   const phrasePosition = useMemo(() => {
@@ -64,6 +67,7 @@ export function useMetronome() {
   const scheduleClick = useCallback((time: number, subdivisionIndex: number) => {
     const ctx = audioContextRef.current;
     if (!ctx) return;
+    if (muteClicksRef.current) return;
 
     const isAccented = accentPatternRef.current.beats[subdivisionIndex];
     if (!isAccented) return; // Don't play non-accented beats
@@ -135,8 +139,8 @@ export function useMetronome() {
     rafRef.current = requestAnimationFrame(updateVisual);
   }, []);
 
-  const start = useCallback(() => {
-    const ctx = new AudioContext();
+  const start = useCallback((existingContext?: AudioContext) => {
+    const ctx = existingContext ?? new AudioContext();
     audioContextRef.current = ctx;
 
     currentSubRef.current = 0;
@@ -150,7 +154,7 @@ export function useMetronome() {
     setCurrentSubdivision(-1);
   }, [scheduler, updateVisual]);
 
-  const stop = useCallback(() => {
+  const stop = useCallback((keepContext?: boolean) => {
     if (schedulerTimerRef.current) {
       clearInterval(schedulerTimerRef.current);
       schedulerTimerRef.current = null;
@@ -159,7 +163,7 @@ export function useMetronome() {
       cancelAnimationFrame(rafRef.current);
       rafRef.current = null;
     }
-    if (audioContextRef.current) {
+    if (!keepContext && audioContextRef.current) {
       audioContextRef.current.close();
       audioContextRef.current = null;
     }
@@ -192,6 +196,8 @@ export function useMetronome() {
     phrasePosition,
     start,
     stop,
+    muteClicks,
+    setMuteClicks,
     audioContextRef,
     scheduledBeatsRef,
   };

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useRef, useMemo } from "react";
+import { useState, useCallback, useRef, useMemo, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { BeatGrid } from "@/components/rhythm/beat-grid";
@@ -11,7 +11,9 @@ import { PatternTimeline } from "@/components/rhythm/pattern-timeline";
 import { TimingVisualization } from "@/components/rhythm/timing-visualization";
 import { AccuracyHeatmap } from "@/components/rhythm/accuracy-heatmap";
 import { TempoRampControls } from "@/components/rhythm/tempo-ramp-controls";
+import { MusicPlayer } from "@/components/rhythm/music-player";
 import { useMetronome } from "@/hooks/use-metronome";
+import { useAudioPlayer } from "@/hooks/use-audio-player";
 import { useTapTracker } from "@/hooks/use-tap-tracker";
 import { useAccuracyHistory } from "@/hooks/use-accuracy-history";
 import { useTempoRamp } from "@/hooks/use-tempo-ramp";
@@ -80,12 +82,21 @@ export default function RhythmPage() {
   const { logPractice } = useAppStore();
 
   const metronome = useMetronome();
+  const audioPlayer = useAudioPlayer();
+  const sharedContextRef = useRef<AudioContext | null>(null);
   const tapTracker = useTapTracker(
     metronome.audioContextRef,
     metronome.scheduledBeatsRef
   );
   const accuracyHistory = useAccuracyHistory();
   const tempoRamp = useTempoRamp(metronome.setBpm);
+
+  // Auto-set BPM when audio is detected with sufficient confidence
+  useEffect(() => {
+    if (audioPlayer.detectedBpm && audioPlayer.bpmConfidence > 0.3) {
+      metronome.setBpm(audioPlayer.detectedBpm);
+    }
+  }, [audioPlayer.detectedBpm, audioPlayer.bpmConfidence, metronome.setBpm]);
 
   const effectiveBeatCount = selectedPattern?.beatCount ?? 2;
   const effectiveTotalSubs = selectedPattern?.totalSubdivisions ?? 8;
@@ -116,7 +127,12 @@ export default function RhythmPage() {
   );
 
   const handleStart = useCallback(() => {
-    metronome.start();
+    const ctx = new AudioContext();
+    sharedContextRef.current = ctx;
+    metronome.start(ctx);
+    if (audioPlayer.isLoaded) {
+      audioPlayer.play(ctx);
+    }
     startTimeRef.current = Date.now();
     tapTracker.reset();
     if (mode === "challenge") {
@@ -125,10 +141,15 @@ export default function RhythmPage() {
     if (isRampMode) {
       tempoRamp.start();
     }
-  }, [metronome, tapTracker, mode, challengeType, selectedPattern, effectiveTotalSubs, isRampMode, tempoRamp]);
+  }, [metronome, audioPlayer, tapTracker, mode, challengeType, selectedPattern, effectiveTotalSubs, isRampMode, tempoRamp]);
 
   const handleStop = useCallback(() => {
-    metronome.stop();
+    metronome.stop(true); // keep context alive briefly
+    audioPlayer.stop();
+    if (sharedContextRef.current) {
+      sharedContextRef.current.close();
+      sharedContextRef.current = null;
+    }
     if (isRampMode && tempoRamp.state.isActive) {
       tempoRamp.stop();
     }
@@ -155,7 +176,7 @@ export default function RhythmPage() {
       }
       startTimeRef.current = null;
     }
-  }, [metronome, logPractice, tapTracker, selectedPattern, accuracyHistory, isRampMode, tempoRamp]);
+  }, [metronome, audioPlayer, logPractice, tapTracker, selectedPattern, accuracyHistory, isRampMode, tempoRamp]);
 
   const handleTargetHit = useCallback(
     (result: TapResult) => {
@@ -240,6 +261,19 @@ export default function RhythmPage() {
         phrasePosition={metronome.phrasePosition}
         isRampMode={isRampMode}
         onRampModeToggle={() => setIsRampMode((prev) => !prev)}
+      />
+
+      {/* Music Player */}
+      <MusicPlayer
+        playerState={audioPlayer}
+        onLoadFile={audioPlayer.loadFile}
+        onLoadUrl={audioPlayer.loadUrl}
+        onUnload={audioPlayer.unload}
+        onVolumeChange={audioPlayer.setVolume}
+        onBpmSelect={metronome.setBpm}
+        muteClicks={metronome.muteClicks}
+        onMuteClicksToggle={() => metronome.setMuteClicks((prev) => !prev)}
+        disabled={metronome.isPlaying}
       />
 
       {/* Practice Modes */}
