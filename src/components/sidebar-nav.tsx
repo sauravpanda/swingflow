@@ -9,6 +9,8 @@ import {
   Brain,
   Timer,
   Music,
+  Video,
+  CreditCard,
   Settings,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -20,6 +22,8 @@ const navItems = [
   { href: "/review", label: "Review", icon: Brain },
   { href: "/practice", label: "Practice", icon: Timer },
   { href: "/rhythm", label: "Rhythm", icon: Music },
+  { href: "/analyze", label: "Analyze", icon: Video },
+  { href: "/billing", label: "Billing", icon: CreditCard },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 

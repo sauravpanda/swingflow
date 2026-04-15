@@ -7,8 +7,9 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Slider } from "@/components/ui/slider";
 import { Separator } from "@/components/ui/separator";
-import { Upload, Link, X, Volume2, Loader2, Minus, Plus } from "lucide-react";
+import { Upload, Link, X, Volume2, Loader2, Minus, Plus, Sparkles } from "lucide-react";
 import type { AudioPlayerState } from "@/hooks/use-audio-player";
+import type { MusicAnalysisState } from "@/hooks/use-music-analysis";
 
 type MusicPlayerProps = {
   playerState: AudioPlayerState;
@@ -20,6 +21,8 @@ type MusicPlayerProps = {
   muteClicks: boolean;
   onMuteClicksToggle: () => void;
   disabled?: boolean;
+  analysisState?: MusicAnalysisState;
+  onAnalyzePrecise?: () => void;
 };
 
 function formatDuration(seconds: number): string {
@@ -50,6 +53,8 @@ export function MusicPlayer({
   muteClicks,
   onMuteClicksToggle,
   disabled,
+  analysisState,
+  onAnalyzePrecise,
 }: MusicPlayerProps) {
   const [urlInput, setUrlInput] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -169,6 +174,51 @@ export function MusicPlayer({
                     </Badge>
                   ))}
               </div>
+            </div>
+          )}
+
+          {/* Precise analysis (cloud, librosa) */}
+          {analysisState && onAnalyzePrecise && (
+            <div className="space-y-2">
+              <Separator />
+              {analysisState.status === "idle" && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8 w-full"
+                  onClick={onAnalyzePrecise}
+                  disabled={disabled}
+                >
+                  <Sparkles className="mr-2 h-3.5 w-3.5" />
+                  Analyze precisely (cloud)
+                </Button>
+              )}
+              {analysisState.status === "loading" && (
+                <div className="flex items-center justify-center gap-2 py-1 text-xs text-muted-foreground">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  Analyzing (~5s)…
+                </div>
+              )}
+              {analysisState.status === "success" && analysisState.result && (
+                <div className="space-y-0.5 text-xs text-muted-foreground">
+                  <div>
+                    <span className="font-semibold text-foreground">
+                      Precise BPM:
+                    </span>{" "}
+                    <span className="font-mono">
+                      {Math.round(analysisState.result.bpm)}
+                    </span>
+                  </div>
+                  <div>
+                    {analysisState.result.downbeats.length} downbeats ·{" "}
+                    {analysisState.result.phrases.length} × 8-count phrases ·{" "}
+                    {analysisState.result.anchor_beats.length} anchors
+                  </div>
+                </div>
+              )}
+              {analysisState.status === "error" && (
+                <p className="text-xs text-destructive">{analysisState.error}</p>
+              )}
             </div>
           )}
 
