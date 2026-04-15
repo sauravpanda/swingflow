@@ -1,0 +1,102 @@
+-- SwingFlow Supabase schema
+-- Paste into Supabase SQL Editor and run. Safe to re-run.
+
+-- ────────────────────────────────────────────────────────────
+-- Tables
+-- ────────────────────────────────────────────────────────────
+
+create table if not exists public.profiles (
+  id                 uuid primary key references auth.users(id) on delete cascade,
+  email              text,
+  plan               text not null default 'free' check (plan in ('free', 'pro')),
+  stripe_customer_id text unique,
+  created_at         timestamptz not null default now(),
+  updated_at         timestamptz not null default now()
+);
+
+create table if not exists public.subscriptions (
+  id                     text primary key,
+  user_id                uuid not null references public.profiles(id) on delete cascade,
+  status                 text not null,
+  price_id               text,
+  current_period_start   timestamptz,
+  current_period_end     timestamptz,
+  cancel_at_period_end   boolean not null default false,
+  created_at             timestamptz not null default now(),
+  updated_at             timestamptz not null default now()
+);
+create index if not exists subscriptions_user_id_idx on public.subscriptions(user_id);
+
+create table if not exists public.usage_events (
+  id           uuid primary key default gen_random_uuid(),
+  user_id      uuid not null references public.profiles(id) on delete cascade,
+  kind         text not null check (kind in ('video', 'music')),
+  duration_sec integer,
+  job_id       text,
+  created_at   timestamptz not null default now()
+);
+create index if not exists usage_events_user_month_idx
+  on public.usage_events(user_id, created_at desc);
+
+-- ────────────────────────────────────────────────────────────
+-- Row Level Security
+-- ────────────────────────────────────────────────────────────
+
+alter table public.profiles      enable row level security;
+alter table public.subscriptions enable row level security;
+alter table public.usage_events  enable row level security;
+
+-- Profiles: user reads/updates own row. Service role bypasses RLS automatically.
+drop policy if exists profiles_self_select on public.profiles;
+create policy profiles_self_select on public.profiles
+  for select using (auth.uid() = id);
+
+drop policy if exists profiles_self_update on public.profiles;
+create policy profiles_self_update on public.profiles
+  for update using (auth.uid() = id);
+
+-- Subscriptions: user reads own. Only service role writes (Stripe webhook).
+drop policy if exists subscriptions_self_select on public.subscriptions;
+create policy subscriptions_self_select on public.subscriptions
+  for select using (auth.uid() = user_id);
+
+-- Usage events: user reads own. Only service role writes (quota enforcement).
+drop policy if exists usage_events_self_select on public.usage_events;
+create policy usage_events_self_select on public.usage_events
+  for select using (auth.uid() = user_id);
+
+-- ────────────────────────────────────────────────────────────
+-- Auto-create profile row when a new auth.users row appears
+-- ────────────────────────────────────────────────────────────
+
+create or replace function public.handle_new_user()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  insert into public.profiles (id, email)
+  values (new.id, new.email)
+  on conflict (id) do nothing;
+  return new;
+end;
+$$;
+
+drop trigger if exists on_auth_user_created on auth.users;
+create trigger on_auth_user_created
+  after insert on auth.users
+  for each row execute function public.handle_new_user();
+
+-- ────────────────────────────────────────────────────────────
+-- Current-month usage view (calendar month reset)
+-- ────────────────────────────────────────────────────────────
+
+create or replace view public.current_month_usage as
+  select
+    user_id,
+    kind,
+    count(*)::int as used_count
+  from public.usage_events
+  where created_at >= date_trunc('month', now())
+  group by user_id, kind;

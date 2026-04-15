@@ -1,0 +1,377 @@
+"use client";
+
+import { useCallback, useRef, useState } from "react";
+import Link from "next/link";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Progress } from "@/components/ui/progress";
+import {
+  Video,
+  Upload,
+  Loader2,
+  Sparkles,
+  X,
+  CheckCircle2,
+  AlertCircle,
+} from "lucide-react";
+import { useVideoAnalysis } from "@/hooks/use-video-analysis";
+import type { VideoScoreResult } from "@/lib/wcs-api";
+
+const CATEGORY_LABELS: Record<keyof VideoScoreResult["categories"], string> = {
+  timing: "Timing & Rhythm",
+  technique: "Technique",
+  teamwork: "Teamwork",
+  presentation: "Presentation",
+};
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+}
+
+function formatDuration(sec: number): string {
+  const m = Math.floor(sec / 60);
+  const s = Math.floor(sec % 60);
+  return `${m}:${s.toString().padStart(2, "0")}`;
+}
+
+export default function AnalyzePage() {
+  const {
+    state,
+    quota,
+    quotaLoading,
+    quotaError,
+    analyze,
+    reset,
+    isConfigured,
+  } = useVideoAnalysis();
+
+  const [file, setFile] = useState<File | null>(null);
+  const [localError, setLocalError] = useState<string | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const handleFileChange = useCallback(
+    async (e: React.ChangeEvent<HTMLInputElement>) => {
+      setLocalError(null);
+      reset();
+      const f = e.target.files?.[0];
+      if (!f) return;
+
+      if (!f.type.startsWith("video/")) {
+        setLocalError("Please choose a video file (mp4, mov, etc.)");
+        if (inputRef.current) inputRef.current.value = "";
+        return;
+      }
+
+      // Client-side duration check (saves a wasted upload).
+      if (quota) {
+        try {
+          const dur = await probeDuration(f);
+          if (dur > quota.max_seconds) {
+            setLocalError(
+              `Video is ${Math.round(dur)}s, your ${quota.plan} plan allows up to ${
+                quota.max_seconds
+              }s.`
+            );
+            if (inputRef.current) inputRef.current.value = "";
+            return;
+          }
+        } catch {
+          // If we can't probe locally, let the server enforce.
+        }
+      }
+
+      setFile(f);
+    },
+    [quota, reset]
+  );
+
+  const handleAnalyze = useCallback(() => {
+    if (file) analyze(file);
+  }, [file, analyze]);
+
+  const handleClear = useCallback(() => {
+    setFile(null);
+    setLocalError(null);
+    reset();
+    if (inputRef.current) inputRef.current.value = "";
+  }, [reset]);
+
+  const isLoading = state.status === "loading";
+  const isPaywalled = quota && quota.remaining <= 0;
+
+  return (
+    <div className="space-y-6 max-w-2xl mx-auto">
+      <div>
+        <div className="flex items-center gap-2">
+          <Video className="h-6 w-6 text-primary" />
+          <h1 className="text-2xl font-bold">Dance Video Analysis</h1>
+        </div>
+        <p className="text-muted-foreground mt-1">
+          Upload a clip to get WSDC-style scoring and feedback
+        </p>
+      </div>
+
+      {/* Quota card */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center justify-between">
+            <span>Monthly usage</span>
+            {quota && (
+              <Badge variant={quota.plan === "pro" ? "default" : "secondary"}>
+                {quota.plan === "pro" ? "Pro" : "Free"}
+              </Badge>
+            )}
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-2">
+          {quotaLoading ? (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              Loading…
+            </div>
+          ) : quotaError ? (
+            <p className="text-sm text-destructive">{quotaError}</p>
+          ) : quota ? (
+            <>
+              <div className="flex items-center justify-between text-sm">
+                <span>
+                  {quota.used} of {quota.limit} videos used
+                </span>
+                <span className="text-muted-foreground">
+                  up to {Math.round(quota.max_seconds / 60)} min each
+                </span>
+              </div>
+              <Progress
+                value={Math.min(100, (quota.used / quota.limit) * 100)}
+                className="h-2"
+              />
+            </>
+          ) : null}
+        </CardContent>
+      </Card>
+
+      {/* Paywall */}
+      {isPaywalled && (
+        <Card className="border-primary/40">
+          <CardContent className="py-6 space-y-3 text-center">
+            <Sparkles className="h-8 w-8 text-primary mx-auto" />
+            <h2 className="text-lg font-semibold">Monthly limit reached</h2>
+            <p className="text-sm text-muted-foreground">
+              Upgrade to Pro for 10 videos / month and 5-minute clips.
+            </p>
+            <Link href="/billing">
+              <Button className="w-full">Upgrade to Pro — $10/mo</Button>
+            </Link>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Uploader */}
+      {!isPaywalled && state.status !== "success" && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Upload a clip</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {!isConfigured && (
+              <p className="text-sm text-destructive">
+                Cloud API not configured — set{" "}
+                <code className="text-xs">NEXT_PUBLIC_WCS_API_URL</code>.
+              </p>
+            )}
+
+            <input
+              ref={inputRef}
+              type="file"
+              accept="video/*"
+              className="hidden"
+              onChange={handleFileChange}
+              disabled={isLoading}
+            />
+
+            {!file ? (
+              <Button
+                variant="outline"
+                className="w-full h-20"
+                onClick={() => inputRef.current?.click()}
+                disabled={!isConfigured || isLoading}
+              >
+                <Upload className="mr-2 h-5 w-5" />
+                Choose video
+              </Button>
+            ) : (
+              <div className="flex items-center justify-between rounded-lg border border-border p-3">
+                <div className="text-sm min-w-0 flex-1">
+                  <p className="truncate font-medium">{file.name}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {formatBytes(file.size)}
+                  </p>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={handleClear}
+                  disabled={isLoading}
+                  className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+            )}
+
+            {localError && (
+              <p className="text-sm text-destructive">{localError}</p>
+            )}
+
+            {file && (
+              <Button
+                onClick={handleAnalyze}
+                disabled={isLoading}
+                className="w-full"
+              >
+                {isLoading ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Analyzing… (~30-60s)
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="mr-2 h-4 w-4" />
+                    Analyze video
+                  </>
+                )}
+              </Button>
+            )}
+
+            {state.status === "error" && (
+              <div className="flex items-start gap-2 text-sm text-destructive">
+                <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
+                <span>{state.error}</span>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Result */}
+      {state.status === "success" && state.result && (
+        <ScoreResultCard
+          result={state.result.result}
+          duration={state.result.duration}
+          onClear={handleClear}
+        />
+      )}
+    </div>
+  );
+}
+
+function ScoreResultCard({
+  result,
+  duration,
+  onClear,
+}: {
+  result: VideoScoreResult;
+  duration: number;
+  onClear: () => void;
+}) {
+  return (
+    <div className="space-y-4">
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="flex items-center justify-between">
+            <span className="flex items-center gap-2">
+              <CheckCircle2 className="h-5 w-5 text-primary" />
+              Score
+            </span>
+            <span className="text-sm text-muted-foreground font-normal">
+              {formatDuration(duration)}
+            </span>
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-baseline justify-center gap-2 py-2">
+            <span className="text-5xl font-bold tabular-nums">
+              {result.overall.score.toFixed(1)}
+            </span>
+            <span className="text-2xl text-muted-foreground">/ 10</span>
+            <Badge className="ml-3 text-base">{result.overall.grade}</Badge>
+          </div>
+
+          <div className="space-y-3">
+            {(Object.keys(CATEGORY_LABELS) as Array<keyof typeof CATEGORY_LABELS>).map(
+              (key) => {
+                const cat = result.categories[key];
+                return (
+                  <div key={key} className="space-y-1">
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="font-medium">{CATEGORY_LABELS[key]}</span>
+                      <span className="font-mono tabular-nums">
+                        {cat.score.toFixed(1)} / 10
+                      </span>
+                    </div>
+                    <Progress value={cat.score * 10} className="h-1.5" />
+                    <p className="text-xs text-muted-foreground">{cat.notes}</p>
+                  </div>
+                );
+              }
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">Strengths</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <ul className="space-y-1.5 text-sm text-muted-foreground">
+            {result.strengths.map((s, i) => (
+              <li key={i}>• {s}</li>
+            ))}
+          </ul>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">Areas to improve</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <ul className="space-y-1.5 text-sm text-muted-foreground">
+            {result.improvements.map((s, i) => (
+              <li key={i}>• {s}</li>
+            ))}
+          </ul>
+        </CardContent>
+      </Card>
+
+      <Button onClick={onClear} variant="outline" className="w-full">
+        Analyze another video
+      </Button>
+    </div>
+  );
+}
+
+/**
+ * Probe video duration locally via a hidden <video> element. Avoids a
+ * wasted upload when the file is obviously over the plan limit.
+ */
+function probeDuration(file: File): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const v = document.createElement("video");
+    v.preload = "metadata";
+    v.onloadedmetadata = () => {
+      URL.revokeObjectURL(url);
+      resolve(v.duration);
+    };
+    v.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error("Could not read video metadata"));
+    };
+    v.src = url;
+  });
+}

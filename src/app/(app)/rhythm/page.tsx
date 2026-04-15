@@ -17,6 +17,7 @@ import { useAudioPlayer } from "@/hooks/use-audio-player";
 import { useTapTracker } from "@/hooks/use-tap-tracker";
 import { useAccuracyHistory } from "@/hooks/use-accuracy-history";
 import { useTempoRamp } from "@/hooks/use-tempo-ramp";
+import { useMusicAnalysis } from "@/hooks/use-music-analysis";
 import { useAppStore } from "@/components/store-provider";
 import {
   type PracticeMode,
@@ -83,6 +84,9 @@ export default function RhythmPage() {
 
   const metronome = useMetronome();
   const audioPlayer = useAudioPlayer();
+  const musicAnalysis = useMusicAnalysis();
+  const lastFileRef = useRef<File | null>(null);
+  const [hasFile, setHasFile] = useState(false);
   const sharedContextRef = useRef<AudioContext | null>(null);
   const tapTracker = useTapTracker(
     metronome.audioContextRef,
@@ -97,6 +101,46 @@ export default function RhythmPage() {
       metronome.setBpm(audioPlayer.detectedBpm);
     }
   }, [audioPlayer.detectedBpm, audioPlayer.bpmConfidence, metronome.setBpm]);
+
+  // When cloud analysis succeeds, prefer its BPM over the local estimate.
+  useEffect(() => {
+    if (musicAnalysis.state.status === "success" && musicAnalysis.state.result) {
+      metronome.setBpm(Math.round(musicAnalysis.state.result.bpm));
+    }
+  }, [musicAnalysis.state.status, musicAnalysis.state.result, metronome.setBpm]);
+
+  const handleLoadFile = useCallback(
+    (file: File) => {
+      lastFileRef.current = file;
+      setHasFile(true);
+      musicAnalysis.reset();
+      audioPlayer.loadFile(file);
+    },
+    [audioPlayer, musicAnalysis]
+  );
+
+  const handleLoadUrl = useCallback(
+    (url: string) => {
+      lastFileRef.current = null;
+      setHasFile(false);
+      musicAnalysis.reset();
+      audioPlayer.loadUrl(url);
+    },
+    [audioPlayer, musicAnalysis]
+  );
+
+  const handleUnloadFile = useCallback(() => {
+    lastFileRef.current = null;
+    setHasFile(false);
+    musicAnalysis.reset();
+    audioPlayer.unload();
+  }, [audioPlayer, musicAnalysis]);
+
+  const handleAnalyzePrecise = useCallback(() => {
+    const file = lastFileRef.current;
+    if (!file) return;
+    musicAnalysis.analyze(file);
+  }, [musicAnalysis]);
 
   const effectiveBeatCount = selectedPattern?.beatCount ?? 2;
   const effectiveTotalSubs = selectedPattern?.totalSubdivisions ?? 8;
@@ -266,14 +310,20 @@ export default function RhythmPage() {
       {/* Music Player */}
       <MusicPlayer
         playerState={audioPlayer}
-        onLoadFile={audioPlayer.loadFile}
-        onLoadUrl={audioPlayer.loadUrl}
-        onUnload={audioPlayer.unload}
+        onLoadFile={handleLoadFile}
+        onLoadUrl={handleLoadUrl}
+        onUnload={handleUnloadFile}
         onVolumeChange={audioPlayer.setVolume}
         onBpmSelect={metronome.setBpm}
         muteClicks={metronome.muteClicks}
         onMuteClicksToggle={() => metronome.setMuteClicks((prev) => !prev)}
         disabled={metronome.isPlaying}
+        analysisState={
+          musicAnalysis.isConfigured && hasFile ? musicAnalysis.state : undefined
+        }
+        onAnalyzePrecise={
+          musicAnalysis.isConfigured && hasFile ? handleAnalyzePrecise : undefined
+        }
       />
 
       {/* Practice Modes */}
