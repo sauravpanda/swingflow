@@ -112,7 +112,7 @@ export type VideoScoreResult = {
 };
 
 export type VideoQuota = {
-  plan: "free" | "pro";
+  plan: "free" | "basic";
   used: number;
   limit: number;
   max_seconds: number;
@@ -123,7 +123,7 @@ export type VideoAnalysisResponse = {
   duration: number;
   result: VideoScoreResult;
   quota: {
-    plan: "free" | "pro";
+    plan: "free" | "basic";
     used: number;
     limit: number;
     remaining: number;
@@ -137,7 +137,14 @@ export async function getVideoQuota(): Promise<VideoQuota> {
     headers: { Authorization: `Bearer ${token}` },
   });
   if (!res.ok) {
-    throw new Error(`Quota check failed (${res.status})`);
+    let detail = res.statusText;
+    try {
+      const body = await res.json();
+      if (body?.detail) detail = String(body.detail);
+    } catch {
+      // ignore
+    }
+    throw new Error(`Quota check failed (${res.status}): ${detail}`);
   }
   return (await res.json()) as VideoQuota;
 }

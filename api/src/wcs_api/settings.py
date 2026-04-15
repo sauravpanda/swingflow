@@ -22,8 +22,8 @@ class Settings(BaseSettings):
     max_video_bytes: int = 100 * 1024 * 1024  # 100 MB
     free_monthly_video: int = 1
     free_max_video_seconds: int = 120
-    pro_monthly_video: int = 10
-    pro_max_video_seconds: int = 300
+    basic_monthly_video: int = 10
+    basic_max_video_seconds: int = 300
 
     @property
     def allowed_origins_list(self) -> list[str]:

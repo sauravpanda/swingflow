@@ -120,8 +120,8 @@ export default function AnalyzePage() {
           <CardTitle className="text-base flex items-center justify-between">
             <span>Monthly usage</span>
             {quota && (
-              <Badge variant={quota.plan === "pro" ? "default" : "secondary"}>
-                {quota.plan === "pro" ? "Pro" : "Free"}
+              <Badge variant={quota.plan === "basic" ? "default" : "secondary"}>
+                {quota.plan === "basic" ? "Basic" : "Free"}
               </Badge>
             )}
           </CardTitle>
@@ -160,10 +160,10 @@ export default function AnalyzePage() {
             <Sparkles className="h-8 w-8 text-primary mx-auto" />
             <h2 className="text-lg font-semibold">Monthly limit reached</h2>
             <p className="text-sm text-muted-foreground">
-              Upgrade to Pro for 10 videos / month and 5-minute clips.
+              Upgrade to Basic for 10 videos / month and 5-minute clips.
             </p>
             <Link href="/billing">
-              <Button className="w-full">Upgrade to Pro — $10/mo</Button>
+              <Button className="w-full">Upgrade to Basic — $10/mo</Button>
             </Link>
           </CardContent>
         </Card>

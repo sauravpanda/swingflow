@@ -37,18 +37,35 @@ export function useUser() {
     };
   }, []);
 
-  const signInWithGoogle = useCallback(async () => {
-    const sb = getSupabase();
-    await sb.auth.signInWithOAuth({
-      provider: "google",
-      options: { redirectTo: `${window.location.origin}/auth/callback` },
-    });
-  }, []);
+  const signInWithPassword = useCallback(
+    async (email: string, password: string) => {
+      const sb = getSupabase();
+      const { error } = await sb.auth.signInWithPassword({ email, password });
+      if (error) throw error;
+    },
+    []
+  );
+
+  const signUpWithPassword = useCallback(
+    async (email: string, password: string) => {
+      const sb = getSupabase();
+      const { error } = await sb.auth.signUp({ email, password });
+      if (error) throw error;
+    },
+    []
+  );
 
   const signOut = useCallback(async () => {
     const sb = getSupabase();
     await sb.auth.signOut();
   }, []);
 
-  return { user, session, loading, signInWithGoogle, signOut };
+  return {
+    user,
+    session,
+    loading,
+    signInWithPassword,
+    signUpWithPassword,
+    signOut,
+  };
 }

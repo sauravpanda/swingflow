@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { getSupabase, isSupabaseConfigured } from "@/lib/supabase";
 import { useUser } from "@/hooks/use-user";
 
-export type Plan = "free" | "pro";
+export type Plan = "free" | "basic";
 
 export type Profile = {
   id: string;

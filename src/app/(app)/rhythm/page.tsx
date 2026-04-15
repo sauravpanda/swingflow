@@ -4,6 +4,7 @@ import { useState, useCallback, useRef, useMemo, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { BeatGrid } from "@/components/rhythm/beat-grid";
+import { PhraseBeatGrid } from "@/components/rhythm/phrase-beat-grid";
 import { RhythmControls } from "@/components/rhythm/rhythm-controls";
 import { TapArea } from "@/components/rhythm/tap-area";
 import { ChallengeSelector } from "@/components/rhythm/challenge-selector";
@@ -34,6 +35,31 @@ import { Music } from "lucide-react";
 
 function getRandomSubdivision(max = 8): SubdivisionIndex {
   return Math.floor(Math.random() * max) as SubdivisionIndex;
+}
+
+/**
+ * Map a song playback time to which 8-count phrase we're inside and
+ * which beat (0–7) of that phrase. Returns -1 for either when the user
+ * is before the first phrase or hasn't started playing.
+ */
+function findCurrentPhrasePosition(
+  currentTime: number,
+  phrases: number[][]
+): { phraseIndex: number; beatInPhrase: number } {
+  if (!phrases.length) return { phraseIndex: -1, beatInPhrase: -1 };
+  // Scan from the end — as playback moves forward, the answer is
+  // usually in the last phrase we looked at, so this is effectively O(1).
+  for (let p = phrases.length - 1; p >= 0; p--) {
+    const phrase = phrases[p];
+    if (currentTime >= phrase[0]) {
+      for (let i = phrase.length - 1; i >= 0; i--) {
+        if (currentTime >= phrase[i]) {
+          return { phraseIndex: p, beatInPhrase: i };
+        }
+      }
+    }
+  }
+  return { phraseIndex: -1, beatInPhrase: -1 };
 }
 
 function getTargetForChallenge(
@@ -101,6 +127,15 @@ export default function RhythmPage() {
       metronome.setBpm(audioPlayer.detectedBpm);
     }
   }, [audioPlayer.detectedBpm, audioPlayer.bpmConfidence, metronome.setBpm]);
+
+  // Auto-mute metronome clicks when a song is loaded — the song already
+  // provides the beat, and stacking the tick on top is almost always
+  // unwanted. User can still toggle it back on manually.
+  useEffect(() => {
+    if (audioPlayer.isLoaded) {
+      metronome.setMuteClicks(true);
+    }
+  }, [audioPlayer.isLoaded, metronome.setMuteClicks]);
 
   // When cloud analysis succeeds, prefer its BPM over the local estimate.
   useEffect(() => {
@@ -266,6 +301,15 @@ export default function RhythmPage() {
   const aggregateAccuracy = accuracyHistory.getAggregateAccuracy(selectedPattern?.id);
   const challengeLabel = getChallengeLabel(challengeType, selectedPattern);
 
+  // Song-synced phrase visualization — only populated when precise cloud
+  // analysis has run on the loaded song.
+  const analysisResult = musicAnalysis.state.result;
+  const analyzedPhrases = analysisResult?.phrases ?? [];
+  const { phraseIndex, beatInPhrase } =
+    analysisResult && audioPlayer.isPlaying
+      ? findCurrentPhrasePosition(audioPlayer.currentTime, analyzedPhrases)
+      : { phraseIndex: -1, beatInPhrase: -1 };
+
   return (
     <div className="space-y-6 max-w-2xl mx-auto">
       {/* Header */}
@@ -288,6 +332,19 @@ export default function RhythmPage() {
         phrasePosition={metronome.phrasePosition}
         totalSubdivisions={metronome.totalSubdivisions}
       />
+
+      {/* Song-synced phrase grid — only when precise analysis is loaded */}
+      {analysisResult && (
+        <Card>
+          <CardContent className="pt-5">
+            <PhraseBeatGrid
+              currentBeatInPhrase={beatInPhrase}
+              phraseIndex={phraseIndex}
+              totalPhrases={analyzedPhrases.length}
+            />
+          </CardContent>
+        </Card>
+      )}
 
       {/* Controls */}
       <RhythmControls

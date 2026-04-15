@@ -4,9 +4,6 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   LayoutDashboard,
-  Library,
-  Anchor,
-  Brain,
   Timer,
   Music,
   Video,
@@ -17,12 +14,9 @@ import { cn } from "@/lib/utils";
 
 const navItems = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/patterns", label: "Patterns", icon: Library },
-  { href: "/anchors", label: "Anchors", icon: Anchor },
-  { href: "/review", label: "Review", icon: Brain },
-  { href: "/practice", label: "Practice", icon: Timer },
   { href: "/rhythm", label: "Rhythm", icon: Music },
   { href: "/analyze", label: "Analyze", icon: Video },
+  { href: "/practice", label: "Practice", icon: Timer },
   { href: "/billing", label: "Billing", icon: CreditCard },
   { href: "/settings", label: "Settings", icon: Settings },
 ];

@@ -7,7 +7,18 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Slider } from "@/components/ui/slider";
 import { Separator } from "@/components/ui/separator";
-import { Upload, Link, X, Volume2, Loader2, Minus, Plus, Sparkles } from "lucide-react";
+import {
+  Upload,
+  Link,
+  X,
+  Volume2,
+  Loader2,
+  Minus,
+  Plus,
+  Sparkles,
+  Bell,
+  BellOff,
+} from "lucide-react";
 import type { AudioPlayerState } from "@/hooks/use-audio-player";
 import type { MusicAnalysisState } from "@/hooks/use-music-analysis";
 
@@ -222,7 +233,7 @@ export function MusicPlayer({
             </div>
           )}
 
-          {/* Volume + Mute Clicks */}
+          {/* Volume */}
           <div className="flex items-center gap-3">
             <Volume2 className="h-4 w-4 text-muted-foreground shrink-0" />
             <Slider
@@ -233,14 +244,31 @@ export function MusicPlayer({
               onValueChange={([v]) => onVolumeChange(v / 100)}
               className="flex-1"
             />
-            <Badge
-              variant={muteClicks ? "default" : "outline"}
-              className="cursor-pointer shrink-0"
-              onClick={onMuteClicksToggle}
-            >
-              {muteClicks ? "Clicks Off" : "Clicks On"}
-            </Badge>
           </div>
+
+          {/* Metronome click toggle — prominent so users find it.
+              Auto-defaults to muted when a song is loaded. */}
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-9 w-full justify-start"
+            onClick={onMuteClicksToggle}
+            disabled={disabled}
+          >
+            {muteClicks ? (
+              <BellOff className="mr-2 h-4 w-4" />
+            ) : (
+              <Bell className="mr-2 h-4 w-4" />
+            )}
+            <span className="flex-1 text-left text-xs">
+              {muteClicks
+                ? "Metronome clicks muted — song provides the beat"
+                : "Metronome clicks on — will play over song"}
+            </span>
+            <span className="text-xs text-muted-foreground">
+              {muteClicks ? "tap to enable" : "tap to mute"}
+            </span>
+          </Button>
         </CardContent>
       </Card>
     );

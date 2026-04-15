@@ -30,9 +30,9 @@ async def get_video_quota_status(user_id: str) -> VideoQuotaStatus:
         since_iso=_start_of_month_iso(),
     )
 
-    if plan == "pro":
-        limit = settings.pro_monthly_video
-        max_seconds = settings.pro_max_video_seconds
+    if plan == "basic":
+        limit = settings.basic_monthly_video
+        max_seconds = settings.basic_max_video_seconds
     else:
         plan = "free"
         limit = settings.free_monthly_video
