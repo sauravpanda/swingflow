@@ -22,6 +22,7 @@ class VideoAnalyzeBody(BaseModel):
     role: str | None = None
     competition_level: str | None = None
     event_name: str | None = None
+    event_date: str | None = None  # ISO date string (YYYY-MM-DD)
     stage: str | None = None
     tags: list[str] | None = None
 
@@ -150,6 +151,7 @@ async def analyze_video_endpoint(
                 role=body.role,
                 competition_level=body.competition_level,
                 event_name=body.event_name,
+                event_date=body.event_date,
                 stage=body.stage,
                 tags=body.tags,
             )

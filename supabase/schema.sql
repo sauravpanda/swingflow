@@ -93,7 +93,8 @@ create table if not exists public.video_analyses (
   object_key        text,            -- R2 key while the source video is still in storage; NULL once deleted
   role              text,            -- optional: lead / follow / solo
   competition_level text,            -- optional: novice / intermediate / all-star / champion
-  event_name        text,            -- optional: "Boogie by the Bay 2026 J&J"
+  event_name        text,            -- optional: "Boogie by the Bay"
+  event_date        date,            -- optional: when the event happened (separate from created_at)
   stage             text,            -- optional: prelims / quarters / semis / finals
   tags              text[] default '{}',  -- optional free-form user tags
   share_token       text,            -- NULL = not shared; set = public read via /shared?t=<token>

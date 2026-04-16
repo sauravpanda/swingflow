@@ -314,6 +314,7 @@ export type VideoAnalyzeOptions = {
   role?: string;
   competitionLevel?: string;
   eventName?: string;
+  eventDate?: string; // YYYY-MM-DD
   stage?: string;
   tags?: string[];
 };
@@ -329,6 +330,7 @@ export async function analyzeVideoFromKey(
     role: options.role || null,
     competition_level: options.competitionLevel || null,
     event_name: options.eventName || null,
+    event_date: options.eventDate || null,
     stage: options.stage || null,
     tags: options.tags && options.tags.length ? options.tags : null,
   });
