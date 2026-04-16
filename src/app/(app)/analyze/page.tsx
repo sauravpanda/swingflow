@@ -68,10 +68,10 @@ export default function AnalyzePage() {
         return;
       }
 
-      const MAX_SIZE_MB = 90;
+      const MAX_SIZE_MB = 500;
       if (f.size > MAX_SIZE_MB * 1024 * 1024) {
         setLocalError(
-          `File is ${(f.size / 1024 / 1024).toFixed(0)} MB. We currently cap uploads at ${MAX_SIZE_MB} MB due to proxy limits — try trimming to a shorter clip, or lower the recording quality to 1080p / 30 fps before shooting.`
+          `File is ${(f.size / 1024 / 1024).toFixed(0)} MB, limit is ${MAX_SIZE_MB} MB. Try trimming the clip.`
         );
         if (inputRef.current) inputRef.current.value = "";
         return;
@@ -113,7 +113,8 @@ export default function AnalyzePage() {
     if (inputRef.current) inputRef.current.value = "";
   }, [reset]);
 
-  const isLoading = state.status === "loading";
+  const isLoading =
+    state.status === "uploading" || state.status === "analyzing";
   const isPaywalled = quota && quota.remaining <= 0;
 
   return (
@@ -241,23 +242,41 @@ export default function AnalyzePage() {
             )}
 
             {file && (
-              <Button
-                onClick={handleAnalyze}
-                disabled={isLoading}
-                className="w-full"
-              >
-                {isLoading ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Analyzing… (~30-60s)
-                  </>
-                ) : (
-                  <>
-                    <Sparkles className="mr-2 h-4 w-4" />
-                    Analyze video
-                  </>
+              <>
+                {state.status === "uploading" && (
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between text-xs text-muted-foreground">
+                      <span>Uploading to storage…</span>
+                      <span className="font-mono tabular-nums">
+                        {state.uploadProgress}%
+                      </span>
+                    </div>
+                    <Progress value={state.uploadProgress} className="h-1.5" />
+                  </div>
                 )}
-              </Button>
+                <Button
+                  onClick={handleAnalyze}
+                  disabled={isLoading}
+                  className="w-full"
+                >
+                  {state.status === "uploading" ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Uploading… {state.uploadProgress}%
+                    </>
+                  ) : state.status === "analyzing" ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Analyzing… (~30-60s)
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="mr-2 h-4 w-4" />
+                      Analyze video
+                    </>
+                  )}
+                </Button>
+              </>
             )}
 
             {state.status === "error" && (
