@@ -85,12 +85,18 @@ create policy usage_events_self_select on public.usage_events
   for select using (auth.uid() = user_id);
 
 create table if not exists public.video_analyses (
-  id          uuid primary key default gen_random_uuid(),
-  user_id     uuid not null references public.profiles(id) on delete cascade,
-  filename    text,
-  duration    float,
-  result      jsonb not null,
-  created_at  timestamptz not null default now()
+  id                uuid primary key default gen_random_uuid(),
+  user_id           uuid not null references public.profiles(id) on delete cascade,
+  filename          text,
+  duration          float,
+  result            jsonb not null,
+  object_key        text,            -- R2 key while the source video is still in storage; NULL once deleted
+  role              text,            -- optional: lead / follow / solo
+  competition_level text,            -- optional: novice / intermediate / all-star / champion
+  event_name        text,            -- optional: "Boogie by the Bay 2026 J&J"
+  stage             text,            -- optional: prelims / quarters / semis / finals
+  tags              text[] default '{}',  -- optional free-form user tags
+  created_at        timestamptz not null default now()
 );
 create index if not exists video_analyses_user_idx
   on public.video_analyses(user_id, created_at desc);
