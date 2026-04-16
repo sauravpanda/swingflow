@@ -12,7 +12,7 @@ async def analyze_music_endpoint(
     file: UploadFile = File(...),
     user: dict = Depends(verify_jwt),
 ) -> dict:
-    del user  # auth-only; quota enforcement lands with Stripe in Phase 2
+    user_id = user.get("sub", "")
 
     content = await file.read()
     if len(content) > settings.max_music_bytes:
@@ -39,6 +39,17 @@ async def analyze_music_endpoint(
             status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
             detail=f"audio longer than {settings.max_music_seconds}s",
         )
+
+    # Track for analytics (non-fatal — music analysis is free and unlimited)
+    if user_id:
+        try:
+            from ..services import supabase_admin
+
+            await supabase_admin.insert_usage_event(
+                user_id=user_id, kind="music"
+            )
+        except Exception:
+            pass
 
     return {
         "bpm": result.bpm,

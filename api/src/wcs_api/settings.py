@@ -9,6 +9,7 @@ class Settings(BaseSettings):
     supabase_service_role_key: str = ""
 
     allowed_origins: str = "http://localhost:3000"
+    admin_emails: str = "saurav@browser-use.com"
 
     max_music_bytes: int = 25 * 1024 * 1024
     max_music_seconds: int = 480

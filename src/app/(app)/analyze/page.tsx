@@ -16,6 +16,7 @@ import {
   AlertCircle,
 } from "lucide-react";
 import { useVideoAnalysis } from "@/hooks/use-video-analysis";
+import { useAnalysisHistory, type AnalysisRecord } from "@/hooks/use-analysis-history";
 import type { VideoScoreResult } from "@/lib/wcs-api";
 
 const CATEGORY_LABELS: Record<keyof VideoScoreResult["categories"], string> = {
@@ -45,8 +46,10 @@ export default function AnalyzePage() {
     quotaError,
     analyze,
     reset,
+    refreshQuota,
     isConfigured,
   } = useVideoAnalysis();
+  const history = useAnalysisHistory();
 
   const [file, setFile] = useState<File | null>(null);
   const [localError, setLocalError] = useState<string | null>(null);
@@ -98,8 +101,10 @@ export default function AnalyzePage() {
   );
 
   const handleAnalyze = useCallback(() => {
-    if (file) analyze(file);
-  }, [file, analyze]);
+    if (file) {
+      analyze(file).then(() => history.refresh());
+    }
+  }, [file, analyze, history]);
 
   const handleClear = useCallback(() => {
     setFile(null);
@@ -272,6 +277,70 @@ export default function AnalyzePage() {
           duration={state.result.duration}
           onClear={handleClear}
         />
+      )}
+
+      {/* Past analyses */}
+      {history.records.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Past analyses</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {history.records.map((rec) => (
+              <HistoryRow key={rec.id} record={rec} />
+            ))}
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  );
+}
+
+function HistoryRow({ record }: { record: AnalysisRecord }) {
+  const [expanded, setExpanded] = useState(false);
+  const overall = record.result?.overall;
+  return (
+    <div className="border border-border rounded-lg">
+      <button
+        type="button"
+        className="w-full flex items-center justify-between p-3 text-sm text-left hover:bg-muted/30 transition-colors"
+        onClick={() => setExpanded((p) => !p)}
+      >
+        <div className="min-w-0 flex-1">
+          <span className="font-medium truncate block">
+            {record.filename || "Untitled"}
+          </span>
+          <span className="text-xs text-muted-foreground">
+            {new Date(record.created_at).toLocaleDateString("en-US", {
+              month: "short",
+              day: "numeric",
+              hour: "2-digit",
+              minute: "2-digit",
+            })}
+            {record.duration
+              ? ` · ${formatDuration(record.duration)}`
+              : ""}
+          </span>
+        </div>
+        {overall && (
+          <div className="flex items-center gap-2 shrink-0 ml-3">
+            <span className="font-mono font-bold tabular-nums">
+              {overall.score?.toFixed?.(1) ?? "—"}
+            </span>
+            <Badge variant="secondary" className="text-xs">
+              {overall.grade ?? "—"}
+            </Badge>
+          </div>
+        )}
+      </button>
+      {expanded && record.result && (
+        <div className="border-t border-border p-3">
+          <ScoreResultCard
+            result={record.result}
+            duration={record.duration ?? 0}
+            onClear={() => setExpanded(false)}
+          />
+        </div>
       )}
     </div>
   );

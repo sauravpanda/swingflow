@@ -70,6 +70,37 @@ async def upsert_subscription(record: dict[str, Any]) -> None:
         r.raise_for_status()
 
 
+async def insert_video_analysis(
+    user_id: str,
+    filename: str | None,
+    duration: float | None,
+    result: dict[str, Any],
+) -> None:
+    async with httpx.AsyncClient(timeout=10) as client:
+        r = await client.post(
+            _rest("video_analyses"),
+            headers={**_headers(), "Prefer": "return=minimal"},
+            json={
+                "user_id": user_id,
+                "filename": filename,
+                "duration": duration,
+                "result": result,
+            },
+        )
+        r.raise_for_status()
+
+
+async def get_admin_stats() -> dict[str, Any]:
+    async with httpx.AsyncClient(timeout=15) as client:
+        r = await client.post(
+            f"{settings.supabase_url}/rest/v1/rpc/admin_stats",
+            headers={**_headers(), "Prefer": "return=representation"},
+            json={},
+        )
+        r.raise_for_status()
+        return r.json()
+
+
 async def insert_usage_event(
     user_id: str,
     kind: str,
