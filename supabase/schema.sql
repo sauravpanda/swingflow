@@ -210,6 +210,12 @@ create or replace view public.current_month_usage as
 -- api/src/wcs_api/routes/admin.py and the frontend admin page.
 -- ────────────────────────────────────────────────────────────
 
+-- Drop first so return-type changes are allowed. Postgres rejects
+-- `create or replace` when the signature (including return type) has
+-- changed; earlier versions of admin_stats() returned `setof` jsonb
+-- or a different shape, so we drop then recreate.
+drop function if exists public.admin_stats();
+
 create or replace function public.admin_stats()
 returns jsonb
 language plpgsql
