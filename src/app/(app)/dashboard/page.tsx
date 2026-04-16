@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useAppStore } from "@/components/store-provider";
 import { useAnalysisHistory } from "@/hooks/use-analysis-history";
+import { ScoreTrendChart } from "@/components/analyze/score-trend";
 import {
   Video,
   Music,
@@ -161,6 +162,9 @@ export default function DashboardPage() {
           }
         />
       </div>
+
+      {/* ─── Score trend ─── */}
+      <ScoreTrendChart records={history.records} loading={history.loading} />
 
       {/* ─── Recent analyses ─── */}
       <div className="grid gap-4 lg:grid-cols-3">
