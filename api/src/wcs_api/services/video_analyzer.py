@@ -387,6 +387,7 @@ Respond in this exact JSON format. Fill `reasoning` BEFORE `score` in each categ
     "notes": "<follow-specific observations>"
   },
   "overall_impression": "<1-2 sentence overall assessment>",
+  "observed_level": "<one of: Newcomer|Novice|Intermediate|Advanced|All-Star|Champion — the tier the dancing actually lands at, regardless of what was declared. Fill this even when it matches the declared level; leave null only if truly uncertain.>",
   "estimated_bpm": <estimated BPM from the music>,
   "song_style": "<e.g., blues, contemporary, lyrical>"
 }
@@ -1221,6 +1222,7 @@ def _shape_response(
         "follow": parsed.get("follow"),
         "estimated_bpm": parsed.get("estimated_bpm"),
         "song_style": parsed.get("song_style"),
+        "observed_level": parsed.get("observed_level"),
         "sanity_warnings": sanity_warnings or [],
         "usage": usage,
     }
