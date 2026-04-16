@@ -2,25 +2,34 @@
 
 import { useCallback, useEffect, useState } from "react";
 import {
-  analyzeVideo,
+  analyzeVideoFromKey,
+  getPresignedUploadUrl,
   getVideoQuota,
   isWcsApiConfigured,
+  uploadToPresignedUrl,
   type VideoAnalysisResponse,
   type VideoQuota,
 } from "@/lib/wcs-api";
 
-export type VideoAnalysisStatus = "idle" | "loading" | "success" | "error";
+export type VideoAnalysisStatus =
+  | "idle"
+  | "uploading"
+  | "analyzing"
+  | "success"
+  | "error";
 
 export type VideoAnalysisState = {
   status: VideoAnalysisStatus;
   result: VideoAnalysisResponse | null;
   error: string | null;
+  uploadProgress: number;
 };
 
 const INITIAL: VideoAnalysisState = {
   status: "idle",
   result: null,
   error: null,
+  uploadProgress: 0,
 };
 
 export function useVideoAnalysis() {
@@ -55,21 +64,36 @@ export function useVideoAnalysis() {
     async (file: File) => {
       if (!isWcsApiConfigured) {
         setState({
+          ...INITIAL,
           status: "error",
-          result: null,
           error: "Cloud API not configured (NEXT_PUBLIC_WCS_API_URL)",
         });
         return;
       }
-      setState({ status: "loading", result: null, error: null });
+      setState({ ...INITIAL, status: "uploading" });
       try {
-        const result = await analyzeVideo(file);
-        setState({ status: "success", result, error: null });
-        // Refresh quota so the UI shows the updated count.
+        // 1) Get a presigned PUT URL scoped to this user.
+        const { uploadUrl, objectKey } = await getPresignedUploadUrl(
+          file.name,
+          file.type || "application/octet-stream"
+        );
+        // 2) Upload straight to R2 (bypasses Railway's proxy body limit).
+        await uploadToPresignedUrl(uploadUrl, file, (percent) => {
+          setState((s) => ({ ...s, uploadProgress: percent }));
+        });
+        // 3) Kick off analysis on the stored object.
+        setState((s) => ({ ...s, status: "analyzing", uploadProgress: 100 }));
+        const result = await analyzeVideoFromKey(objectKey, file.name);
+        setState({
+          status: "success",
+          result,
+          error: null,
+          uploadProgress: 100,
+        });
         refreshQuota();
       } catch (e) {
         const message = e instanceof Error ? e.message : "Analysis failed";
-        setState({ status: "error", result: null, error: message });
+        setState({ ...INITIAL, status: "error", error: message });
       }
     },
     [refreshQuota]

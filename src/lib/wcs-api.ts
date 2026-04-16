@@ -251,27 +251,71 @@ export async function getAdminStats(): Promise<AdminStats> {
   return (await res.json()) as AdminStats;
 }
 
-export async function analyzeVideo(
-  file: File
-): Promise<VideoAnalysisResponse> {
-  if (!API_URL) throw new Error("NEXT_PUBLIC_WCS_API_URL is not set");
-  const token = await getAccessToken();
-  const form = new FormData();
-  form.append("file", file);
-  const res = await fetch(`${API_URL}/analyze/video`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${token}` },
-    body: form,
+export type PresignResponse = {
+  uploadUrl: string;
+  objectKey: string;
+  expiresIn: number;
+};
+
+export async function getPresignedUploadUrl(
+  filename: string,
+  contentType: string
+): Promise<PresignResponse> {
+  return postJson<PresignResponse>("/uploads/presign", {
+    filename,
+    content_type: contentType || "application/octet-stream",
   });
-  if (!res.ok) {
-    let detail = res.statusText;
-    try {
-      const body = await res.json();
-      if (body?.detail) detail = String(body.detail);
-    } catch {
-      // ignore
-    }
-    throw new Error(`Video analysis failed (${res.status}): ${detail}`);
-  }
-  return (await res.json()) as VideoAnalysisResponse;
+}
+
+/**
+ * PUT a file directly to the presigned URL. Uses XHR (not fetch) because
+ * only XHR exposes upload progress events.
+ */
+export function uploadToPresignedUrl(
+  url: string,
+  file: File,
+  onProgress?: (percent: number) => void
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("PUT", url);
+    xhr.setRequestHeader(
+      "Content-Type",
+      file.type || "application/octet-stream"
+    );
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable && onProgress) {
+        onProgress(Math.round((e.loaded / e.total) * 100));
+      }
+    };
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        resolve();
+      } else {
+        reject(
+          new Error(
+            `Upload failed (${xhr.status}). Your R2 bucket may be missing CORS — verify the policy allows PUT from this origin.`
+          )
+        );
+      }
+    };
+    xhr.onerror = () =>
+      reject(
+        new Error(
+          "Upload failed (network error). If this persists, check the R2 bucket's CORS policy."
+        )
+      );
+    xhr.onabort = () => reject(new Error("Upload aborted"));
+    xhr.send(file);
+  });
+}
+
+export async function analyzeVideoFromKey(
+  objectKey: string,
+  filename: string
+): Promise<VideoAnalysisResponse> {
+  return postJson<VideoAnalysisResponse>("/analyze/video", {
+    object_key: objectKey,
+    filename,
+  });
 }

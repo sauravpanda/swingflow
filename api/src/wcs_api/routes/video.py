@@ -1,11 +1,11 @@
 import os
-import tempfile
 
 import httpx
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel
 
 from ..auth import verify_jwt
-from ..services import quota, supabase_admin
+from ..services import quota, r2, supabase_admin
 from ..services.video_analyzer import (
     VideoAnalysisError,
     analyze_video_path,
@@ -14,6 +14,11 @@ from ..services.video_analyzer import (
 from ..settings import settings
 
 router = APIRouter(prefix="/analyze/video", tags=["analyze"])
+
+
+class VideoAnalyzeBody(BaseModel):
+    object_key: str
+    filename: str | None = None
 
 
 def _admin_error_to_http(exc: httpx.HTTPStatusError) -> HTTPException:
@@ -42,13 +47,17 @@ async def get_quota(user: dict = Depends(verify_jwt)) -> dict:
 
 @router.post("")
 async def analyze_video_endpoint(
-    file: UploadFile = File(...),
+    body: VideoAnalyzeBody,
     user: dict = Depends(verify_jwt),
 ) -> dict:
     user_id = user["sub"]
 
-    # 1) Quota gate — must be done before consuming the upload, so
-    #    we don't burn bandwidth on requests we'll reject anyway.
+    # Authorization: key must belong to this user (prevents analyzing
+    # someone else's upload by key-guessing).
+    if not r2.object_key_belongs_to_user(body.object_key, user_id):
+        raise HTTPException(status_code=403, detail="object does not belong to user")
+
+    # Quota gate.
     try:
         quota_status = await quota.get_video_quota_status(user_id)
     except httpx.HTTPStatusError as exc:
@@ -69,26 +78,32 @@ async def analyze_video_endpoint(
             detail="video analysis not configured (GEMINI_API_KEY missing)",
         )
 
-    # 2) Read bytes and enforce size limit.
-    content = await file.read()
-    if not content:
-        raise HTTPException(status_code=400, detail="empty file")
-    if len(content) > settings.max_video_bytes:
+    # Validate the object exists in R2 and check size.
+    head = r2.head_object(body.object_key)
+    if not head:
+        raise HTTPException(
+            status_code=404,
+            detail="object not found — upload may have expired or failed",
+        )
+
+    content_length = int(head.get("ContentLength", 0))
+    if content_length > settings.max_video_bytes:
+        r2.delete_object(body.object_key)
         limit_mb = settings.max_video_bytes / (1024 * 1024)
-        size_mb = len(content) / (1024 * 1024)
+        size_mb = content_length / (1024 * 1024)
         raise HTTPException(
             status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
             detail=f"file is {size_mb:.0f} MB, limit is {limit_mb:.0f} MB",
         )
 
-    # 3) Spool to a tempfile so ffprobe + Gemini File API can read by path.
-    suffix = os.path.splitext(file.filename or "video")[1] or ".mp4"
-    with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
-        tmp.write(content)
-        tmp_path = tmp.name
+    # Download to a tempfile and run the existing pipeline.
+    suffix = os.path.splitext(body.filename or body.object_key)[1] or ".mp4"
+    try:
+        tmp_path = r2.download_to_tempfile(body.object_key, suffix=suffix)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=502, detail=f"failed to download from R2: {exc}")
 
     try:
-        # 4) Duration check — second-level enforcement of the per-plan cap.
         try:
             duration = get_video_duration(tmp_path)
         except VideoAnalysisError as exc:
@@ -106,13 +121,11 @@ async def analyze_video_endpoint(
                 ),
             )
 
-        # 5) Analyze (slow — ~30-60s for Gemini Flash on a 1-2 min clip).
         try:
             result = analyze_video_path(tmp_path)
         except VideoAnalysisError as exc:
             raise HTTPException(status_code=502, detail=str(exc))
 
-        # 6) Record successful usage and persist the full result.
         await supabase_admin.insert_usage_event(
             user_id=user_id,
             kind="video",
@@ -121,12 +134,12 @@ async def analyze_video_endpoint(
         try:
             await supabase_admin.insert_video_analysis(
                 user_id=user_id,
-                filename=file.filename,
+                filename=body.filename,
                 duration=duration,
                 result=result,
             )
         except Exception:
-            pass  # persistence failure is non-fatal
+            pass
 
         return {
             "duration": round(duration, 2),
@@ -143,3 +156,5 @@ async def analyze_video_endpoint(
             os.unlink(tmp_path)
         except OSError:
             pass
+        # Clean up the R2 object — the 24h lifecycle rule is a backstop.
+        r2.delete_object(body.object_key)

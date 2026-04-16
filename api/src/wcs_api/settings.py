@@ -28,7 +28,12 @@ class Settings(BaseSettings):
     # patterns_identified, the pre-pass is an opt-in precision mode for
     # cases where the main call mis-identifies patterns. Default off.
     enable_pattern_prepass: bool = False
-    max_video_bytes: int = 90 * 1024 * 1024  # 90 MB (below Railway edge proxy ceiling)
+    max_video_bytes: int = 500 * 1024 * 1024  # 500 MB — we upload direct to R2 now, no proxy
+    r2_account_id: str = ""
+    r2_access_key_id: str = ""
+    r2_secret_access_key: str = ""
+    r2_bucket: str = "swingflow-uploads"
+    r2_upload_ttl_seconds: int = 3600
     free_monthly_video: int = 1
     free_max_video_seconds: int = 120
     basic_monthly_video: int = 10
