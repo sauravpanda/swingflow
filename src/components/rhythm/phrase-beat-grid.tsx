@@ -40,7 +40,7 @@ export function PhraseBeatGrid({
         <span className="font-mono tabular-nums">{phraseLabel}</span>
       </div>
 
-      <div className="grid grid-cols-8 gap-1.5">
+      <div className="grid grid-cols-8 gap-1 sm:gap-1.5">
         {BEAT_LABELS.map((label, i) => {
           const role = beatRole(i);
           const isActive = i === currentBeatInPhrase;
@@ -48,7 +48,7 @@ export function PhraseBeatGrid({
             <div
               key={i}
               className={cn(
-                "relative flex h-14 flex-col items-center justify-center rounded-md border font-semibold transition-all",
+                "relative flex h-12 sm:h-14 flex-col items-center justify-center rounded-md border font-semibold transition-all",
                 role === "anchor" &&
                   "border-amber-400/50 bg-amber-400/10 text-amber-200",
                 role === "downbeat" &&
@@ -59,9 +59,9 @@ export function PhraseBeatGrid({
                   "scale-[1.08] ring-2 ring-offset-2 ring-offset-background ring-primary"
               )}
             >
-              <span className="text-base">{label}</span>
+              <span className="text-sm sm:text-base">{label}</span>
               {role === "anchor" && (
-                <span className="absolute bottom-1 text-[8px] font-normal uppercase tracking-wider opacity-70">
+                <span className="absolute bottom-0.5 sm:bottom-1 text-[7px] sm:text-[8px] font-normal uppercase tracking-wider opacity-70">
                   anchor
                 </span>
               )}

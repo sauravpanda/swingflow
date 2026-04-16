@@ -46,17 +46,17 @@ export default function HomePage() {
         {/* ─── Hero ─── */}
         <section className="relative overflow-hidden">
           <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--primary)/10,_transparent_60%)] pointer-events-none" />
-          <div className="container mx-auto px-4 pt-20 pb-16 sm:pt-28 sm:pb-20 relative">
-            <div className="max-w-3xl mx-auto text-center space-y-6">
+          <div className="container mx-auto px-4 pt-12 pb-12 sm:pt-28 sm:pb-20 relative">
+            <div className="max-w-3xl mx-auto text-center space-y-5 sm:space-y-6">
               <Badge variant="secondary" className="px-3 py-1 text-xs">
                 <Sparkles className="h-3 w-3 mr-1.5" />
                 Built for West Coast Swing dancers
               </Badge>
-              <h1 className="text-4xl sm:text-6xl font-bold tracking-tight">
+              <h1 className="text-3xl sm:text-6xl font-bold tracking-tight leading-tight">
                 See exactly where you&rsquo;re{" "}
                 <span className="text-primary">dancing off-beat</span>
               </h1>
-              <p className="text-lg sm:text-xl text-muted-foreground max-w-2xl mx-auto">
+              <p className="text-base sm:text-xl text-muted-foreground max-w-2xl mx-auto">
                 Upload a song and SwingFlow finds every anchor. Upload a dance
                 clip and you get WSDC-style scoring on timing, technique,
                 teamwork, and presentation — with the exact moments that need
@@ -86,13 +86,13 @@ export default function HomePage() {
           id="how-it-works"
           className="border-t border-border/60 bg-card/20"
         >
-          <div className="container mx-auto px-4 py-16 sm:py-24">
+          <div className="container mx-auto px-4 py-12 sm:py-24">
             <div className="text-center max-w-2xl mx-auto mb-12 space-y-3">
               <div className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-primary">
                 <Sparkles className="h-4 w-4" />
                 How it works
               </div>
-              <h2 className="text-3xl sm:text-4xl font-bold tracking-tight">
+              <h2 className="text-2xl sm:text-4xl font-bold tracking-tight">
                 From song to feedback in four steps
               </h2>
             </div>
@@ -126,14 +126,14 @@ export default function HomePage() {
         </section>
 
         {/* ─── Feature 1: Music analysis with the phrase-beat-grid mockup ─── */}
-        <section className="container mx-auto px-4 py-16 sm:py-24">
+        <section className="container mx-auto px-4 py-12 sm:py-24">
           <div className="grid lg:grid-cols-2 gap-10 items-center">
             <div className="space-y-5 order-2 lg:order-1">
               <div className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-primary">
                 <Music className="h-4 w-4" />
                 Precise music analysis
               </div>
-              <h2 className="text-3xl sm:text-4xl font-bold tracking-tight">
+              <h2 className="text-2xl sm:text-4xl font-bold tracking-tight">
                 Every anchor, marked precisely
               </h2>
               <p className="text-muted-foreground text-lg">
@@ -174,7 +174,7 @@ export default function HomePage() {
                     </span>
                     <span className="font-mono tabular-nums">3 / 9</span>
                   </div>
-                  <div className="grid grid-cols-8 gap-1.5">
+                  <div className="grid grid-cols-8 gap-1 sm:gap-1.5">
                     {["1", "2", "3", "4", "5", "6", "7", "8"].map((label, i) => {
                       const isDownbeat = i === 0;
                       const isAnchor = i === 4 || i === 5;
@@ -183,7 +183,7 @@ export default function HomePage() {
                         <div
                           key={i}
                           className={[
-                            "relative flex h-14 flex-col items-center justify-center rounded-md border font-semibold",
+                            "relative flex h-12 sm:h-14 flex-col items-center justify-center rounded-md border font-semibold",
                             isAnchor
                               ? "border-amber-400/50 bg-amber-400/10 text-amber-200"
                               : isDownbeat
@@ -194,9 +194,9 @@ export default function HomePage() {
                               : "",
                           ].join(" ")}
                         >
-                          <span className="text-base">{label}</span>
+                          <span className="text-sm sm:text-base">{label}</span>
                           {isAnchor && (
-                            <span className="absolute bottom-1 text-[8px] font-normal uppercase tracking-wider opacity-70">
+                            <span className="absolute bottom-0.5 sm:bottom-1 text-[7px] sm:text-[8px] font-normal uppercase tracking-wider opacity-70">
                               anchor
                             </span>
                           )}
@@ -225,7 +225,7 @@ export default function HomePage() {
 
         {/* ─── Feature 2: Video scoring ─── */}
         <section className="border-y border-border/60 bg-card/20">
-          <div className="container mx-auto px-4 py-16 sm:py-24">
+          <div className="container mx-auto px-4 py-12 sm:py-24">
             <div className="grid lg:grid-cols-2 gap-10 items-center">
               <div>
                 <Card className="border-border/60 bg-card/60 backdrop-blur">
@@ -279,7 +279,7 @@ export default function HomePage() {
                   <Video className="h-4 w-4" />
                   Dance video analysis
                 </div>
-                <h2 className="text-3xl sm:text-4xl font-bold tracking-tight">
+                <h2 className="text-2xl sm:text-4xl font-bold tracking-tight">
                   Honest feedback, in 60 seconds
                 </h2>
                 <p className="text-muted-foreground text-lg">
@@ -319,9 +319,9 @@ export default function HomePage() {
         </section>
 
         {/* ─── Feature 3 row: Rhythm trainer + Pattern library ─── */}
-        <section className="container mx-auto px-4 py-16 sm:py-24">
+        <section className="container mx-auto px-4 py-12 sm:py-24">
           <div className="text-center max-w-2xl mx-auto mb-12 space-y-3">
-            <h2 className="text-3xl sm:text-4xl font-bold tracking-tight">
+            <h2 className="text-2xl sm:text-4xl font-bold tracking-tight">
               Everything you need to practice with intention
             </h2>
             <p className="text-muted-foreground text-lg">
@@ -350,9 +350,9 @@ export default function HomePage() {
 
         {/* ─── Pricing ─── */}
         <section className="border-t border-border/60 bg-card/20">
-          <div className="container mx-auto px-4 py-16 sm:py-24">
+          <div className="container mx-auto px-4 py-12 sm:py-24">
             <div className="text-center max-w-2xl mx-auto mb-10 space-y-3">
-              <h2 className="text-3xl sm:text-4xl font-bold tracking-tight">
+              <h2 className="text-2xl sm:text-4xl font-bold tracking-tight">
                 Simple pricing
               </h2>
               <p className="text-muted-foreground text-lg">
@@ -510,7 +510,7 @@ export default function HomePage() {
               <HelpCircle className="h-4 w-4" />
               FAQ
             </div>
-            <h2 className="text-3xl sm:text-4xl font-bold tracking-tight">
+            <h2 className="text-2xl sm:text-4xl font-bold tracking-tight">
               Common questions
             </h2>
           </div>
@@ -549,7 +549,7 @@ export default function HomePage() {
         {/* ─── CTA ─── */}
         <section className="container mx-auto px-4 py-20 text-center">
           <div className="max-w-2xl mx-auto space-y-5">
-            <h2 className="text-3xl sm:text-4xl font-bold tracking-tight">
+            <h2 className="text-2xl sm:text-4xl font-bold tracking-tight">
               Ready to practice smarter?
             </h2>
             <p className="text-muted-foreground text-lg">

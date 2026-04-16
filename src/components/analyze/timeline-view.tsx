@@ -60,6 +60,10 @@ export function TimelineView({
   const [currentTime, setCurrentTime] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [hovered, setHovered] = useState<VideoPatternIdentified | null>(null);
+  const [selected, setSelected] = useState<VideoPatternIdentified | null>(null);
+  // On touch devices there's no hover — tap sticks a selection that
+  // shows the same detail card below the timeline.
+  const detail = hovered ?? selected;
 
   const effectiveDuration = useMemo(() => {
     if (duration > 0) return duration;
@@ -138,7 +142,7 @@ export function TimelineView({
         </div>
 
         <div
-          className="relative h-12 rounded-md bg-muted/30 overflow-hidden border border-border"
+          className="relative h-12 sm:h-14 rounded-md bg-muted/30 overflow-hidden border border-border"
           role="region"
           aria-label="Pattern timeline"
         >
@@ -155,12 +159,15 @@ export function TimelineView({
                 key={`${i}-${p.name}`}
                 type="button"
                 className={cn(
-                  "absolute h-full border-r border-background/40 flex items-center justify-start px-1 text-[10px] font-medium overflow-hidden whitespace-nowrap transition-opacity",
+                  "absolute h-full border-r border-background/40 flex items-center justify-start px-1 text-[9px] sm:text-[10px] font-medium overflow-hidden whitespace-nowrap transition-opacity",
                   colorForQuality(p.quality),
                   hovered === p ? "opacity-100" : "opacity-90 hover:opacity-100"
                 )}
                 style={{ left: `${left}%`, width: `${width}%` }}
-                onClick={() => seek(start)}
+                onClick={() => {
+                  seek(start);
+                  setSelected(p);
+                }}
                 onMouseEnter={() => setHovered(p)}
                 onMouseLeave={() => setHovered(null)}
                 title={`${p.name} — ${p.quality ?? "?"} · ${p.timing ?? "?"} · ${formatTime(start)}-${formatTime(end)}`}
@@ -248,23 +255,23 @@ export function TimelineView({
           </span>
         </div>
 
-        {/* Hovered pattern detail */}
-        {hovered && (
+        {/* Hovered / tap-selected pattern detail */}
+        {detail && (
           <div className="rounded-md border border-border bg-muted/20 p-2 text-xs">
-            <div className="flex items-baseline justify-between gap-3">
+            <div className="flex items-baseline justify-between gap-2 flex-wrap">
               <span className="font-semibold text-foreground">
-                {hovered.name}
+                {detail.name}
               </span>
               <span className="text-muted-foreground font-mono tabular-nums">
-                {formatTime(hovered.start_time ?? 0)} →{" "}
-                {formatTime(hovered.end_time ?? 0)}
+                {formatTime(detail.start_time ?? 0)} →{" "}
+                {formatTime(detail.end_time ?? 0)}
               </span>
             </div>
             <div className="text-muted-foreground mt-1">
-              {hovered.quality ?? "—"} · {hovered.timing ?? "—"}
-              {hovered.notes && (
-                <span className="block mt-1 whitespace-pre-wrap">
-                  {hovered.notes}
+              {detail.quality ?? "—"} · {detail.timing ?? "—"}
+              {detail.notes && (
+                <span className="block mt-1 whitespace-pre-wrap break-words">
+                  {detail.notes}
                 </span>
               )}
             </div>
