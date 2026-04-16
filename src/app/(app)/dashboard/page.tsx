@@ -207,7 +207,7 @@ export default function DashboardPage() {
                   return (
                     <Link
                       key={rec.id}
-                      href="/analyze"
+                      href={`/analyze?id=${rec.id}`}
                       className="flex items-center justify-between rounded-md border border-border p-2.5 text-sm hover:bg-muted/30 transition-colors"
                     >
                       <div className="min-w-0 flex-1">
