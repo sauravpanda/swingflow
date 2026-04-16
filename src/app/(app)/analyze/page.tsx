@@ -145,7 +145,7 @@ export default function AnalyzePage() {
   const isPaywalled = quota && quota.remaining <= 0;
 
   return (
-    <div className="space-y-6 max-w-2xl mx-auto">
+    <div className="space-y-6 max-w-4xl mx-auto">
       <div>
         <div className="flex items-center gap-2">
           <Video className="h-6 w-6 text-primary" />
