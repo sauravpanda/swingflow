@@ -65,6 +65,15 @@ export default function AnalyzePage() {
         return;
       }
 
+      const MAX_SIZE_MB = 250;
+      if (f.size > MAX_SIZE_MB * 1024 * 1024) {
+        setLocalError(
+          `File is ${(f.size / 1024 / 1024).toFixed(0)} MB, limit is ${MAX_SIZE_MB} MB. Try trimming or compressing the clip.`
+        );
+        if (inputRef.current) inputRef.current.value = "";
+        return;
+      }
+
       // Client-side duration check (saves a wasted upload).
       if (quota) {
         try {

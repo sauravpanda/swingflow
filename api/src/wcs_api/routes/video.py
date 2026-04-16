@@ -74,9 +74,11 @@ async def analyze_video_endpoint(
     if not content:
         raise HTTPException(status_code=400, detail="empty file")
     if len(content) > settings.max_video_bytes:
+        limit_mb = settings.max_video_bytes / (1024 * 1024)
+        size_mb = len(content) / (1024 * 1024)
         raise HTTPException(
             status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-            detail=f"file exceeds {settings.max_video_bytes} bytes",
+            detail=f"file is {size_mb:.0f} MB, limit is {limit_mb:.0f} MB",
         )
 
     # 3) Spool to a tempfile so ffprobe + Gemini File API can read by path.
