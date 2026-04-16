@@ -4,7 +4,31 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { TrendingUp, Trash2, ExternalLink } from "lucide-react";
-import type { ChartRecord } from "@/hooks/use-analysis-history";
+import type { ChartMetric, ChartRecord } from "@/hooks/use-analysis-history";
+
+const METRIC_TABS: Array<{ key: ChartMetric; label: string }> = [
+  { key: "overall", label: "Overall" },
+  { key: "timing", label: "Timing" },
+  { key: "technique", label: "Technique" },
+  { key: "teamwork", label: "Teamwork" },
+  { key: "presentation", label: "Presentation" },
+];
+
+function scoreFor(r: ChartRecord, metric: ChartMetric): number | null {
+  switch (metric) {
+    case "timing":
+      return r.timing;
+    case "technique":
+      return r.technique;
+    case "teamwork":
+      return r.teamwork;
+    case "presentation":
+      return r.presentation;
+    case "overall":
+    default:
+      return r.score;
+  }
+}
 
 type Point = {
   id: string;
@@ -53,10 +77,14 @@ function addMonths(d: Date, n: number): Date {
 }
 
 /** Build per-month buckets covering [earliest - 3mo, max(now, latest) + 3mo]. */
-function buildBuckets(records: ChartRecord[]): MonthBucket[] {
+function buildBuckets(
+  records: ChartRecord[],
+  metric: ChartMetric = "overall"
+): MonthBucket[] {
   const points: Point[] = [];
   for (const r of records) {
-    if (typeof r.score !== "number" || Number.isNaN(r.score)) continue;
+    const s = scoreFor(r, metric);
+    if (typeof s !== "number" || Number.isNaN(s)) continue;
     // Prefer the user-entered event_date so footage from a 2024
     // event clusters in 2024, even if uploaded later. Falls back to
     // created_at when no event date was supplied.
@@ -79,7 +107,7 @@ function buildBuckets(records: ChartRecord[]): MonthBucket[] {
     points.push({
       id: r.id,
       date,
-      score: r.score,
+      score: s,
       filename: r.filename,
       event_name: r.event_name,
       stage: r.stage,
@@ -168,7 +196,11 @@ export function ScoreTrendChart({
   loading?: boolean;
 }) {
   const router = useRouter();
-  const buckets = useMemo(() => buildBuckets(records), [records]);
+  const [metric, setMetric] = useState<ChartMetric>("overall");
+  const buckets = useMemo(
+    () => buildBuckets(records, metric),
+    [records, metric]
+  );
   const [hovered, setHovered] = useState<Point | null>(null);
 
   // Clicking a dot or the detail card deep-links into the analyze
@@ -228,7 +260,7 @@ export function ScoreTrendChart({
 
   return (
     <Card>
-      <CardHeader className="pb-3">
+      <CardHeader className="pb-3 space-y-3">
         <CardTitle className="text-base flex items-center justify-between flex-wrap gap-2">
           <span className="flex items-center gap-2">
             <TrendingUp className="h-4 w-4 text-primary" />
@@ -245,6 +277,25 @@ export function ScoreTrendChart({
             )}
           </span>
         </CardTitle>
+        <div className="flex flex-wrap gap-1">
+          {METRIC_TABS.map((t) => (
+            <button
+              key={t.key}
+              type="button"
+              onClick={() => {
+                setMetric(t.key);
+                setHovered(null);
+              }}
+              className={`text-[11px] px-2 py-0.5 rounded-md border transition-colors ${
+                metric === t.key
+                  ? "border-primary bg-primary/15 text-foreground"
+                  : "border-border text-muted-foreground hover:text-foreground hover:border-primary/40"
+              }`}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
       </CardHeader>
       <CardContent>
         <TrendSVG
