@@ -285,12 +285,48 @@ def _strip_code_fence(text: str) -> str:
 
 
 def _safe_parse_json(text: str) -> dict[str, Any] | None:
-    cleaned = _strip_code_fence(text)
+    cleaned = _strip_code_fence(text).strip()
+
+    # Happy path
     try:
         parsed = json.loads(cleaned)
+        return parsed if isinstance(parsed, dict) else None
     except json.JSONDecodeError:
+        pass
+
+    # Tolerant fallback: try to extract the first complete top-level JSON
+    # object by depth-counting braces. Handles trailing garbage, markdown
+    # fragments, or partial truncation past a valid object.
+    start = cleaned.find("{")
+    if start < 0:
         return None
-    return parsed if isinstance(parsed, dict) else None
+    depth = 0
+    in_string = False
+    escape = False
+    for i in range(start, len(cleaned)):
+        ch = cleaned[i]
+        if escape:
+            escape = False
+            continue
+        if ch == "\\":
+            escape = True
+            continue
+        if ch == '"':
+            in_string = not in_string
+            continue
+        if in_string:
+            continue
+        if ch == "{":
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth == 0:
+                try:
+                    parsed = json.loads(cleaned[start : i + 1])
+                    return parsed if isinstance(parsed, dict) else None
+                except json.JSONDecodeError:
+                    return None
+    return None
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -358,8 +394,12 @@ def _max_interval(categories: dict[str, dict[str, Any]]) -> float:
 def _build_gen_config(model: str) -> genai_types.GenerateContentConfig:
     config_kwargs: dict[str, Any] = {
         "system_instruction": SYSTEM_PROMPT,
-        "max_output_tokens": 8192,
+        # Rich schema (reasoning + sub-scores + off-beat moments +
+        # patterns + lead/follow) produces long outputs. 8192 was
+        # truncating mid-JSON on real dance videos with many events.
+        "max_output_tokens": 32768,
         "temperature": 0.0,
+        "response_mime_type": "application/json",
     }
     # Extended thinking — Gemini 3.x accepts thinking_config. We pass it
     # on a best-effort basis and fall back silently for older models.
