@@ -12,7 +12,7 @@ from . import supabase_admin
 
 stripe.api_key = settings.stripe_secret_key
 
-PLAN_PRO = "pro"
+PLAN_BASIC = "basic"
 PLAN_FREE = "free"
 ACTIVE_STATUSES = {"active", "trialing"}
 
@@ -79,7 +79,7 @@ async def _upsert_subscription_record(user_id: str, sub: dict[str, Any]) -> None
 
 
 def _plan_for_status(status: str | None) -> str:
-    return PLAN_PRO if status in ACTIVE_STATUSES else PLAN_FREE
+    return PLAN_BASIC if status in ACTIVE_STATUSES else PLAN_FREE
 
 
 async def handle_event(event: dict[str, Any]) -> None:
@@ -96,7 +96,7 @@ async def handle_event(event: dict[str, Any]) -> None:
         await _upsert_subscription_record(user_id, dict(sub))
         await supabase_admin.update_profile(
             user_id,
-            {"plan": PLAN_PRO, "stripe_customer_id": customer_id},
+            {"plan": PLAN_BASIC, "stripe_customer_id": customer_id},
         )
         return
 

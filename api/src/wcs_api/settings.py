@@ -19,11 +19,19 @@ class Settings(BaseSettings):
 
     gemini_api_key: str = ""
     gemini_model: str = "gemini-2.0-flash-exp"
+    # When enabled, runs a dedicated Gemini call asking ONLY about the
+    # pattern timeline, then injects the result as context into the
+    # main scoring call. wcs-analyzer found this improves scoring
+    # quality, but it doubles Gemini spend per video. Since we now ask
+    # the main prompt to emit start_time/end_time directly in
+    # patterns_identified, the pre-pass is an opt-in precision mode for
+    # cases where the main call mis-identifies patterns. Default off.
+    enable_pattern_prepass: bool = False
     max_video_bytes: int = 100 * 1024 * 1024  # 100 MB
     free_monthly_video: int = 1
     free_max_video_seconds: int = 120
-    pro_monthly_video: int = 10
-    pro_max_video_seconds: int = 300
+    basic_monthly_video: int = 10
+    basic_max_video_seconds: int = 300
 
     @property
     def allowed_origins_list(self) -> list[str]:

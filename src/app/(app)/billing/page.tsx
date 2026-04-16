@@ -9,9 +9,23 @@ import {
   Sparkles,
   CreditCard,
   ArrowUpRight,
+  Check,
 } from "lucide-react";
 import { useProfile } from "@/hooks/use-profile";
 import { createCheckoutSession, createPortalSession } from "@/lib/wcs-api";
+
+const BASIC_BENEFITS = [
+  "10 dance video analyses per month",
+  "Clips up to 5 minutes each",
+  "Precise cloud music analysis — unlimited songs",
+  "WSDC-style scoring across timing, technique, teamwork, and presentation",
+  "Cancel anytime — access continues until the end of your period",
+];
+
+const FREE_FEATURES = [
+  "1 dance video analysis per month, up to 2 minutes",
+  "Precise cloud music analysis — unlimited songs",
+];
 
 export default function BillingPage() {
   const { profile, loading, error } = useProfile();
@@ -57,7 +71,7 @@ export default function BillingPage() {
     );
   }
 
-  const isPro = profile?.plan === "pro";
+  const isBasic = profile?.plan === "basic";
 
   return (
     <div className="space-y-6 max-w-2xl mx-auto">
@@ -79,36 +93,29 @@ export default function BillingPage() {
         </Card>
       )}
 
+      {/* Current plan card */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center justify-between">
             <span>Current plan</span>
-            <Badge variant={isPro ? "default" : "secondary"}>
-              {isPro ? "Pro" : "Free"}
+            <Badge variant={isBasic ? "default" : "secondary"}>
+              {isBasic ? "Basic" : "Free"}
             </Badge>
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <ul className="space-y-1.5 text-sm text-muted-foreground">
-            <li>
-              • Music analysis —{" "}
-              <span className="text-foreground">unlimited</span>
-            </li>
-            <li>
-              • Video analysis —{" "}
-              <span className="text-foreground">
-                {isPro
-                  ? "10 per month, up to 5 minutes each"
-                  : "1 per month, up to 2 minutes"}
-              </span>
-            </li>
+          <ul className="space-y-2 text-sm">
+            {(isBasic ? BASIC_BENEFITS : FREE_FEATURES).map((feature) => (
+              <li key={feature} className="flex items-start gap-2">
+                <Check className="h-4 w-4 text-primary mt-0.5 shrink-0" />
+                <span className="text-muted-foreground">{feature}</span>
+              </li>
+            ))}
           </ul>
 
-          {actError && (
-            <p className="text-sm text-destructive">{actError}</p>
-          )}
+          {actError && <p className="text-sm text-destructive">{actError}</p>}
 
-          {isPro ? (
+          {isBasic && (
             <Button
               onClick={handleManage}
               disabled={acting}
@@ -122,7 +129,37 @@ export default function BillingPage() {
               )}
               Manage subscription
             </Button>
-          ) : (
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Upgrade card — only shown to free users */}
+      {!isBasic && (
+        <Card className="border-primary/40">
+          <CardHeader>
+            <CardTitle className="flex items-center justify-between">
+              <span className="flex items-center gap-2">
+                <Sparkles className="h-5 w-5 text-primary" />
+                Upgrade to Basic
+              </span>
+              <span className="text-2xl font-bold">
+                $10
+                <span className="text-sm font-normal text-muted-foreground">
+                  /mo
+                </span>
+              </span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <ul className="space-y-2 text-sm">
+              {BASIC_BENEFITS.map((benefit) => (
+                <li key={benefit} className="flex items-start gap-2">
+                  <Check className="h-4 w-4 text-primary mt-0.5 shrink-0" />
+                  <span>{benefit}</span>
+                </li>
+              ))}
+            </ul>
+
             <Button
               onClick={handleUpgrade}
               disabled={acting}
@@ -133,11 +170,11 @@ export default function BillingPage() {
               ) : (
                 <Sparkles className="mr-2 h-4 w-4" />
               )}
-              Upgrade to Pro — $10/mo
+              Upgrade to Basic — $10/mo
             </Button>
-          )}
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      )}
 
       <p className="text-center text-xs text-muted-foreground">
         Subscriptions managed by Stripe. Cancel anytime — access continues

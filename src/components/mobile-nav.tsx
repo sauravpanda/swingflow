@@ -4,19 +4,19 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   LayoutDashboard,
-  Library,
-  Brain,
   Timer,
   Music,
+  Video,
+  CreditCard,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const mobileNavItems = [
   { href: "/dashboard", label: "Home", icon: LayoutDashboard },
-  { href: "/patterns", label: "Patterns", icon: Library },
-  { href: "/review", label: "Review", icon: Brain },
-  { href: "/practice", label: "Practice", icon: Timer },
   { href: "/rhythm", label: "Rhythm", icon: Music },
+  { href: "/analyze", label: "Analyze", icon: Video },
+  { href: "/practice", label: "Practice", icon: Timer },
+  { href: "/billing", label: "Plan", icon: CreditCard },
 ];
 
 export function MobileNav() {

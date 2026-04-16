@@ -8,11 +8,28 @@
 create table if not exists public.profiles (
   id                 uuid primary key references auth.users(id) on delete cascade,
   email              text,
-  plan               text not null default 'free' check (plan in ('free', 'pro')),
+  plan               text not null default 'free' check (plan in ('free', 'basic')),
   stripe_customer_id text unique,
   created_at         timestamptz not null default now(),
   updated_at         timestamptz not null default now()
 );
+
+-- Migration: older versions used 'pro' as the paid tier name. Rename to
+-- 'basic' if we're coming from that state. Idempotent and no-op on fresh.
+do $$
+begin
+  update public.profiles set plan = 'basic' where plan = 'pro';
+  if exists (
+    select 1 from pg_constraint c
+    join pg_class r on c.conrelid = r.oid
+    where r.relname = 'profiles' and c.conname = 'profiles_plan_check'
+      and pg_get_constraintdef(c.oid) like '%pro%'
+  ) then
+    alter table public.profiles drop constraint profiles_plan_check;
+    alter table public.profiles add constraint profiles_plan_check
+      check (plan in ('free', 'basic'));
+  end if;
+end $$;
 
 create table if not exists public.subscriptions (
   id                     text primary key,

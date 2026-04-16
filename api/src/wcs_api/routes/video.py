@@ -1,6 +1,7 @@
 import os
 import tempfile
 
+import httpx
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 
 from ..auth import verify_jwt
@@ -15,9 +16,28 @@ from ..settings import settings
 router = APIRouter(prefix="/analyze/video", tags=["analyze"])
 
 
+def _admin_error_to_http(exc: httpx.HTTPStatusError) -> HTTPException:
+    code = exc.response.status_code
+    if code in (401, 403):
+        return HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=(
+                "backend Supabase admin call rejected — check "
+                "SUPABASE_SERVICE_ROLE_KEY on the API service"
+            ),
+        )
+    return HTTPException(
+        status_code=status.HTTP_502_BAD_GATEWAY,
+        detail=f"Supabase admin error: {code}",
+    )
+
+
 @router.get("/quota")
 async def get_quota(user: dict = Depends(verify_jwt)) -> dict:
-    return await quota.get_video_quota_status(user["sub"])
+    try:
+        return await quota.get_video_quota_status(user["sub"])
+    except httpx.HTTPStatusError as exc:
+        raise _admin_error_to_http(exc)
 
 
 @router.post("")
@@ -29,7 +49,10 @@ async def analyze_video_endpoint(
 
     # 1) Quota gate — must be done before consuming the upload, so
     #    we don't burn bandwidth on requests we'll reject anyway.
-    quota_status = await quota.get_video_quota_status(user_id)
+    try:
+        quota_status = await quota.get_video_quota_status(user_id)
+    except httpx.HTTPStatusError as exc:
+        raise _admin_error_to_http(exc)
     if quota_status["remaining"] <= 0:
         raise HTTPException(
             status_code=status.HTTP_402_PAYMENT_REQUIRED,

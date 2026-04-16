@@ -18,7 +18,10 @@ class VideoQuotaStatus(TypedDict):
 def _start_of_month_iso() -> str:
     now = _dt.datetime.now(_dt.timezone.utc)
     start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-    return start.isoformat()
+    # Use 'Z' suffix instead of '+00:00' because '+' in a URL query string
+    # gets decoded to ' ' (space) by PostgREST, producing
+    # "invalid input syntax for type timestamp with time zone".
+    return start.isoformat().replace("+00:00", "Z")
 
 
 async def get_video_quota_status(user_id: str) -> VideoQuotaStatus:
@@ -30,9 +33,9 @@ async def get_video_quota_status(user_id: str) -> VideoQuotaStatus:
         since_iso=_start_of_month_iso(),
     )
 
-    if plan == "pro":
-        limit = settings.pro_monthly_video
-        max_seconds = settings.pro_max_video_seconds
+    if plan == "basic":
+        limit = settings.basic_monthly_video
+        max_seconds = settings.basic_max_video_seconds
     else:
         plan = "free"
         limit = settings.free_monthly_video
