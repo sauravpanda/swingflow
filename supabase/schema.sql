@@ -47,15 +47,29 @@ create table if not exists public.subscriptions (
 create index if not exists subscriptions_user_id_idx on public.subscriptions(user_id);
 
 create table if not exists public.usage_events (
-  id           uuid primary key default gen_random_uuid(),
-  user_id      uuid not null references public.profiles(id) on delete cascade,
-  kind         text not null check (kind in ('video', 'music')),
-  duration_sec integer,
-  job_id       text,
-  created_at   timestamptz not null default now()
+  id              uuid primary key default gen_random_uuid(),
+  user_id         uuid not null references public.profiles(id) on delete cascade,
+  kind            text not null check (kind in ('video', 'music')),
+  duration_sec    integer,
+  job_id          text,
+  -- Cost tracking (video analyses only — music path is on-device and free).
+  -- Cost is stored as integer micros (1 micro = 1e-6 USD) to avoid float drift
+  -- in sum() / avg() queries.
+  model           text,
+  prompt_tokens   integer,
+  response_tokens integer,
+  cost_usd_micros integer,
+  created_at      timestamptz not null default now()
 );
 create index if not exists usage_events_user_month_idx
   on public.usage_events(user_id, created_at desc);
+
+-- Migration: add cost columns to pre-existing usage_events. No-op on fresh.
+alter table public.usage_events
+  add column if not exists model           text,
+  add column if not exists prompt_tokens   integer,
+  add column if not exists response_tokens integer,
+  add column if not exists cost_usd_micros integer;
 
 -- ────────────────────────────────────────────────────────────
 -- Row Level Security
@@ -98,8 +112,20 @@ create table if not exists public.video_analyses (
   stage             text,            -- optional: prelims / quarters / semis / finals
   tags              text[] default '{}',  -- optional free-form user tags
   share_token       text,            -- NULL = not shared; set = public read via /shared?t=<token>
+  -- Cost / usage tracking (admin-only, never exposed to user UI).
+  model             text,
+  prompt_tokens     integer,
+  response_tokens   integer,
+  cost_usd_micros   integer,
   created_at        timestamptz not null default now()
 );
+
+-- Migration: add cost columns to pre-existing rows. Idempotent.
+alter table public.video_analyses
+  add column if not exists model           text,
+  add column if not exists prompt_tokens   integer,
+  add column if not exists response_tokens integer,
+  add column if not exists cost_usd_micros integer;
 create unique index if not exists video_analyses_share_token_idx
   on public.video_analyses(share_token)
   where share_token is not null;
@@ -176,3 +202,138 @@ create or replace view public.current_month_usage as
   from public.usage_events
   where created_at >= date_trunc('month', now())
   group by user_id, kind;
+
+
+-- ────────────────────────────────────────────────────────────
+-- Admin stats RPC — aggregates user counts, recent activity, and
+-- Gemini spend for the admin dashboard. Keep in sync with
+-- api/src/wcs_api/routes/admin.py and the frontend admin page.
+-- ────────────────────────────────────────────────────────────
+
+-- Drop first so return-type changes are allowed. Postgres rejects
+-- `create or replace` when the signature (including return type) has
+-- changed; earlier versions of admin_stats() returned `setof` jsonb
+-- or a different shape, so we drop then recreate.
+drop function if exists public.admin_stats();
+
+create or replace function public.admin_stats()
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  result jsonb;
+begin
+  select jsonb_build_object(
+    'total_users', (select count(*) from public.profiles),
+    'signups_this_month', (
+      select count(*) from public.profiles
+      where created_at >= date_trunc('month', now())
+    ),
+    'signups_this_week', (
+      select count(*) from public.profiles
+      where created_at > now() - interval '7 days'
+    ),
+    'total_video_analyses', (select count(*) from public.video_analyses),
+    'total_music_analyses', (
+      select count(*) from public.usage_events where kind = 'music'
+    ),
+    'active_users_7d', (
+      select count(distinct user_id) from public.usage_events
+      where created_at > now() - interval '7 days'
+    ),
+    'active_users_30d', (
+      select count(distinct user_id) from public.usage_events
+      where created_at > now() - interval '30 days'
+    ),
+    'total_feature_requests', (select count(*) from public.feature_requests),
+    -- Gemini spend totals (admin-only — never surfaced to end users).
+    -- Stored as integer micros (1e-6 USD) so Postgres sum() stays exact;
+    -- we convert to USD here so the frontend doesn't have to divide.
+    'cost_total_usd', (
+      select round(coalesce(sum(cost_usd_micros), 0)::numeric / 1000000, 4)
+      from public.usage_events where kind = 'video'
+    ),
+    'cost_last_7d_usd', (
+      select round(coalesce(sum(cost_usd_micros), 0)::numeric / 1000000, 4)
+      from public.usage_events
+      where kind = 'video' and created_at > now() - interval '7 days'
+    ),
+    'cost_last_30d_usd', (
+      select round(coalesce(sum(cost_usd_micros), 0)::numeric / 1000000, 4)
+      from public.usage_events
+      where kind = 'video' and created_at > now() - interval '30 days'
+    ),
+    'total_tokens', (
+      select coalesce(sum(prompt_tokens), 0) + coalesce(sum(response_tokens), 0)
+      from public.usage_events where kind = 'video'
+    ),
+    'recent_signups', (
+      select coalesce(jsonb_agg(row_json order by created_at desc), '[]'::jsonb)
+      from (
+        select
+          id,
+          email,
+          plan,
+          created_at,
+          jsonb_build_object(
+            'id', id,
+            'email', email,
+            'plan', plan,
+            'created_at', created_at
+          ) as row_json
+        from public.profiles
+        order by created_at desc
+        limit 10
+      ) s
+    ),
+    'recent_analyses', (
+      select coalesce(jsonb_agg(row_json order by created_at desc), '[]'::jsonb)
+      from (
+        select
+          va.id,
+          va.created_at,
+          jsonb_build_object(
+            'id', va.id,
+            'filename', va.filename,
+            'duration', va.duration,
+            'email', p.email,
+            'model', va.model,
+            'cost_usd', round(coalesce(va.cost_usd_micros, 0)::numeric / 1000000, 4),
+            'created_at', va.created_at
+          ) as row_json
+        from public.video_analyses va
+        left join public.profiles p on p.id = va.user_id
+        order by va.created_at desc
+        limit 20
+      ) a
+    ),
+    'recent_feature_requests', (
+      select coalesce(jsonb_agg(row_json order by created_at desc), '[]'::jsonb)
+      from (
+        select
+          fr.id,
+          fr.created_at,
+          jsonb_build_object(
+            'id', fr.id,
+            'title', fr.title,
+            'description', fr.description,
+            'email', coalesce(p.email, fr.email),
+            'created_at', fr.created_at
+          ) as row_json
+        from public.feature_requests fr
+        left join public.profiles p on p.id = fr.user_id
+        order by fr.created_at desc
+        limit 20
+      ) f
+    )
+  ) into result;
+  return result;
+end;
+$$;
+
+-- admin_stats() is called via PostgREST RPC with the service-role key
+-- from our FastAPI admin route. Email-based gating happens in the
+-- FastAPI layer, not in SQL, so the function itself is callable by
+-- anyone with the service key.

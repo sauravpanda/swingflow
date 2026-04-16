@@ -132,10 +132,17 @@ async def analyze_video_endpoint(
         except VideoAnalysisError as exc:
             raise HTTPException(status_code=502, detail=str(exc))
 
+        # Strip usage metadata from the user-facing response — we keep
+        # cost tracking admin-only. The full `usage` dict (model,
+        # tokens, cost_usd_micros) is persisted to Postgres below so
+        # admin dashboards can aggregate it.
+        usage = result.pop("usage", None)
+
         await supabase_admin.insert_usage_event(
             user_id=user_id,
             kind="video",
             duration_sec=int(duration),
+            usage=usage,
         )
         try:
             # object_key is intentionally NOT saved — the R2 object is
@@ -154,6 +161,7 @@ async def analyze_video_endpoint(
                 event_date=body.event_date,
                 stage=body.stage,
                 tags=body.tags,
+                usage=usage,
             )
         except Exception:
             pass

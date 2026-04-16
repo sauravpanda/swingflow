@@ -141,6 +141,14 @@ export type VideoPartnerScore = {
   notes?: string;
 };
 
+export type PatternSummary = {
+  name: string;
+  count: number;
+  quality?: string | null;
+  timing?: string | null;
+  notes?: string | null;
+};
+
 export type VideoScoreResult = {
   overall: {
     score: number;
@@ -155,6 +163,9 @@ export type VideoScoreResult = {
     presentation: VideoCategoryScore;
   };
   patterns_identified?: VideoPatternIdentified[];
+  // Aggregated patterns: deduplicated by name with per-pattern
+  // occurrence count + most-common quality/timing. Computed server-side.
+  pattern_summary?: PatternSummary[];
   strengths: string[];
   improvements: string[];
   lead?: VideoPartnerScore;
@@ -210,6 +221,11 @@ export type AdminStats = {
   active_users_7d: number;
   active_users_30d: number;
   total_feature_requests: number;
+  // Gemini spend — admin-only, never shown to end users.
+  cost_total_usd?: number;
+  cost_last_7d_usd?: number;
+  cost_last_30d_usd?: number;
+  total_tokens?: number;
   recent_signups: Array<{
     id: string;
     email: string;
@@ -222,6 +238,8 @@ export type AdminStats = {
     duration: number;
     created_at: string;
     email: string;
+    model?: string | null;
+    cost_usd?: number;
   }>;
   recent_feature_requests: Array<{
     id: string;

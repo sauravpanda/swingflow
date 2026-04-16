@@ -19,7 +19,11 @@ class Settings(BaseSettings):
     stripe_price_id: str = ""
 
     gemini_api_key: str = ""
-    gemini_model: str = "gemini-2.5-flash"
+    # Default matches sibling `wcs-analyzer` project. Requires Google
+    # AI paid billing — on the free tier this model returns a 429 with
+    # `limit: 0`. Production can override to `gemini-2.5-flash` via
+    # the `GEMINI_MODEL` env var on Railway until billing is enabled.
+    gemini_model: str = "gemini-3.1-pro-preview"
     # When enabled, runs a dedicated Gemini call asking ONLY about the
     # pattern timeline, then injects the result as context into the
     # main scoring call. wcs-analyzer found this improves scoring

@@ -213,6 +213,19 @@ Since you can hear the music, evaluate whether the dancers are truly on beat —
 listen for anchors landing on the downbeat, triples matching the rhythm, \
 and whether styling choices align with musical accents and breaks.
 
+For `patterns_identified`, walk through the entire video chronologically and \
+commit to a contiguous list of pattern windows that cover the dance from start \
+to end. Every pattern the dancers execute must appear as its own entry — do \
+NOT merge consecutive repeats of the same pattern into one window. If the \
+couple performs three sugar pushes in a row, emit three separate entries. A \
+typical WCS pattern is 6 or 8 beats, which at 90–130 BPM is roughly 3–6 \
+seconds; windows longer than ~10 seconds almost always mean you collapsed \
+repeats. A 90-second routine usually contains 15-25 pattern windows. \
+Common WCS patterns: sugar push, left side pass, right side pass, tuck turn, \
+whip (and variants: basket whip, reverse whip, apache whip), underarm turn, \
+inside turn, free spin, starter step, basic in closed position, anchor step \
+variations.
+
 Respond in this exact JSON format. Fill `reasoning` BEFORE `score` in each category:
 {
   "timing": {
@@ -284,9 +297,12 @@ Respond in this exact JSON format. Fill `reasoning` BEFORE `score` in each categ
 
 Constraints on patterns_identified:
 - Cover the full video end-to-end with non-overlapping contiguous time ranges, in chronological order.
-- Each range should correspond to one WCS pattern.
-- If a segment is unclear, name it "unknown" and explain in notes.
+- Each entry is ONE occurrence of ONE pattern — emit separate entries for repeated patterns.
+- Windows should be 3–8 seconds typical, rarely longer than 10 seconds.
+- For a 90-second clip expect 15–25 entries; scale proportionally for shorter/longer clips.
+- If a segment is truly unclear, name it "unknown", keep it short (≤8s), and explain in notes.
 - start_time and end_time are decimal seconds from the video start.
+- Use the beat grid in the context (if provided) to anchor window boundaries near anchor steps (beats 5–6).
 
 Only output valid JSON, no other text. Do not include // comments inside the JSON.\
 """
@@ -465,8 +481,12 @@ def _build_gen_config(model: str) -> genai_types.GenerateContentConfig:
         "temperature": 0.0,
         "response_mime_type": "application/json",
     }
-    # Extended thinking — Gemini 3.x accepts thinking_config. We pass it
-    # on a best-effort basis and fall back silently for older models.
+    # Extended thinking. The SDK accepts a ThinkingConfig on both
+    # Gemini 3.x and 2.5 models, but the fields differ:
+    #   - Gemini 3.x: thinking_level ("low"|"medium"|"high")
+    #   - Gemini 2.5: thinking_budget (int token budget; -1 = auto)
+    # We pass the right shape per model family on a best-effort basis
+    # and fall back silently if the SDK rejects the field.
     if "gemini-3" in model:
         try:
             config_kwargs["thinking_config"] = genai_types.ThinkingConfig(
@@ -474,14 +494,49 @@ def _build_gen_config(model: str) -> genai_types.GenerateContentConfig:
             )
         except (TypeError, AttributeError):
             pass
+    elif "gemini-2.5" in model:
+        try:
+            config_kwargs["thinking_config"] = genai_types.ThinkingConfig(
+                thinking_budget=-1,  # auto — let 2.5 decide how much to think
+            )
+        except (TypeError, AttributeError):
+            pass
     return genai_types.GenerateContentConfig(**config_kwargs)
+
+
+def _extract_usage(response: Any, model: str) -> dict[str, Any]:
+    """Pull token counts from a Gemini response's usage_metadata.
+
+    Returns a dict with prompt_tokens, response_tokens, total_tokens,
+    model. Thinking tokens are folded into response_tokens so cost
+    reflects actual billed spend. Safe to call on any response — fields
+    default to 0 when missing.
+    """
+    meta = getattr(response, "usage_metadata", None)
+    if meta is None:
+        return {
+            "prompt_tokens": 0,
+            "response_tokens": 0,
+            "total_tokens": 0,
+            "model": model,
+        }
+    prompt = int(getattr(meta, "prompt_token_count", 0) or 0)
+    candidates = int(getattr(meta, "candidates_token_count", 0) or 0)
+    thinking = int(getattr(meta, "thoughts_token_count", 0) or 0)
+    response_tokens = candidates + thinking
+    return {
+        "prompt_tokens": prompt,
+        "response_tokens": response_tokens,
+        "total_tokens": prompt + response_tokens,
+        "model": model,
+    }
 
 
 def _call_gemini(
     client: genai.Client,
     model: str,
     contents: list,
-) -> str:
+) -> tuple[str, dict[str, Any]]:
     response = client.models.generate_content(
         model=model,
         contents=contents,
@@ -490,7 +545,7 @@ def _call_gemini(
     text = getattr(response, "text", None)
     if not text:
         raise VideoAnalysisError("Gemini returned an empty response")
-    return text
+    return text, _extract_usage(response, model)
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -523,29 +578,31 @@ def _run_pattern_pre_pass(
     client: genai.Client,
     model: str,
     video_file: Any,
-) -> str | None:
+) -> tuple[str | None, dict[str, Any] | None]:
     """Single-purpose Gemini call asking ONLY about the pattern timeline.
 
     Per wcs-analyzer's docstring: "the per-pattern focus consistently
     outperforms asking the main prompt to enumerate patterns while also
     scoring the dance." Failures here are non-fatal — we fall back to
     the main prompt enumerating patterns inline.
+
+    Returns (prompt_context, usage). Either may be None on failure.
     """
     try:
-        raw = _call_gemini(
+        raw, usage = _call_gemini(
             client,
             model,
             contents=[video_file, PATTERN_SEGMENTATION_PROMPT],
         )
     except VideoAnalysisError:
-        return None
+        return None, None
     data = _safe_parse_json(raw)
     if not data:
-        return None
+        return None, usage
     patterns = data.get("patterns")
     if not isinstance(patterns, list) or not patterns:
-        return None
-    return _format_pattern_timeline(patterns)
+        return None, usage
+    return _format_pattern_timeline(patterns), usage
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -576,6 +633,11 @@ def analyze_video_path(video_path: str) -> dict[str, Any]:
         state_name = uploaded.state.name if uploaded.state else "UNKNOWN"
         raise VideoAnalysisError(f"Gemini file upload state: {state_name}")
 
+    # Aggregate token usage across pre-pass + main call so cost
+    # tracking reflects the full billed spend for this analysis.
+    total_prompt_tokens = 0
+    total_response_tokens = 0
+
     try:
         prompt = GEMINI_VIDEO_PROMPT
 
@@ -585,15 +647,20 @@ def analyze_video_path(video_path: str) -> dict[str, Any]:
             prompt = f"{beat_context}\n\n{prompt}"
 
         if settings.enable_pattern_prepass:
-            pre_pass_context = _run_pattern_pre_pass(
+            pre_pass_context, pre_pass_usage = _run_pattern_pre_pass(
                 client, settings.gemini_model, uploaded
             )
             if pre_pass_context:
                 prompt = f"{pre_pass_context}\n\n{prompt}"
+            if pre_pass_usage:
+                total_prompt_tokens += int(pre_pass_usage.get("prompt_tokens", 0))
+                total_response_tokens += int(pre_pass_usage.get("response_tokens", 0))
 
-        raw = _call_gemini(
+        raw, main_usage = _call_gemini(
             client, settings.gemini_model, contents=[uploaded, prompt]
         )
+        total_prompt_tokens += int(main_usage.get("prompt_tokens", 0))
+        total_response_tokens += int(main_usage.get("response_tokens", 0))
     finally:
         # Best-effort cleanup of the Gemini-side file.
         try:
@@ -607,10 +674,141 @@ def analyze_video_path(video_path: str) -> dict[str, Any]:
             f"Gemini returned unparseable JSON: {raw[:200]}"
         )
 
-    return _shape_response(parsed)
+    from .pricing import estimate_cost_micros, pricing_updated_on
+
+    usage = {
+        "model": settings.gemini_model,
+        "prompt_tokens": total_prompt_tokens,
+        "response_tokens": total_response_tokens,
+        "total_tokens": total_prompt_tokens + total_response_tokens,
+        "cost_usd_micros": estimate_cost_micros(
+            settings.gemini_model, total_prompt_tokens, total_response_tokens
+        ),
+        "pricing_updated_on": pricing_updated_on(),
+    }
+
+    return _shape_response(parsed, usage=usage)
 
 
-def _shape_response(parsed: dict[str, Any]) -> dict[str, Any]:
+def _sanitize_patterns(
+    raw: list[Any] | None,
+    *,
+    max_window_sec: float = 12.0,
+) -> list[dict[str, Any]]:
+    """Clean Gemini's patterns_identified output.
+
+    - Drops entries with missing/invalid times.
+    - Splits any window longer than `max_window_sec` into ~6s chunks
+      sharing the same metadata (prevents the "45s Sugar Push" bug
+      even when the model slips past the prompt guidance).
+    - Keeps all other fields untouched.
+    """
+    if not isinstance(raw, list):
+        return []
+    cleaned: list[dict[str, Any]] = []
+    for entry in raw:
+        if not isinstance(entry, dict):
+            continue
+        try:
+            start = float(entry.get("start_time"))
+            end = float(entry.get("end_time"))
+        except (TypeError, ValueError):
+            continue
+        if end <= start:
+            continue
+        span = end - start
+        if span <= max_window_sec:
+            cleaned.append(entry)
+            continue
+        # Model likely merged repeats. Split into ~6s slices sharing
+        # the original metadata. Label subsequent slices so we don't
+        # silently inflate the pattern count UI — caller sees the
+        # same occurrences but time ranges are sane.
+        n_splits = max(2, int(round(span / 6.0)))
+        slice_len = span / n_splits
+        base_name = entry.get("name", "unknown")
+        for i in range(n_splits):
+            clone = dict(entry)
+            clone["start_time"] = start + i * slice_len
+            clone["end_time"] = start + (i + 1) * slice_len
+            clone["name"] = base_name
+            if i > 0:
+                existing_notes = (clone.get("notes") or "").strip()
+                marker = "(split from a long merged window)"
+                clone["notes"] = (
+                    f"{existing_notes} {marker}".strip()
+                    if existing_notes
+                    else marker
+                )
+            cleaned.append(clone)
+    return cleaned
+
+
+def _normalize_pattern_name(name: str) -> str:
+    """Lowercase + collapse whitespace for aggregation key."""
+    return " ".join((name or "").lower().split())
+
+
+def _summarize_patterns(
+    patterns: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Aggregate a flat pattern timeline into per-pattern counts.
+
+    Returns a list like:
+      [{"name": "sugar push", "count": 5, "quality": "needs_work",
+        "timing": "on_beat", "notes": "…"}]
+
+    Keeps the display name from the first occurrence, picks the
+    most common quality/timing (ties broken by first seen), and
+    joins unique notes with " · " for compact rendering.
+    """
+    from collections import Counter, defaultdict
+
+    counts: Counter[str] = Counter()
+    display_names: dict[str, str] = {}
+    qualities: dict[str, list[str]] = defaultdict(list)
+    timings: dict[str, list[str]] = defaultdict(list)
+    notes: dict[str, list[str]] = defaultdict(list)
+
+    for p in patterns:
+        raw_name = (p.get("name") or "").strip()
+        if not raw_name:
+            continue
+        key = _normalize_pattern_name(raw_name)
+        counts[key] += 1
+        display_names.setdefault(key, raw_name)
+        q = p.get("quality")
+        if isinstance(q, str) and q:
+            qualities[key].append(q)
+        t = p.get("timing")
+        if isinstance(t, str) and t:
+            timings[key].append(t)
+        n = (p.get("notes") or "").strip()
+        if n and n not in notes[key]:
+            notes[key].append(n)
+
+    def _most_common(items: list[str]) -> str | None:
+        return Counter(items).most_common(1)[0][0] if items else None
+
+    summary: list[dict[str, Any]] = []
+    for key, cnt in counts.most_common():
+        summary.append(
+            {
+                "name": display_names[key],
+                "count": cnt,
+                "quality": _most_common(qualities[key]),
+                "timing": _most_common(timings[key]),
+                "notes": " · ".join(notes[key][:3]) if notes[key] else None,
+            }
+        )
+    return summary
+
+
+def _shape_response(
+    parsed: dict[str, Any],
+    *,
+    usage: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     """Map Gemini's rich response into the API's return shape.
 
     Preserves rich audit fields (reasoning, score_low/high,
@@ -631,6 +829,9 @@ def _shape_response(parsed: dict[str, Any]) -> dict[str, Any]:
     strengths = parsed.get("highlights") or parsed.get("strengths") or []
     improvements = parsed.get("improvements") or []
 
+    patterns_identified = _sanitize_patterns(parsed.get("patterns_identified"))
+    pattern_summary = _summarize_patterns(patterns_identified)
+
     return {
         "overall": {
             "score": overall_score,
@@ -639,13 +840,15 @@ def _shape_response(parsed: dict[str, Any]) -> dict[str, Any]:
             "impression": parsed.get("overall_impression"),
         },
         "categories": categories,
-        "patterns_identified": parsed.get("patterns_identified") or [],
+        "patterns_identified": patterns_identified,
+        "pattern_summary": pattern_summary,
         "strengths": strengths,
         "improvements": improvements,
         "lead": parsed.get("lead"),
         "follow": parsed.get("follow"),
         "estimated_bpm": parsed.get("estimated_bpm"),
         "song_style": parsed.get("song_style"),
+        "usage": usage,
     }
 
 

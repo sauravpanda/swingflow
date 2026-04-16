@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
+import Script from "next/script";
 import { Providers } from "@/components/providers";
 import "./globals.css";
 
@@ -35,6 +36,12 @@ export default function RootLayout({
     <html lang="en" className="dark" suppressHydrationWarning>
       <body className={`${inter.variable} font-sans antialiased`}>
         <Providers>{children}</Providers>
+        <Script
+          src="https://datafa.st/js/script.js"
+          strategy="afterInteractive"
+          data-website-id="dfid_AcvuHDrJ9u38lotYgcRLA"
+          data-domain="swingflow.dance"
+        />
       </body>
     </html>
   );
