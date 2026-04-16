@@ -165,7 +165,7 @@ export default function DashboardPage() {
 
       {/* ─── Score trend ─── */}
       <ScoreTrendChart
-        records={history.chartRecords}
+        records={history.chartRecords.filter((r) => !r.deleted_at)}
         loading={history.loading}
       />
 
