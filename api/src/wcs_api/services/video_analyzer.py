@@ -480,6 +480,15 @@ def _build_gen_config(model: str) -> genai_types.GenerateContentConfig:
         "max_output_tokens": 32768,
         "temperature": 0.0,
         "response_mime_type": "application/json",
+        # HIGH media resolution (~768 tokens/frame) vs the default
+        # MEDIUM (~256). For dance analysis this is the difference
+        # between "I can see there are dancers" and "I can see heel-
+        # toe rolling and a collapsed anchor." wcs-analyzer uses
+        # HIGH by default and it's critical for technique scoring.
+        # Cost: ~3x the per-frame token billing, but Gemini samples
+        # only ~1 frame per second of video anyway, so total spend
+        # per clip stays bounded.
+        "media_resolution": genai_types.MediaResolution.MEDIA_RESOLUTION_HIGH,
     }
     # Extended thinking. The SDK accepts a ThinkingConfig on both
     # Gemini 3.x and 2.5 models, but the fields differ:
