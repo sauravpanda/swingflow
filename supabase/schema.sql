@@ -101,6 +101,14 @@ drop policy if exists video_analyses_self_select on public.video_analyses;
 create policy video_analyses_self_select on public.video_analyses
   for select using (auth.uid() = user_id);
 
+drop policy if exists video_analyses_self_update on public.video_analyses;
+create policy video_analyses_self_update on public.video_analyses
+  for update using (auth.uid() = user_id);
+
+drop policy if exists video_analyses_self_delete on public.video_analyses;
+create policy video_analyses_self_delete on public.video_analyses
+  for delete using (auth.uid() = user_id);
+
 create table if not exists public.feature_requests (
   id          uuid primary key default gen_random_uuid(),
   user_id     uuid references public.profiles(id) on delete set null,

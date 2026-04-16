@@ -425,6 +425,7 @@ export default function AnalyzePage() {
                 key={rec.id}
                 record={rec}
                 onReanalyzed={history.refresh}
+                onDeleted={history.remove}
               />
             ))}
           </CardContent>
@@ -437,23 +438,26 @@ export default function AnalyzePage() {
 function HistoryRow({
   record,
   onReanalyzed,
+  onDeleted,
 }: {
   record: AnalysisRecord;
   onReanalyzed: () => void;
+  onDeleted: (id: string) => Promise<void> | void;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [loadingVideo, setLoadingVideo] = useState(false);
   const [reanalyzing, setReanalyzing] = useState(false);
-  const [deleting, setDeleting] = useState(false);
-  const [deleted, setDeleted] = useState(false);
+  const [deletingVideo, setDeletingVideo] = useState(false);
+  const [deletingAnalysis, setDeletingAnalysis] = useState(false);
+  const [videoDeleted, setVideoDeleted] = useState(false);
   const [currentResult, setCurrentResult] = useState<
     VideoScoreResult | null
   >(record.result ?? null);
   const [rowError, setRowError] = useState<string | null>(null);
   const overall = currentResult?.overall;
 
-  const canViewOrReanalyze = Boolean(record.object_key) && !deleted;
+  const canViewOrReanalyze = Boolean(record.object_key) && !videoDeleted;
 
   const handleWatch = async (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -498,26 +502,50 @@ function HistoryRow({
     }
   };
 
-  const handleDelete = async (e: React.MouseEvent) => {
+  const handleDeleteVideo = async (e: React.MouseEvent) => {
     e.stopPropagation();
     if (!record.object_key) return;
     const ok = window.confirm(
       "Delete the source video from storage? Your scoring result stays — only the video file is removed. This cannot be undone."
     );
     if (!ok) return;
-    setDeleting(true);
+    setDeletingVideo(true);
     setRowError(null);
     try {
       await deleteUploadedVideo(record.object_key);
-      setDeleted(true);
+      setVideoDeleted(true);
       setVideoUrl(null);
       onReanalyzed();
     } catch (err) {
-      setRowError(
-        err instanceof Error ? err.message : "Delete failed"
-      );
+      setRowError(err instanceof Error ? err.message : "Delete failed");
     } finally {
-      setDeleting(false);
+      setDeletingVideo(false);
+    }
+  };
+
+  const handleDeleteAnalysis = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const ok = window.confirm(
+      "Delete this analysis from your history? This removes the scoring result and any stored video. Your monthly usage count is NOT refunded."
+    );
+    if (!ok) return;
+    setDeletingAnalysis(true);
+    setRowError(null);
+    try {
+      // Clean up the R2 object first if it still exists — otherwise the
+      // analysis row goes away but a ghost upload lingers until the 24h
+      // lifecycle rule collects it.
+      if (record.object_key && !videoDeleted) {
+        try {
+          await deleteUploadedVideo(record.object_key);
+        } catch {
+          // Non-fatal — row deletion is the important part.
+        }
+      }
+      await onDeleted(record.id);
+    } catch (err) {
+      setRowError(err instanceof Error ? err.message : "Delete failed");
+      setDeletingAnalysis(false);
     }
   };
 
@@ -582,56 +610,88 @@ function HistoryRow({
       </div>
       {expanded && (
         <div className="border-t border-border p-3 space-y-3">
-          {canViewOrReanalyze && (
-            <div className="flex items-center gap-2 flex-wrap">
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={handleWatch}
-                disabled={loadingVideo || reanalyzing || deleting}
-              >
-                {loadingVideo ? (
-                  <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
-                ) : (
-                  <Play className="mr-2 h-3.5 w-3.5" />
-                )}
-                {videoUrl ? "Reload video" : "Watch"}
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={handleReanalyze}
-                disabled={reanalyzing || loadingVideo || deleting}
-              >
-                {reanalyzing ? (
-                  <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
-                ) : (
-                  <RotateCcw className="mr-2 h-3.5 w-3.5" />
-                )}
-                Re-analyze (1 quota)
-              </Button>
-              <Button
-                size="sm"
-                variant="ghost"
-                className="text-muted-foreground hover:text-destructive ml-auto"
-                onClick={handleDelete}
-                disabled={deleting || reanalyzing || loadingVideo}
-              >
-                {deleting ? (
-                  <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
-                ) : (
-                  <Trash2 className="mr-2 h-3.5 w-3.5" />
-                )}
-                Delete video
-              </Button>
-            </div>
-          )}
+          <div className="flex items-center gap-2 flex-wrap">
+            {canViewOrReanalyze && (
+              <>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={handleWatch}
+                  disabled={
+                    loadingVideo ||
+                    reanalyzing ||
+                    deletingVideo ||
+                    deletingAnalysis
+                  }
+                >
+                  {loadingVideo ? (
+                    <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Play className="mr-2 h-3.5 w-3.5" />
+                  )}
+                  {videoUrl ? "Reload video" : "Watch"}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={handleReanalyze}
+                  disabled={
+                    reanalyzing ||
+                    loadingVideo ||
+                    deletingVideo ||
+                    deletingAnalysis
+                  }
+                >
+                  {reanalyzing ? (
+                    <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <RotateCcw className="mr-2 h-3.5 w-3.5" />
+                  )}
+                  Re-analyze (1 quota)
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="text-muted-foreground hover:text-destructive"
+                  onClick={handleDeleteVideo}
+                  disabled={
+                    deletingVideo ||
+                    deletingAnalysis ||
+                    reanalyzing ||
+                    loadingVideo
+                  }
+                >
+                  {deletingVideo ? (
+                    <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Trash2 className="mr-2 h-3.5 w-3.5" />
+                  )}
+                  Delete video
+                </Button>
+              </>
+            )}
+
+            <Button
+              size="sm"
+              variant="ghost"
+              className="text-muted-foreground hover:text-destructive ml-auto"
+              onClick={handleDeleteAnalysis}
+              disabled={deletingAnalysis || deletingVideo || reanalyzing}
+            >
+              {deletingAnalysis ? (
+                <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Trash2 className="mr-2 h-3.5 w-3.5" />
+              )}
+              Delete analysis
+            </Button>
+          </div>
 
           {!canViewOrReanalyze && (
             <p className="text-xs text-muted-foreground">
-              {deleted
+              {videoDeleted
                 ? "Video deleted from storage. The scoring result above is preserved."
-                : "Source video isn\u2019t available (older entry — video was removed after scoring)."}
+                : "Source video isn\u2019t available (removed after scoring — scoring result is preserved)."}
             </p>
           )}
 
