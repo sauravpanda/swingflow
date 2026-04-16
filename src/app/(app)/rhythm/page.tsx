@@ -311,7 +311,7 @@ export default function RhythmPage() {
       : { phraseIndex: -1, beatInPhrase: -1 };
 
   return (
-    <div className="space-y-6 max-w-2xl mx-auto">
+    <div className="space-y-4 sm:space-y-6 max-w-2xl mx-auto">
       {/* Header */}
       <div>
         <div className="flex items-center gap-2">

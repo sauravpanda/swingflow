@@ -225,7 +225,7 @@ export default function AnalyzePage() {
   const isPaywalled = quota && quota.remaining <= 0;
 
   return (
-    <div className="space-y-6 max-w-4xl mx-auto">
+    <div className="space-y-4 sm:space-y-6 max-w-4xl mx-auto">
       <div>
         <div className="flex items-center gap-2">
           <Video className="h-6 w-6 text-primary" />
@@ -787,7 +787,7 @@ function HistoryRow({
       </div>
       {expanded && (
         <div className="border-t border-border p-3 space-y-3">
-          <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex items-center gap-1.5 flex-wrap">
             {canViewOrReanalyze && (
               <>
                 <Button
@@ -800,13 +800,16 @@ function HistoryRow({
                     deletingVideo ||
                     deletingAnalysis
                   }
+                  title={videoUrl ? "Reload video" : "Watch"}
                 >
                   {loadingVideo ? (
-                    <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+                    <Loader2 className="h-3.5 w-3.5 animate-spin sm:mr-2" />
                   ) : (
-                    <Play className="mr-2 h-3.5 w-3.5" />
+                    <Play className="h-3.5 w-3.5 sm:mr-2" />
                   )}
-                  {videoUrl ? "Reload video" : "Watch"}
+                  <span className="hidden sm:inline">
+                    {videoUrl ? "Reload video" : "Watch"}
+                  </span>
                 </Button>
                 <Button
                   size="sm"
@@ -818,13 +821,14 @@ function HistoryRow({
                     deletingVideo ||
                     deletingAnalysis
                   }
+                  title="Re-analyze — uses 1 quota"
                 >
                   {reanalyzing ? (
-                    <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+                    <Loader2 className="h-3.5 w-3.5 animate-spin sm:mr-2" />
                   ) : (
-                    <RotateCcw className="mr-2 h-3.5 w-3.5" />
+                    <RotateCcw className="h-3.5 w-3.5 sm:mr-2" />
                   )}
-                  Re-analyze (1 quota)
+                  <span className="hidden sm:inline">Re-analyze</span>
                 </Button>
                 <Button
                   size="sm"
@@ -837,13 +841,14 @@ function HistoryRow({
                     reanalyzing ||
                     loadingVideo
                   }
+                  title="Delete video file from storage"
                 >
                   {deletingVideo ? (
-                    <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+                    <Loader2 className="h-3.5 w-3.5 animate-spin sm:mr-2" />
                   ) : (
-                    <Trash2 className="mr-2 h-3.5 w-3.5" />
+                    <Trash2 className="h-3.5 w-3.5 sm:mr-2" />
                   )}
-                  Delete video
+                  <span className="hidden sm:inline">Delete video</span>
                 </Button>
               </>
             )}
@@ -855,9 +860,10 @@ function HistoryRow({
                   variant="outline"
                   onClick={handleCopyShareLink}
                   disabled={sharing}
+                  title="Copy share link"
                 >
-                  <Copy className="mr-2 h-3.5 w-3.5" />
-                  Copy share link
+                  <Copy className="h-3.5 w-3.5 sm:mr-2" />
+                  <span className="hidden sm:inline">Copy link</span>
                 </Button>
                 <Button
                   size="sm"
@@ -865,13 +871,14 @@ function HistoryRow({
                   className="text-muted-foreground hover:text-destructive"
                   onClick={handleStopShare}
                   disabled={sharing}
+                  title="Stop sharing"
                 >
                   {sharing ? (
-                    <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+                    <Loader2 className="h-3.5 w-3.5 animate-spin sm:mr-2" />
                   ) : (
-                    <Link2Off className="mr-2 h-3.5 w-3.5" />
+                    <Link2Off className="h-3.5 w-3.5 sm:mr-2" />
                   )}
-                  Stop sharing
+                  <span className="hidden sm:inline">Stop sharing</span>
                 </Button>
               </>
             ) : (
@@ -880,13 +887,14 @@ function HistoryRow({
                 variant="outline"
                 onClick={handleShare}
                 disabled={sharing}
+                title="Share this analysis via link"
               >
                 {sharing ? (
-                  <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+                  <Loader2 className="h-3.5 w-3.5 animate-spin sm:mr-2" />
                 ) : (
-                  <Share2 className="mr-2 h-3.5 w-3.5" />
+                  <Share2 className="h-3.5 w-3.5 sm:mr-2" />
                 )}
-                Share link
+                <span className="hidden sm:inline">Share link</span>
               </Button>
             )}
 
@@ -896,13 +904,14 @@ function HistoryRow({
               className="text-muted-foreground hover:text-destructive ml-auto"
               onClick={handleDeleteAnalysis}
               disabled={deletingAnalysis || deletingVideo || reanalyzing}
+              title="Delete this analysis from history"
             >
               {deletingAnalysis ? (
-                <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+                <Loader2 className="h-3.5 w-3.5 animate-spin sm:mr-2" />
               ) : (
-                <Trash2 className="mr-2 h-3.5 w-3.5" />
+                <Trash2 className="h-3.5 w-3.5 sm:mr-2" />
               )}
-              Delete analysis
+              <span className="hidden sm:inline">Delete analysis</span>
             </Button>
           </div>
 

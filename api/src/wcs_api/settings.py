@@ -19,7 +19,7 @@ class Settings(BaseSettings):
     stripe_price_id: str = ""
 
     gemini_api_key: str = ""
-    gemini_model: str = "gemini-3-pro-preview"
+    gemini_model: str = "gemini-2.5-flash"
     # When enabled, runs a dedicated Gemini call asking ONLY about the
     # pattern timeline, then injects the result as context into the
     # main scoring call. wcs-analyzer found this improves scoring

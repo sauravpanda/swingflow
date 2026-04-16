@@ -140,12 +140,12 @@ export default function BillingPage() {
       {!isBasic && (
         <Card className="border-primary/40">
           <CardHeader>
-            <CardTitle className="flex items-center justify-between">
+            <CardTitle className="flex items-start sm:items-center justify-between gap-3 flex-wrap sm:flex-nowrap">
               <span className="flex items-center gap-2">
-                <Sparkles className="h-5 w-5 text-primary" />
+                <Sparkles className="h-5 w-5 text-primary shrink-0" />
                 Upgrade to Basic
               </span>
-              <div className="flex items-baseline gap-1.5">
+              <div className="flex items-baseline gap-1.5 shrink-0">
                 <span className="text-base font-normal text-muted-foreground line-through">
                   $20
                 </span>
@@ -183,8 +183,10 @@ export default function BillingPage() {
               ) : (
                 <Sparkles className="mr-2 h-4 w-4" />
               )}
-              Upgrade to Basic — $10/mo
-              <span className="ml-2 text-xs opacity-70 line-through">$20</span>
+              <span className="truncate">Upgrade to Basic — $10/mo</span>
+              <span className="ml-2 text-xs opacity-70 line-through hidden sm:inline">
+                $20
+              </span>
             </Button>
           </CardContent>
         </Card>
