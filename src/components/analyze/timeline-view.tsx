@@ -189,6 +189,45 @@ export function TimelineView({
           />
         </div>
 
+        {/* Time ticks */}
+        <div className="relative h-3 text-[9px] text-muted-foreground">
+          {(() => {
+            const step =
+              effectiveDuration <= 30
+                ? 5
+                : effectiveDuration <= 90
+                ? 15
+                : effectiveDuration <= 240
+                ? 30
+                : 60;
+            const ticks: number[] = [];
+            for (let t = 0; t <= effectiveDuration; t += step) {
+              ticks.push(t);
+            }
+            return ticks.map((t) => {
+              const pct = (t / effectiveDuration) * 100;
+              const atStart = pct < 2;
+              const atEnd = pct > 98;
+              return (
+                <span
+                  key={t}
+                  className="absolute tabular-nums"
+                  style={{
+                    left: `${pct}%`,
+                    transform: atStart
+                      ? undefined
+                      : atEnd
+                      ? "translateX(-100%)"
+                      : "translateX(-50%)",
+                  }}
+                >
+                  {formatTime(t)}
+                </span>
+              );
+            });
+          })()}
+        </div>
+
         {/* Legend */}
         <div className="flex flex-wrap items-center gap-3 text-[10px] text-muted-foreground pt-1">
           <span className="flex items-center gap-1.5">

@@ -39,6 +39,24 @@ const CATEGORY_LABELS: Record<keyof VideoScoreResult["categories"], string> = {
   presentation: "Presentation",
 };
 
+function scoreBarColor(score: number): string {
+  if (score >= 8) return "bg-emerald-500";
+  if (score >= 6) return "bg-primary";
+  if (score >= 4) return "bg-amber-500";
+  return "bg-rose-500";
+}
+
+function ScoreBar({ score }: { score: number }) {
+  return (
+    <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
+      <div
+        className={`h-full ${scoreBarColor(score)} transition-all`}
+        style={{ width: `${Math.min(100, score * 10)}%` }}
+      />
+    </div>
+  );
+}
+
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
@@ -789,7 +807,7 @@ function ScoreResultCard({
             )}
           </div>
 
-          <div className="space-y-3.5 pt-2 border-t border-border">
+          <div className="space-y-4 pt-2 border-t border-border">
             {(Object.keys(CATEGORY_LABELS) as Array<keyof typeof CATEGORY_LABELS>).map(
               (key) => {
                 const cat = result.categories[key];
@@ -801,11 +819,14 @@ function ScoreResultCard({
                         {cat.score.toFixed(1)} / 10
                       </span>
                     </div>
-                    <Progress value={cat.score * 10} className="h-1.5" />
+                    <ScoreBar score={cat.score} />
                     {cat.notes && (
                       <p className="text-xs text-muted-foreground pt-0.5">
                         {cat.notes}
                       </p>
+                    )}
+                    {key === "technique" && (
+                      <TechniqueBreakdown technique={cat} />
                     )}
                   </div>
                 );
@@ -814,6 +835,10 @@ function ScoreResultCard({
           </div>
         </CardContent>
       </Card>
+
+      {(result.lead || result.follow) && (
+        <PartnerCards lead={result.lead} follow={result.follow} />
+      )}
 
       <Card>
         <CardHeader className="pb-3">
@@ -856,6 +881,107 @@ function ScoreResultCard({
       <Button onClick={onClear} variant="outline" className="w-full">
         Analyze another video
       </Button>
+    </div>
+  );
+}
+
+function TechniqueBreakdown({
+  technique,
+}: {
+  technique: VideoScoreResult["categories"]["technique"];
+}) {
+  const subs = [
+    { key: "posture", label: "Posture", sub: technique.posture },
+    { key: "extension", label: "Extension", sub: technique.extension },
+    { key: "footwork", label: "Footwork", sub: technique.footwork },
+    { key: "slot", label: "Slot", sub: technique.slot },
+  ].filter(
+    (s): s is { key: string; label: string; sub: { score: number; notes?: string } } =>
+      Boolean(s.sub && typeof s.sub.score === "number")
+  );
+  if (subs.length === 0) return null;
+  return (
+    <details className="group pt-1">
+      <summary className="cursor-pointer text-xs text-muted-foreground hover:text-foreground list-none inline-flex items-center gap-1">
+        <span className="group-open:hidden">Show sub-scores ▾</span>
+        <span className="hidden group-open:inline">Hide sub-scores ▴</span>
+      </summary>
+      <div className="grid grid-cols-2 gap-3 pt-2.5">
+        {subs.map(({ key, label, sub }) => (
+          <div key={key} className="space-y-1">
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-muted-foreground">{label}</span>
+              <span className="font-mono tabular-nums">
+                {sub.score.toFixed(1)}
+              </span>
+            </div>
+            <ScoreBar score={sub.score} />
+          </div>
+        ))}
+      </div>
+    </details>
+  );
+}
+
+function PartnerCards({
+  lead,
+  follow,
+}: {
+  lead?: VideoScoreResult["lead"];
+  follow?: VideoScoreResult["follow"];
+}) {
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <CardTitle className="text-base">Lead & Follow</CardTitle>
+      </CardHeader>
+      <CardContent className="grid sm:grid-cols-2 gap-4">
+        <PartnerPanel label="Lead" data={lead} />
+        <PartnerPanel label="Follow" data={follow} />
+      </CardContent>
+    </Card>
+  );
+}
+
+function PartnerPanel({
+  label,
+  data,
+}: {
+  label: string;
+  data?: { technique_score?: number; presentation_score?: number; notes?: string };
+}) {
+  if (!data) {
+    return (
+      <div className="rounded-md border border-dashed border-border p-3 text-xs text-muted-foreground">
+        {label}: no per-partner detail
+      </div>
+    );
+  }
+  const rows: Array<{ k: string; v?: number }> = [
+    { k: "Technique", v: data.technique_score },
+    { k: "Presentation", v: data.presentation_score },
+  ].filter((r) => typeof r.v === "number");
+  return (
+    <div className="rounded-md border border-border p-3 space-y-2.5">
+      <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+        {label}
+      </div>
+      <div className="space-y-2">
+        {rows.map((r) => (
+          <div key={r.k} className="space-y-1">
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-muted-foreground">{r.k}</span>
+              <span className="font-mono tabular-nums">
+                {(r.v ?? 0).toFixed(1)}
+              </span>
+            </div>
+            <ScoreBar score={r.v ?? 0} />
+          </div>
+        ))}
+      </div>
+      {data.notes && (
+        <p className="text-xs text-muted-foreground pt-1">{data.notes}</p>
+      )}
     </div>
   );
 }
