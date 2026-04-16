@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -204,6 +204,19 @@ export default function AnalyzePage() {
   const [file, setFile] = useState<File | null>(null);
   const [localError, setLocalError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // Deep-link: dashboard / chart pass `?id=<analysis-uuid>` to jump
+  // straight to a specific analysis. Read once on mount and clear it
+  // after first use so refreshing doesn't keep re-expanding the row.
+  const [targetAnalysisId, setTargetAnalysisId] = useState<string | null>(
+    null
+  );
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const id = params.get("id");
+    if (id) setTargetAnalysisId(id);
+  }, []);
 
   // Optional metadata — captured pre-upload so it gets saved with the analysis.
   // Each of role / level / stage can be a preset OR free text via "Other".
@@ -641,6 +654,7 @@ export default function AnalyzePage() {
               <HistoryRow
                 key={rec.id}
                 record={rec}
+                autoExpand={rec.id === targetAnalysisId}
                 onReanalyzed={history.refresh}
                 onDeleted={history.remove}
                 onShare={history.enableSharing}
@@ -656,18 +670,39 @@ export default function AnalyzePage() {
 
 function HistoryRow({
   record,
+  autoExpand,
   onReanalyzed,
   onDeleted,
   onShare,
   onStopShare,
 }: {
   record: AnalysisRecord;
+  autoExpand?: boolean;
   onReanalyzed: () => void;
   onDeleted: (id: string) => Promise<void> | void;
   onShare: (id: string) => Promise<string>;
   onStopShare: (id: string) => Promise<void>;
 }) {
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(Boolean(autoExpand));
+  const rowRef = useRef<HTMLDivElement>(null);
+
+  // When a deep-link targets this row (e.g. arriving from /dashboard
+  // with ?id=<uuid>), expand AND scroll the row into view so the
+  // user actually lands on the analysis they clicked. autoExpand is
+  // computed from the URL param in the parent, so it only fires
+  // once for the targeted row.
+  useEffect(() => {
+    if (!autoExpand) return;
+    setExpanded(true);
+    // Defer one tick so the expanded body mounts before scrolling.
+    const t = setTimeout(() => {
+      rowRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    }, 50);
+    return () => clearTimeout(t);
+  }, [autoExpand]);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [loadingVideo, setLoadingVideo] = useState(false);
   const [reanalyzing, setReanalyzing] = useState(false);
@@ -832,7 +867,14 @@ function HistoryRow({
   };
 
   return (
-    <div className="border border-border rounded-lg">
+    <div
+      ref={rowRef}
+      className={`border rounded-lg transition-colors ${
+        autoExpand
+          ? "border-primary/50 shadow-[0_0_0_1px_hsl(var(--primary)/0.25)]"
+          : "border-border"
+      }`}
+    >
       <div
         className="w-full flex items-center justify-between p-3 text-sm cursor-pointer hover:bg-muted/30 transition-colors"
         onClick={() => setExpanded((p) => !p)}

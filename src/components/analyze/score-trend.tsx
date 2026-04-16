@@ -1,8 +1,9 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { TrendingUp, Trash2 } from "lucide-react";
+import { TrendingUp, Trash2, ExternalLink } from "lucide-react";
 import type { ChartRecord } from "@/hooks/use-analysis-history";
 
 type Point = {
@@ -166,8 +167,15 @@ export function ScoreTrendChart({
   records: ChartRecord[];
   loading?: boolean;
 }) {
+  const router = useRouter();
   const buckets = useMemo(() => buildBuckets(records), [records]);
   const [hovered, setHovered] = useState<Point | null>(null);
+
+  // Clicking a dot or the detail card deep-links into the analyze
+  // page with the analysis auto-expanded + scrolled into view.
+  const openAnalysis = (id: string) => {
+    router.push(`/analyze?id=${id}`);
+  };
 
   const allPoints = useMemo(
     () => buckets.flatMap((b) => b.points),
@@ -239,12 +247,23 @@ export function ScoreTrendChart({
         </CardTitle>
       </CardHeader>
       <CardContent>
-        <TrendSVG buckets={buckets} hovered={hovered} setHovered={setHovered} />
+        <TrendSVG
+          buckets={buckets}
+          hovered={hovered}
+          setHovered={setHovered}
+          onOpen={openAnalysis}
+        />
         {hovered && (
-          <div className="mt-2 rounded-md border border-border bg-muted/20 p-2 text-xs">
+          <button
+            type="button"
+            onClick={() => openAnalysis(hovered.id)}
+            className="mt-2 w-full rounded-md border border-border bg-muted/20 hover:bg-muted/40 p-2 text-xs text-left transition-colors group"
+            title="Open this analysis"
+          >
             <div className="flex items-baseline justify-between gap-3">
-              <span className="truncate font-medium">
+              <span className="truncate font-medium flex items-center gap-1">
                 {hoverContext(hovered)}
+                <ExternalLink className="h-3 w-3 opacity-0 group-hover:opacity-60 transition-opacity" />
               </span>
               <span className="font-mono tabular-nums text-muted-foreground shrink-0">
                 {hovered.date.toLocaleDateString("en-US", {
@@ -256,12 +275,12 @@ export function ScoreTrendChart({
               </span>
             </div>
             {hovered.deleted && (
-              <p className="text-[10px] text-muted-foreground mt-0.5 flex items-center gap-1">
+              <span className="text-[10px] text-muted-foreground mt-0.5 flex items-center gap-1">
                 <Trash2 className="h-3 w-3" />
                 Deleted from your list — kept for trend history
-              </p>
+              </span>
             )}
-          </div>
+          </button>
         )}
       </CardContent>
     </Card>
@@ -272,10 +291,12 @@ function TrendSVG({
   buckets,
   hovered,
   setHovered,
+  onOpen,
 }: {
   buckets: MonthBucket[];
   hovered: Point | null;
   setHovered: (p: Point | null) => void;
+  onOpen: (id: string) => void;
 }) {
   // Responsive via viewBox — SVG scales to container width. Pick a
   // logical width that widens with bucket count so long (2+ year)
@@ -441,7 +462,17 @@ function TrendSVG({
                 className="cursor-pointer transition-all"
                 onMouseEnter={() => setHovered(p)}
                 onMouseLeave={() => setHovered(null)}
-                onClick={() => setHovered(isActive ? null : p)}
+                onClick={() => {
+                  // Touch devices: first tap shows the detail card,
+                  // second tap on the same dot navigates. Mouse
+                  // users see the detail card on hover and click
+                  // navigates directly.
+                  if (isActive) {
+                    onOpen(p.id);
+                  } else {
+                    setHovered(p);
+                  }
+                }}
               >
                 <title>
                   {hoverContext(p) +
