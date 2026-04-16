@@ -40,7 +40,7 @@ export function useAnalysisHistory() {
         "id, filename, duration, result, object_key, role, competition_level, event_name, event_date, stage, tags, share_token, created_at"
       )
       .order("created_at", { ascending: false })
-      .limit(20);
+      .limit(200);
     setRecords((data as AnalysisRecord[]) ?? []);
     setLoading(false);
   }, [user]);
