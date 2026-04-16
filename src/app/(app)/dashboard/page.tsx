@@ -164,7 +164,10 @@ export default function DashboardPage() {
       </div>
 
       {/* ─── Score trend ─── */}
-      <ScoreTrendChart records={history.records} loading={history.loading} />
+      <ScoreTrendChart
+        records={history.chartRecords}
+        loading={history.loading}
+      />
 
       {/* ─── Recent analyses ─── */}
       <div className="grid gap-4 lg:grid-cols-3">

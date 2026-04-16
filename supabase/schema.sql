@@ -117,6 +117,9 @@ create table if not exists public.video_analyses (
   prompt_tokens     integer,
   response_tokens   integer,
   cost_usd_micros   integer,
+  -- Soft-delete: analyze list filters these out; dashboard score
+  -- trend chart still shows them for historical progress.
+  deleted_at        timestamptz,
   created_at        timestamptz not null default now()
 );
 
@@ -125,7 +128,15 @@ alter table public.video_analyses
   add column if not exists model           text,
   add column if not exists prompt_tokens   integer,
   add column if not exists response_tokens integer,
-  add column if not exists cost_usd_micros integer;
+  add column if not exists cost_usd_micros integer,
+  -- Soft-delete: the analyze list filters these out, but the
+  -- dashboard score trend chart still shows them so users can see
+  -- their historical progress even after cleaning up old clips.
+  add column if not exists deleted_at      timestamptz;
+
+create index if not exists video_analyses_user_active_idx
+  on public.video_analyses(user_id, created_at desc)
+  where deleted_at is null;
 create unique index if not exists video_analyses_share_token_idx
   on public.video_analyses(share_token)
   where share_token is not null;

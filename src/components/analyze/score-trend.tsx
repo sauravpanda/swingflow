@@ -2,14 +2,19 @@
 
 import { useMemo, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { TrendingUp } from "lucide-react";
-import type { AnalysisRecord } from "@/hooks/use-analysis-history";
+import { TrendingUp, Trash2 } from "lucide-react";
+import type { ChartRecord } from "@/hooks/use-analysis-history";
 
 type Point = {
   id: string;
   date: Date;
   score: number;
   filename: string | null;
+  event_name: string | null;
+  stage: string | null;
+  competition_level: string | null;
+  tags: string[] | null;
+  deleted: boolean;
 };
 
 type MonthBucket = {
@@ -21,6 +26,11 @@ type MonthBucket = {
   avg: number;
 };
 
+// Pad the chart with blank months on either side so live data doesn't
+// sit flush against the frame. 3 before the earliest analysis and 3
+// after "today" (or the most recent analysis, whichever is later).
+const PADDING_MONTHS = 3;
+
 function monthKey(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 }
@@ -29,40 +39,50 @@ function monthLabel(d: Date): string {
   return d.toLocaleDateString("en-US", { month: "short" });
 }
 
-/**
- * Build a contiguous run of month buckets between the earliest record
- * and now — empty months included, so the X-axis shows real time
- * passage (gaps = months with no practice).
- */
-function buildBuckets(records: AnalysisRecord[]): MonthBucket[] {
+function startOfMonth(d: Date): Date {
+  return new Date(d.getFullYear(), d.getMonth(), 1);
+}
+
+function addMonths(d: Date, n: number): Date {
+  return new Date(d.getFullYear(), d.getMonth() + n, 1);
+}
+
+/** Build per-month buckets covering [earliest - 3mo, max(now, latest) + 3mo]. */
+function buildBuckets(records: ChartRecord[]): MonthBucket[] {
   const points: Point[] = [];
   for (const r of records) {
-    const score = r.result?.overall?.score;
-    if (typeof score !== "number" || Number.isNaN(score)) continue;
+    if (typeof r.score !== "number" || Number.isNaN(r.score)) continue;
     points.push({
       id: r.id,
       date: new Date(r.created_at),
-      score,
+      score: r.score,
       filename: r.filename,
+      event_name: r.event_name,
+      stage: r.stage,
+      competition_level: r.competition_level,
+      tags: r.tags,
+      deleted: Boolean(r.deleted_at),
     });
   }
   if (points.length === 0) return [];
 
   points.sort((a, b) => a.date.getTime() - b.date.getTime());
+
   const earliest = points[0].date;
+  const latest = points[points.length - 1].date;
   const now = new Date();
 
-  // Cap at 12 months for readability — show the most recent year.
-  const oldestShown = new Date(now.getFullYear(), now.getMonth() - 11, 1);
-  const start = earliest < oldestShown ? oldestShown : earliest;
+  // Show the full history, no 12-month cap — a 2-year journey should
+  // render in full. Pad both ends by PADDING_MONTHS for visual room.
+  const startMonth = addMonths(startOfMonth(earliest), -PADDING_MONTHS);
+  const endReference = latest > now ? latest : now;
+  const endMonth = addMonths(startOfMonth(endReference), PADDING_MONTHS);
 
-  const buckets = new Map<string, MonthBucket>();
-  const cursor = new Date(start.getFullYear(), start.getMonth(), 1);
-  const end = new Date(now.getFullYear(), now.getMonth(), 1);
-  while (cursor <= end) {
-    const key = monthKey(cursor);
-    buckets.set(key, {
-      key,
+  const buckets: MonthBucket[] = [];
+  const cursor = new Date(startMonth);
+  while (cursor <= endMonth) {
+    buckets.push({
+      key: monthKey(cursor),
       label: monthLabel(cursor),
       year: cursor.getFullYear(),
       month: cursor.getMonth(),
@@ -72,19 +92,19 @@ function buildBuckets(records: AnalysisRecord[]): MonthBucket[] {
     cursor.setMonth(cursor.getMonth() + 1);
   }
 
+  const byKey = new Map(buckets.map((b) => [b.key, b]));
   for (const p of points) {
-    const b = buckets.get(monthKey(p.date));
+    const b = byKey.get(monthKey(p.date));
     if (b) b.points.push(p);
   }
 
-  const list = Array.from(buckets.values());
-  for (const b of list) {
+  for (const b of buckets) {
     b.avg =
       b.points.length > 0
         ? b.points.reduce((a, x) => a + x.score, 0) / b.points.length
         : 0;
   }
-  return list;
+  return buckets;
 }
 
 function colorForScore(s: number): string {
@@ -94,8 +114,24 @@ function colorForScore(s: number): string {
   return "#f43f5e"; // rose
 }
 
-const CHART_H = 180;
-const MARGIN = { top: 12, right: 12, bottom: 24, left: 28 };
+/**
+ * Build the hover detail string. Prefers event context (event + stage
+ * + level + tags) over the raw filename, since "IMG_8665.MOV" means
+ * nothing in a progression view but "Boogie by the Bay · Finals"
+ * actually anchors the memory.
+ */
+function hoverContext(p: Point): string {
+  const parts: string[] = [];
+  if (p.event_name) parts.push(p.event_name);
+  if (p.stage) parts.push(p.stage);
+  if (p.competition_level) parts.push(p.competition_level);
+  if (p.tags && p.tags.length > 0) parts.push(p.tags.join(", "));
+  if (parts.length > 0) return parts.join(" · ");
+  return p.filename || "Untitled";
+}
+
+const CHART_H = 200;
+const MARGIN = { top: 12, right: 16, bottom: 28, left: 28 };
 const Y_MIN = 0;
 const Y_MAX = 10;
 
@@ -103,14 +139,17 @@ export function ScoreTrendChart({
   records,
   loading,
 }: {
-  records: AnalysisRecord[];
+  records: ChartRecord[];
   loading?: boolean;
 }) {
   const buckets = useMemo(() => buildBuckets(records), [records]);
   const [hovered, setHovered] = useState<Point | null>(null);
 
-  // Need at least one scored analysis for the chart to be useful.
-  const hasData = buckets.some((b) => b.points.length > 0);
+  const allPoints = useMemo(
+    () => buckets.flatMap((b) => b.points),
+    [buckets]
+  );
+  const hasData = allPoints.length > 0;
 
   if (loading) {
     return (
@@ -150,9 +189,10 @@ export function ScoreTrendChart({
   }
 
   const monthsWithData = buckets.filter((b) => b.points.length > 0).length;
-  const allScores = buckets.flatMap((b) => b.points.map((p) => p.score));
-  const bestScore = Math.max(...allScores);
-  const avgAll = allScores.reduce((a, b) => a + b, 0) / allScores.length;
+  const scores = allPoints.map((p) => p.score);
+  const bestScore = Math.max(...scores);
+  const avgAll = scores.reduce((a, b) => a + b, 0) / scores.length;
+  const deletedCount = allPoints.filter((p) => p.deleted).length;
 
   return (
     <Card>
@@ -165,24 +205,38 @@ export function ScoreTrendChart({
           <span className="text-xs font-normal text-muted-foreground tabular-nums">
             {monthsWithData} month{monthsWithData === 1 ? "" : "s"} · avg{" "}
             {avgAll.toFixed(1)} · best {bestScore.toFixed(1)}
+            {deletedCount > 0 && (
+              <span className="ml-2 inline-flex items-center gap-1">
+                <Trash2 className="h-3 w-3" />
+                {deletedCount} deleted
+              </span>
+            )}
           </span>
         </CardTitle>
       </CardHeader>
       <CardContent>
         <TrendSVG buckets={buckets} hovered={hovered} setHovered={setHovered} />
         {hovered && (
-          <div className="mt-2 rounded-md border border-border bg-muted/20 p-2 text-xs flex items-center justify-between gap-3">
-            <span className="truncate font-medium">
-              {hovered.filename || "Untitled"}
-            </span>
-            <span className="font-mono tabular-nums text-muted-foreground shrink-0">
-              {hovered.date.toLocaleDateString("en-US", {
-                month: "short",
-                day: "numeric",
-                year: "numeric",
-              })}{" "}
-              · {hovered.score.toFixed(1)}
-            </span>
+          <div className="mt-2 rounded-md border border-border bg-muted/20 p-2 text-xs">
+            <div className="flex items-baseline justify-between gap-3">
+              <span className="truncate font-medium">
+                {hoverContext(hovered)}
+              </span>
+              <span className="font-mono tabular-nums text-muted-foreground shrink-0">
+                {hovered.date.toLocaleDateString("en-US", {
+                  month: "short",
+                  day: "numeric",
+                  year: "numeric",
+                })}{" "}
+                · {hovered.score.toFixed(1)}
+              </span>
+            </div>
+            {hovered.deleted && (
+              <p className="text-[10px] text-muted-foreground mt-0.5 flex items-center gap-1">
+                <Trash2 className="h-3 w-3" />
+                Deleted from your list — kept for trend history
+              </p>
+            )}
           </div>
         )}
       </CardContent>
@@ -199,42 +253,46 @@ function TrendSVG({
   hovered: Point | null;
   setHovered: (p: Point | null) => void;
 }) {
-  // Responsive via viewBox — SVG scales to container width. We pick a
-  // logical width that fits ~12 buckets comfortably; the viewBox then
-  // rescales to fill the card.
-  const W = 600;
+  // Responsive via viewBox — SVG scales to container width. Pick a
+  // logical width that widens with bucket count so long (2+ year)
+  // histories don't cram dots on top of each other; browsers will
+  // still shrink it to fit the card visually.
+  const n = buckets.length;
+  const W = Math.max(600, n * 38);
   const innerW = W - MARGIN.left - MARGIN.right;
   const innerH = CHART_H - MARGIN.top - MARGIN.bottom;
-  const n = buckets.length;
   const slotW = n > 1 ? innerW / (n - 1) : innerW;
 
   const xFor = (i: number) => MARGIN.left + i * slotW;
   const yFor = (score: number) =>
     MARGIN.top + innerH - ((score - Y_MIN) / (Y_MAX - Y_MIN)) * innerH;
 
-  // Build avg polyline only over months that have data — skip empty
-  // months so the line doesn't dip to 0.
   const avgPath = buckets
     .map((b, i) =>
       b.points.length === 0
         ? null
-        : { x: xFor(i), y: yFor(b.avg), avg: b.avg }
+        : { x: xFor(i), y: yFor(b.avg) }
     )
-    .filter((p): p is { x: number; y: number; avg: number } => p !== null);
+    .filter((p): p is { x: number; y: number } => p !== null);
 
   const pathD = avgPath
     .map((p, i) => `${i === 0 ? "M" : "L"} ${p.x.toFixed(1)} ${p.y.toFixed(1)}`)
     .join(" ");
 
+  // For long histories, label every Nth month so the axis stays readable.
+  const labelEvery = n <= 12 ? 1 : n <= 24 ? 2 : Math.ceil(n / 12);
+
   return (
-    <div className="w-full">
+    <div className="w-full overflow-x-auto">
       <svg
         viewBox={`0 0 ${W} ${CHART_H}`}
+        preserveAspectRatio="xMidYMid meet"
         className="w-full h-auto"
+        style={{ minWidth: n > 18 ? `${n * 24}px` : undefined }}
         role="img"
         aria-label="Monthly score trend"
       >
-        {/* Horizontal gridlines at 2, 4, 6, 8, 10 */}
+        {/* Gridlines at 2/4/6/8/10 */}
         {[2, 4, 6, 8, 10].map((s) => (
           <g key={s}>
             <line
@@ -259,7 +317,7 @@ function TrendSVG({
           </g>
         ))}
 
-        {/* Average line through months with data */}
+        {/* Average polyline */}
         {pathD && (
           <path
             d={pathD}
@@ -273,7 +331,7 @@ function TrendSVG({
           />
         )}
 
-        {/* Average-per-month dots */}
+        {/* Average-per-month markers */}
         {avgPath.map((p, i) => (
           <circle
             key={`avg-${i}`}
@@ -284,61 +342,71 @@ function TrendSVG({
           />
         ))}
 
-        {/* Individual analysis dots (scatter). Jitter the x-position
-            slightly within the month slot so overlapping dots separate. */}
+        {/* Individual analysis dots. Soft-deleted rows render as
+            hollow outlines so the user can tell them apart from
+            active analyses at a glance. */}
         {buckets.flatMap((b, i) =>
           b.points.map((p, pi) => {
-            const jitter = b.points.length > 1 ? (pi - (b.points.length - 1) / 2) * 6 : 0;
+            const jitter =
+              b.points.length > 1
+                ? (pi - (b.points.length - 1) / 2) * 6
+                : 0;
             const cx = xFor(i) + jitter;
             const cy = yFor(p.score);
             const isActive = hovered?.id === p.id;
+            const color = colorForScore(p.score);
             return (
               <circle
                 key={p.id}
                 cx={cx}
                 cy={cy}
                 r={isActive ? 5 : 3.5}
-                fill={colorForScore(p.score)}
-                stroke="white"
-                strokeOpacity={0.2}
-                strokeWidth={1}
+                fill={p.deleted ? "transparent" : color}
+                stroke={p.deleted ? color : "white"}
+                strokeOpacity={p.deleted ? 0.9 : 0.2}
+                strokeWidth={p.deleted ? 1.5 : 1}
+                strokeDasharray={p.deleted ? "2 1.5" : undefined}
                 className="cursor-pointer transition-all"
                 onMouseEnter={() => setHovered(p)}
                 onMouseLeave={() => setHovered(null)}
                 onClick={() => setHovered(isActive ? null : p)}
               >
                 <title>
-                  {(p.filename || "Untitled") +
+                  {hoverContext(p) +
                     " — " +
                     p.score.toFixed(1) +
                     " on " +
                     p.date.toLocaleDateString("en-US", {
                       month: "short",
                       day: "numeric",
-                    })}
+                    }) +
+                    (p.deleted ? " (deleted)" : "")}
                 </title>
               </circle>
             );
           })
         )}
 
-        {/* Month labels on X-axis */}
+        {/* Month labels + year tick on January (or on the first
+            labeled bucket so users still see the year on long
+            histories that start mid-year) */}
         {buckets.map((b, i) => {
-          // Only label every other month if too dense to read.
-          const showLabel = n <= 6 || i % 2 === 0 || i === n - 1;
+          const showLabel = i % labelEvery === 0 || i === n - 1;
           if (!showLabel) return null;
+          const isFirst = i === 0;
+          const showYear = b.month === 0 || isFirst;
           return (
             <text
               key={b.key}
               x={xFor(i)}
-              y={CHART_H - 6}
+              y={CHART_H - 10}
               textAnchor="middle"
               className="fill-muted-foreground"
               fontSize={10}
             >
               {b.label}
-              {b.month === 0 && (
-                <tspan x={xFor(i)} dy={10}>
+              {showYear && (
+                <tspan x={xFor(i)} dy={11}>
                   &apos;{String(b.year).slice(-2)}
                 </tspan>
               )}

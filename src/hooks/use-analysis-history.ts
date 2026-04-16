@@ -18,30 +18,97 @@ export type AnalysisRecord = {
   stage: string | null;
   tags: string[] | null;
   share_token: string | null;
+  deleted_at: string | null;
+  created_at: string;
+};
+
+/**
+ * Minimal shape for the score trend chart. Intentionally projects
+ * only the fields the chart needs so we can still fetch the full
+ * history (including soft-deleted rows) without paying for the big
+ * result JSON per row.
+ */
+export type ChartRecord = {
+  id: string;
+  filename: string | null;
+  score: number | null;
+  event_name: string | null;
+  stage: string | null;
+  competition_level: string | null;
+  tags: string[] | null;
+  deleted_at: string | null;
   created_at: string;
 };
 
 export function useAnalysisHistory() {
   const { user } = useUser();
   const [records, setRecords] = useState<AnalysisRecord[]>([]);
+  const [chartRecords, setChartRecords] = useState<ChartRecord[]>([]);
   const [loading, setLoading] = useState(true);
 
   const refresh = useCallback(async () => {
     if (!isSupabaseConfigured || !user) {
       setRecords([]);
+      setChartRecords([]);
       setLoading(false);
       return;
     }
     setLoading(true);
     const sb = getSupabase();
-    const { data } = await sb
+
+    // Active records — for the analyze-page history list and anywhere
+    // that wants the full, undeleted view. Soft-deleted rows filtered
+    // out server-side via the partial index.
+    const activePromise = sb
       .from("video_analyses")
       .select(
-        "id, filename, duration, result, object_key, role, competition_level, event_name, event_date, stage, tags, share_token, created_at"
+        "id, filename, duration, result, object_key, role, competition_level, event_name, event_date, stage, tags, share_token, deleted_at, created_at"
       )
+      .is("deleted_at", null)
       .order("created_at", { ascending: false })
       .limit(200);
-    setRecords((data as AnalysisRecord[]) ?? []);
+
+    // Chart records — includes soft-deleted rows so the user can see
+    // their historical progress even after cleanup. Projects only
+    // what the chart needs (score, tags, event metadata) so we can
+    // pull more rows without the cost of full result JSON each.
+    const chartPromise = sb
+      .from("video_analyses")
+      .select(
+        "id, filename, created_at, deleted_at, event_name, stage, competition_level, tags, result"
+      )
+      .order("created_at", { ascending: true })
+      .limit(1000);
+
+    const [activeRes, chartRes] = await Promise.all([activePromise, chartPromise]);
+
+    setRecords((activeRes.data as AnalysisRecord[]) ?? []);
+
+    // Flatten the result -> score projection for the chart so it
+    // doesn't carry the big JSON around in component props.
+    const chartData = (chartRes.data ?? []).map((r: {
+      id: string;
+      filename: string | null;
+      created_at: string;
+      deleted_at: string | null;
+      event_name: string | null;
+      stage: string | null;
+      competition_level: string | null;
+      tags: string[] | null;
+      result: VideoScoreResult | null;
+    }): ChartRecord => ({
+      id: r.id,
+      filename: r.filename,
+      score: r.result?.overall?.score ?? null,
+      event_name: r.event_name,
+      stage: r.stage,
+      competition_level: r.competition_level,
+      tags: r.tags,
+      deleted_at: r.deleted_at,
+      created_at: r.created_at,
+    }));
+    setChartRecords(chartData);
+
     setLoading(false);
   }, [user]);
 
@@ -53,8 +120,19 @@ export function useAnalysisHistory() {
     async (id: string) => {
       if (!isSupabaseConfigured) return;
       const sb = getSupabase();
-      await sb.from("video_analyses").delete().eq("id", id);
+      // Soft-delete: the row stays in the DB so the score trend
+      // chart can still plot it as history, but it disappears from
+      // the analyze-page list. User-intent here is "clean up my
+      // list", not "erase all evidence this ever happened".
+      const now = new Date().toISOString();
+      await sb
+        .from("video_analyses")
+        .update({ deleted_at: now })
+        .eq("id", id);
       setRecords((rs) => rs.filter((r) => r.id !== id));
+      setChartRecords((rs) =>
+        rs.map((r) => (r.id === id ? { ...r, deleted_at: now } : r))
+      );
     },
     []
   );
@@ -85,5 +163,13 @@ export function useAnalysisHistory() {
     );
   }, []);
 
-  return { records, loading, refresh, remove, enableSharing, disableSharing };
+  return {
+    records,
+    chartRecords,
+    loading,
+    refresh,
+    remove,
+    enableSharing,
+    disableSharing,
+  };
 }
