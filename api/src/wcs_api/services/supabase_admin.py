@@ -159,19 +159,48 @@ async def insert_usage_event(
 async def get_shared_analysis(token: str) -> dict[str, Any] | None:
     """Unauthenticated read of a video analysis by its share token.
     Intentionally returns only the public-safe subset of fields (no
-    user_id, object_key, or stripe_customer_id)."""
+    user_id, object_key, or stripe_customer_id). Also returns the
+    view counter columns so the owner sees them update in realtime."""
     async with httpx.AsyncClient(timeout=10) as client:
         r = await client.get(
             _rest(
                 f"video_analyses?share_token=eq.{token}"
                 "&select=id,filename,duration,result,role,"
-                "competition_level,event_name,stage,tags,created_at"
+                "competition_level,event_name,stage,tags,created_at,"
+                "share_view_count,share_last_viewed_at"
             ),
             headers=_headers(),
         )
         r.raise_for_status()
         rows = r.json()
         return rows[0] if rows else None
+
+
+async def increment_share_view(token: str) -> int:
+    """Atomically +1 the view count on the row matching the given
+    share token; also stamps share_last_viewed_at = now(). Returns
+    the new count. Safe to call concurrently — the RPC wraps the
+    UPDATE, so two simultaneous views don't race on read-then-write.
+
+    Best-effort: any HTTP error is swallowed and 0 returned so a
+    flaky counter never breaks the public /shared/{token} page.
+    """
+    try:
+        async with httpx.AsyncClient(timeout=5) as client:
+            r = await client.post(
+                f"{settings.supabase_url}/rest/v1/rpc/increment_share_view",
+                headers={**_headers(), "Prefer": "return=representation"},
+                json={"p_token": token},
+            )
+            r.raise_for_status()
+            data = r.json()
+            if isinstance(data, int):
+                return data
+            if isinstance(data, list) and data and isinstance(data[0], int):
+                return data[0]
+            return 0
+    except Exception:
+        return 0
 
 
 async def clear_video_analysis_object_key(

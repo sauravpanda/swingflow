@@ -382,14 +382,23 @@ export type SharedAnalysis = {
   stage?: string | null;
   tags?: string[] | null;
   created_at: string;
+  // Populated server-side on real browser views — link-preview
+  // bots don't count.
+  share_view_count?: number;
+  share_last_viewed_at?: string | null;
 };
 
 export async function fetchSharedAnalysis(
   token: string
 ): Promise<SharedAnalysis> {
   if (!API_URL) throw new Error("NEXT_PUBLIC_WCS_API_URL is not set");
+  // The custom header tells the backend this is a real frontend
+  // navigation (not a Slack/Twitter unfurl), so the view counter
+  // increments. Bots can't forge custom request headers via the
+  // standard OpenGraph scrape path — they just do a plain GET.
   const res = await fetch(
-    `${API_URL}/shared/${encodeURIComponent(token)}`
+    `${API_URL}/shared/${encodeURIComponent(token)}`,
+    { headers: { "X-Swingflow-View": "1" } }
   );
   if (!res.ok) {
     let detail = res.statusText;
