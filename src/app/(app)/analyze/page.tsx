@@ -22,6 +22,7 @@ import {
   Share2,
   Link2Off,
   Copy,
+  Eye,
 } from "lucide-react";
 import { useVideoAnalysis } from "@/hooks/use-video-analysis";
 import { useAnalysisHistory, type AnalysisRecord } from "@/hooks/use-analysis-history";
@@ -937,6 +938,24 @@ function HistoryRow({
                   <span className="hidden sm:inline">Delete video</span>
                 </Button>
               </>
+            )}
+
+            {shareUrl && (record.share_view_count ?? 0) > 0 && (
+              <span
+                className="inline-flex items-center gap-1 text-xs text-muted-foreground tabular-nums"
+                title={
+                  record.share_last_viewed_at
+                    ? `Last viewed ${new Date(record.share_last_viewed_at).toLocaleString()}`
+                    : undefined
+                }
+              >
+                <Eye className="h-3 w-3" />
+                {record.share_view_count}
+                <span className="hidden sm:inline">
+                  {" "}
+                  view{record.share_view_count === 1 ? "" : "s"}
+                </span>
+              </span>
             )}
 
             {shareUrl ? (

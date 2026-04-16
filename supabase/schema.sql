@@ -120,19 +120,28 @@ create table if not exists public.video_analyses (
   -- Soft-delete: analyze list filters these out; dashboard score
   -- trend chart still shows them for historical progress.
   deleted_at        timestamptz,
+  -- Share-link view counter — see migration block below for details.
+  share_view_count      integer not null default 0,
+  share_last_viewed_at  timestamptz,
   created_at        timestamptz not null default now()
 );
 
 -- Migration: add cost columns to pre-existing rows. Idempotent.
 alter table public.video_analyses
-  add column if not exists model           text,
-  add column if not exists prompt_tokens   integer,
-  add column if not exists response_tokens integer,
-  add column if not exists cost_usd_micros integer,
+  add column if not exists model                 text,
+  add column if not exists prompt_tokens         integer,
+  add column if not exists response_tokens       integer,
+  add column if not exists cost_usd_micros       integer,
   -- Soft-delete: the analyze list filters these out, but the
   -- dashboard score trend chart still shows them so users can see
   -- their historical progress even after cleaning up old clips.
-  add column if not exists deleted_at      timestamptz;
+  add column if not exists deleted_at            timestamptz,
+  -- Share-link view tracking: incremented by the /shared/{token}
+  -- backend route on real browser navigations (Sec-Fetch-Mode:
+  -- navigate) so Slack/iMessage/Twitter link-preview unfurls don't
+  -- inflate the count.
+  add column if not exists share_view_count      integer not null default 0,
+  add column if not exists share_last_viewed_at  timestamptz;
 
 create index if not exists video_analyses_user_active_idx
   on public.video_analyses(user_id, created_at desc)
@@ -348,3 +357,29 @@ $$;
 -- from our FastAPI admin route. Email-based gating happens in the
 -- FastAPI layer, not in SQL, so the function itself is callable by
 -- anyone with the service key.
+
+
+-- ────────────────────────────────────────────────────────────
+-- Share-link view counter RPC — atomic increment.
+-- Called by the FastAPI /shared/{token} route on real browser
+-- navigations (filtered by Sec-Fetch-Mode upstream). Returns the
+-- new count so the route can include it in observability logs.
+-- ────────────────────────────────────────────────────────────
+
+create or replace function public.increment_share_view(p_token text)
+returns integer
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  new_count integer;
+begin
+  update public.video_analyses
+    set share_view_count     = coalesce(share_view_count, 0) + 1,
+        share_last_viewed_at = now()
+    where share_token = p_token
+    returning share_view_count into new_count;
+  return coalesce(new_count, 0);
+end;
+$$;
