@@ -216,6 +216,7 @@ export default function AnalyzePage() {
   const [eventName, setEventName] = useState("");
   const [eventDate, setEventDate] = useState("");
   const [tagsInput, setTagsInput] = useState("");
+  const [dancerDescription, setDancerDescription] = useState("");
 
   const role =
     roleSelect === OTHER ? roleCustom.trim() : roleSelect.trim();
@@ -280,6 +281,7 @@ export default function AnalyzePage() {
     const normalizedDate = eventDate
       ? `${eventDate}-01`
       : undefined;
+    const focus = dancerDescription.trim().slice(0, 200);
     analyze(file, {
       role: role || undefined,
       competitionLevel: competitionLevel || undefined,
@@ -287,6 +289,7 @@ export default function AnalyzePage() {
       eventDate: normalizedDate,
       stage: stage || undefined,
       tags: tags.length ? tags : undefined,
+      dancerDescription: focus || undefined,
     }).then(() => history.refresh());
   }, [
     file,
@@ -298,6 +301,7 @@ export default function AnalyzePage() {
     eventDate,
     stage,
     tagsInput,
+    dancerDescription,
   ]);
 
   const handleClear = useCallback(() => {
@@ -513,6 +517,28 @@ export default function AnalyzePage() {
                     onChange={(e) => setTagsInput(e.target.value)}
                     className="h-8 text-sm"
                   />
+                </div>
+
+                <div className="space-y-1">
+                  <Label htmlFor="dancer-focus" className="text-xs">
+                    Focus on
+                    <span className="ml-1 text-muted-foreground font-normal">
+                      (if multiple people in frame)
+                    </span>
+                  </Label>
+                  <Input
+                    id="dancer-focus"
+                    placeholder="e.g. couple in the red dress, lead on the right"
+                    value={dancerDescription}
+                    onChange={(e) =>
+                      setDancerDescription(e.target.value.slice(0, 200))
+                    }
+                    maxLength={200}
+                    className="h-8 text-sm"
+                  />
+                  <p className="text-[10px] text-muted-foreground tabular-nums text-right">
+                    {dancerDescription.length}/200
+                  </p>
                 </div>
               </div>
             )}
@@ -1019,6 +1045,12 @@ function HistoryRow({
               <span className="hidden sm:inline">Delete analysis</span>
             </Button>
           </div>
+
+          {record.dancer_description && (
+            <p className="text-xs text-muted-foreground italic">
+              Focused on: {record.dancer_description}
+            </p>
+          )}
 
           {shareMessage && (
             <p className="text-xs text-primary">{shareMessage}</p>

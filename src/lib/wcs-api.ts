@@ -339,6 +339,10 @@ export type VideoAnalyzeOptions = {
   eventDate?: string; // YYYY-MM-DD
   stage?: string;
   tags?: string[];
+  // Free-text description of which dancer / couple to focus on
+  // when multiple people are in frame (e.g. "couple in the red
+  // dress and blue shirt", "the lead on the far right").
+  dancerDescription?: string;
 };
 
 export async function analyzeVideoFromKey(
@@ -355,6 +359,7 @@ export async function analyzeVideoFromKey(
     event_date: options.eventDate || null,
     stage: options.stage || null,
     tags: options.tags && options.tags.length ? options.tags : null,
+    dancer_description: options.dancerDescription || null,
   });
 }
 

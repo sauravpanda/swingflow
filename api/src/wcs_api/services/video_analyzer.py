@@ -614,9 +614,33 @@ def _build_user_context(context: dict[str, Any] | None) -> str:
     upload form into a short context block for Gemini. Keeps the
     model grounded on what the user *says* they are (and is at),
     while still scoring against the objective WSDC rubric.
+
+    Also includes a DANCER IDENTIFICATION paragraph when
+    `dancer_description` is set — critical for practice-floor or
+    social-dance clips where multiple couples share the frame.
     """
     if not context:
         return ""
+
+    # Defensive cap in case the request body bypassed the pydantic
+    # validator (older clients, direct REST hits, etc.). Matches the
+    # max_length on VideoAnalyzeBody.dancer_description.
+    dancer = (context.get("dancer_description") or "").strip()[:200]
+    dancer_block = ""
+    if dancer:
+        dancer_block = (
+            "DANCER IDENTIFICATION: "
+            f"{dancer}\n"
+            "Focus your analysis ONLY on these dancers. There may be "
+            "other people visible in the video (other couples, "
+            "spectators, judges, instructors) — ignore them entirely. "
+            "Every pattern you identify, every score you give, and "
+            "every observation you make must refer exclusively to the "
+            "identified dancer(s). If you can't confidently tell which "
+            "dancer matches the description at any given moment, say so "
+            "in the reasoning rather than guessing.\n\n"
+        )
+
     fields = []
     if context.get("role"):
         fields.append(f"- Role: {context['role']}")
@@ -636,20 +660,27 @@ def _build_user_context(context: dict[str, Any] | None) -> str:
         if isinstance(tags, (list, tuple)) and tags:
             fields.append(f"- Tags: {', '.join(str(t) for t in tags)}")
 
-    if not fields:
+    if not fields and not dancer_block:
         return ""
-    return (
-        "USER-PROVIDED CONTEXT:\n"
-        + "\n".join(fields)
-        + "\n\nCalibrate your scoring against the self-reported level — "
-        "a Novice scoring 6/10 is different from a Champion scoring 6/10, "
-        "and your reasoning should reflect the dancer's stated tier. "
-        "If the video clearly shows a dancer at a different level than "
-        "what they self-report, score based on what you observe and say "
-        "so in the reasoning. Use the event / stage info to decide how "
-        "formal the scoring should feel (Finals on the floor vs. a "
-        "practice social).\n"
-    )
+
+    context_block = ""
+    if fields:
+        context_block = (
+            "USER-PROVIDED CONTEXT:\n"
+            + "\n".join(fields)
+            + "\n\nCalibrate your scoring against the self-reported level — "
+            "a Novice scoring 6/10 is different from a Champion scoring 6/10, "
+            "and your reasoning should reflect the dancer's stated tier. "
+            "If the video clearly shows a dancer at a different level than "
+            "what they self-report, score based on what you observe and say "
+            "so in the reasoning. Use the event / stage info to decide how "
+            "formal the scoring should feel (Finals on the floor vs. a "
+            "practice social).\n"
+        )
+
+    # Dancer identification comes first so the model knows WHO to
+    # score before anything about how to score them.
+    return dancer_block + context_block
 
 
 def _build_sanity_retry_prompt(

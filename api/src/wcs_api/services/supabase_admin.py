@@ -82,6 +82,7 @@ async def insert_video_analysis(
     event_date: str | None = None,
     stage: str | None = None,
     tags: list[str] | None = None,
+    dancer_description: str | None = None,
     usage: dict[str, Any] | None = None,
 ) -> None:
     record: dict[str, Any] = {
@@ -103,6 +104,8 @@ async def insert_video_analysis(
         record["stage"] = stage
     if tags:
         record["tags"] = tags
+    if dancer_description:
+        record["dancer_description"] = dancer_description
     if usage:
         record["model"] = usage.get("model")
         record["prompt_tokens"] = usage.get("prompt_tokens")
