@@ -46,5 +46,16 @@ export function useAnalysisHistory() {
     refresh();
   }, [refresh]);
 
-  return { records, loading, refresh };
+  const remove = useCallback(
+    async (id: string) => {
+      if (!isSupabaseConfigured) return;
+      const sb = getSupabase();
+      // RLS: users can only delete rows where auth.uid() = user_id
+      await sb.from("video_analyses").delete().eq("id", id);
+      setRecords((rs) => rs.filter((r) => r.id !== id));
+    },
+    []
+  );
+
+  return { records, loading, refresh, remove };
 }
