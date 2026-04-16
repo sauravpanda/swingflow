@@ -14,6 +14,7 @@ export type AnalysisRecord = {
   role: string | null;
   competition_level: string | null;
   event_name: string | null;
+  stage: string | null;
   tags: string[] | null;
   created_at: string;
 };
@@ -34,7 +35,7 @@ export function useAnalysisHistory() {
     const { data } = await sb
       .from("video_analyses")
       .select(
-        "id, filename, duration, result, object_key, role, competition_level, event_name, tags, created_at"
+        "id, filename, duration, result, object_key, role, competition_level, event_name, stage, tags, created_at"
       )
       .order("created_at", { ascending: false })
       .limit(20);

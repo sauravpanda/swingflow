@@ -79,6 +79,7 @@ async def insert_video_analysis(
     role: str | None = None,
     competition_level: str | None = None,
     event_name: str | None = None,
+    stage: str | None = None,
     tags: list[str] | None = None,
 ) -> None:
     record: dict[str, Any] = {
@@ -94,6 +95,8 @@ async def insert_video_analysis(
         record["competition_level"] = competition_level
     if event_name:
         record["event_name"] = event_name
+    if stage:
+        record["stage"] = stage
     if tags:
         record["tags"] = tags
 

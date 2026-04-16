@@ -72,6 +72,7 @@ export default function AnalyzePage() {
   const [role, setRole] = useState("");
   const [competitionLevel, setCompetitionLevel] = useState("");
   const [eventName, setEventName] = useState("");
+  const [stage, setStage] = useState("");
   const [tagsInput, setTagsInput] = useState("");
 
   const handleFileChange = useCallback(
@@ -129,9 +130,10 @@ export default function AnalyzePage() {
       role: role.trim() || undefined,
       competitionLevel: competitionLevel.trim() || undefined,
       eventName: eventName.trim() || undefined,
+      stage: stage.trim() || undefined,
       tags: tags.length ? tags : undefined,
     }).then(() => history.refresh());
-  }, [file, analyze, history, role, competitionLevel, eventName, tagsInput]);
+  }, [file, analyze, history, role, competitionLevel, eventName, stage, tagsInput]);
 
   const handleClear = useCallback(() => {
     setFile(null);
@@ -299,17 +301,31 @@ export default function AnalyzePage() {
                     />
                   </div>
                 </div>
-                <div className="space-y-1">
-                  <Label htmlFor="event" className="text-xs">
-                    Event
-                  </Label>
-                  <Input
-                    id="event"
-                    placeholder="Boogie by the Bay 2026 J&J"
-                    value={eventName}
-                    onChange={(e) => setEventName(e.target.value)}
-                    className="h-8 text-sm"
-                  />
+                <div className="grid grid-cols-2 gap-2.5">
+                  <div className="space-y-1">
+                    <Label htmlFor="event" className="text-xs">
+                      Event
+                    </Label>
+                    <Input
+                      id="event"
+                      placeholder="Boogie by the Bay 2026 J&J"
+                      value={eventName}
+                      onChange={(e) => setEventName(e.target.value)}
+                      className="h-8 text-sm"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="stage" className="text-xs">
+                      Stage
+                    </Label>
+                    <Input
+                      id="stage"
+                      placeholder="prelims, quarters, semis, finals…"
+                      value={stage}
+                      onChange={(e) => setStage(e.target.value)}
+                      className="h-8 text-sm"
+                    />
+                  </div>
                 </div>
                 <div className="space-y-1">
                   <Label htmlFor="tags" className="text-xs">
@@ -584,6 +600,11 @@ function HistoryRow({
             {record.event_name && (
               <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4">
                 {record.event_name}
+              </Badge>
+            )}
+            {record.stage && (
+              <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4">
+                {record.stage}
               </Badge>
             )}
             {(record.tags ?? []).slice(0, 4).map((t) => (

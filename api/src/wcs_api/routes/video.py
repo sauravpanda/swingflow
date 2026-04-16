@@ -22,6 +22,7 @@ class VideoAnalyzeBody(BaseModel):
     role: str | None = None
     competition_level: str | None = None
     event_name: str | None = None
+    stage: str | None = None
     tags: list[str] | None = None
 
 
@@ -149,6 +150,7 @@ async def analyze_video_endpoint(
                 role=body.role,
                 competition_level=body.competition_level,
                 event_name=body.event_name,
+                stage=body.stage,
                 tags=body.tags,
             )
         except Exception:
