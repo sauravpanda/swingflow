@@ -33,7 +33,35 @@ import {
 } from "@/lib/wcs-api";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { TimelineView } from "@/components/analyze/timeline-view";
+
+const ROLE_OPTIONS = ["Lead", "Follow", "Solo"] as const;
+const LEVEL_OPTIONS = [
+  "Newcomer",
+  "Novice",
+  "Intermediate",
+  "Advanced",
+  "All-Star",
+  "Champion",
+  "Invitational",
+] as const;
+const STAGE_OPTIONS = [
+  "Prelims",
+  "Quarterfinals",
+  "Semifinals",
+  "Finals",
+  "Social",
+  "Practice",
+  "Showcase",
+] as const;
+const OTHER = "__other__";
 
 const CATEGORY_LABELS: Record<keyof VideoScoreResult["categories"], string> = {
   timing: "Timing & Rhythm",
@@ -90,11 +118,23 @@ export default function AnalyzePage() {
   const inputRef = useRef<HTMLInputElement>(null);
 
   // Optional metadata — captured pre-upload so it gets saved with the analysis.
-  const [role, setRole] = useState("");
-  const [competitionLevel, setCompetitionLevel] = useState("");
+  // Each of role / level / stage can be a preset OR free text via "Other".
+  const [roleSelect, setRoleSelect] = useState("");
+  const [roleCustom, setRoleCustom] = useState("");
+  const [levelSelect, setLevelSelect] = useState("");
+  const [levelCustom, setLevelCustom] = useState("");
+  const [stageSelect, setStageSelect] = useState("");
+  const [stageCustom, setStageCustom] = useState("");
   const [eventName, setEventName] = useState("");
-  const [stage, setStage] = useState("");
+  const [eventDate, setEventDate] = useState("");
   const [tagsInput, setTagsInput] = useState("");
+
+  const role =
+    roleSelect === OTHER ? roleCustom.trim() : roleSelect.trim();
+  const competitionLevel =
+    levelSelect === OTHER ? levelCustom.trim() : levelSelect.trim();
+  const stage =
+    stageSelect === OTHER ? stageCustom.trim() : stageSelect.trim();
 
   const handleFileChange = useCallback(
     async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -148,13 +188,24 @@ export default function AnalyzePage() {
       .map((t) => t.trim())
       .filter(Boolean);
     analyze(file, {
-      role: role.trim() || undefined,
-      competitionLevel: competitionLevel.trim() || undefined,
+      role: role || undefined,
+      competitionLevel: competitionLevel || undefined,
       eventName: eventName.trim() || undefined,
-      stage: stage.trim() || undefined,
+      eventDate: eventDate || undefined,
+      stage: stage || undefined,
       tags: tags.length ? tags : undefined,
     }).then(() => history.refresh());
-  }, [file, analyze, history, role, competitionLevel, eventName, stage, tagsInput]);
+  }, [
+    file,
+    analyze,
+    history,
+    role,
+    competitionLevel,
+    eventName,
+    eventDate,
+    stage,
+    tagsInput,
+  ]);
 
   const handleClear = useCallback(() => {
     setFile(null);
@@ -292,36 +343,34 @@ export default function AnalyzePage() {
             )}
 
             {file && state.status === "idle" && (
-              <div className="space-y-2.5 rounded-lg border border-border p-3">
+              <div className="space-y-3 rounded-lg border border-border p-3">
                 <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
                   Optional tags (saved with the analysis)
                 </p>
+
                 <div className="grid grid-cols-2 gap-2.5">
-                  <div className="space-y-1">
-                    <Label htmlFor="role" className="text-xs">
-                      Role
-                    </Label>
-                    <Input
-                      id="role"
-                      placeholder="lead / follow / solo"
-                      value={role}
-                      onChange={(e) => setRole(e.target.value)}
-                      className="h-8 text-sm"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <Label htmlFor="level" className="text-xs">
-                      Level
-                    </Label>
-                    <Input
-                      id="level"
-                      placeholder="novice, intermediate, all-star…"
-                      value={competitionLevel}
-                      onChange={(e) => setCompetitionLevel(e.target.value)}
-                      className="h-8 text-sm"
-                    />
-                  </div>
+                  <SelectWithOther
+                    id="role"
+                    label="Role"
+                    options={ROLE_OPTIONS}
+                    select={roleSelect}
+                    setSelect={setRoleSelect}
+                    custom={roleCustom}
+                    setCustom={setRoleCustom}
+                    customPlaceholder="e.g. both, shadow…"
+                  />
+                  <SelectWithOther
+                    id="level"
+                    label="Level"
+                    options={LEVEL_OPTIONS}
+                    select={levelSelect}
+                    setSelect={setLevelSelect}
+                    custom={levelCustom}
+                    setCustom={setLevelCustom}
+                    customPlaceholder="e.g. Open, Rising Star…"
+                  />
                 </div>
+
                 <div className="grid grid-cols-2 gap-2.5">
                   <div className="space-y-1">
                     <Label htmlFor="event" className="text-xs">
@@ -329,25 +378,37 @@ export default function AnalyzePage() {
                     </Label>
                     <Input
                       id="event"
-                      placeholder="Boogie by the Bay 2026 J&J"
+                      placeholder="Boogie by the Bay"
                       value={eventName}
                       onChange={(e) => setEventName(e.target.value)}
                       className="h-8 text-sm"
                     />
                   </div>
                   <div className="space-y-1">
-                    <Label htmlFor="stage" className="text-xs">
-                      Stage
+                    <Label htmlFor="event-date" className="text-xs">
+                      Event date
                     </Label>
                     <Input
-                      id="stage"
-                      placeholder="prelims, quarters, semis, finals…"
-                      value={stage}
-                      onChange={(e) => setStage(e.target.value)}
+                      id="event-date"
+                      type="date"
+                      value={eventDate}
+                      onChange={(e) => setEventDate(e.target.value)}
                       className="h-8 text-sm"
                     />
                   </div>
                 </div>
+
+                <SelectWithOther
+                  id="stage"
+                  label="Stage"
+                  options={STAGE_OPTIONS}
+                  select={stageSelect}
+                  setSelect={setStageSelect}
+                  custom={stageCustom}
+                  setCustom={setStageCustom}
+                  customPlaceholder="e.g. Open Finals, Jack & Jill Invitational…"
+                />
+
                 <div className="space-y-1">
                   <Label htmlFor="tags" className="text-xs">
                     Tags
@@ -685,6 +746,9 @@ function HistoryRow({
             {record.event_name && (
               <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4">
                 {record.event_name}
+                {record.event_date
+                  ? ` · ${new Date(record.event_date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`
+                  : ""}
               </Badge>
             )}
             {record.stage && (
@@ -994,6 +1058,55 @@ function ScoreResultCard({
       <Button onClick={onClear} variant="outline" className="w-full">
         Analyze another video
       </Button>
+    </div>
+  );
+}
+
+function SelectWithOther({
+  id,
+  label,
+  options,
+  select,
+  setSelect,
+  custom,
+  setCustom,
+  customPlaceholder,
+}: {
+  id: string;
+  label: string;
+  options: readonly string[];
+  select: string;
+  setSelect: (v: string) => void;
+  custom: string;
+  setCustom: (v: string) => void;
+  customPlaceholder?: string;
+}) {
+  return (
+    <div className="space-y-1">
+      <Label htmlFor={id} className="text-xs">
+        {label}
+      </Label>
+      <Select value={select} onValueChange={setSelect}>
+        <SelectTrigger id={id} className="h-8 text-sm">
+          <SelectValue placeholder="Select…" />
+        </SelectTrigger>
+        <SelectContent>
+          {options.map((opt) => (
+            <SelectItem key={opt} value={opt}>
+              {opt}
+            </SelectItem>
+          ))}
+          <SelectItem value={OTHER}>Other…</SelectItem>
+        </SelectContent>
+      </Select>
+      {select === OTHER && (
+        <Input
+          value={custom}
+          onChange={(e) => setCustom(e.target.value)}
+          placeholder={customPlaceholder ?? `Custom ${label.toLowerCase()}`}
+          className="h-8 text-sm mt-1"
+        />
+      )}
     </div>
   );
 }
