@@ -68,10 +68,10 @@ export default function AnalyzePage() {
         return;
       }
 
-      const MAX_SIZE_MB = 250;
+      const MAX_SIZE_MB = 90;
       if (f.size > MAX_SIZE_MB * 1024 * 1024) {
         setLocalError(
-          `File is ${(f.size / 1024 / 1024).toFixed(0)} MB, limit is ${MAX_SIZE_MB} MB. Try trimming or compressing the clip.`
+          `File is ${(f.size / 1024 / 1024).toFixed(0)} MB. We currently cap uploads at ${MAX_SIZE_MB} MB due to proxy limits — try trimming to a shorter clip, or lower the recording quality to 1080p / 30 fps before shooting.`
         );
         if (inputRef.current) inputRef.current.value = "";
         return;
