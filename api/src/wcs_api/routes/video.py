@@ -19,6 +19,10 @@ router = APIRouter(prefix="/analyze/video", tags=["analyze"])
 class VideoAnalyzeBody(BaseModel):
     object_key: str
     filename: str | None = None
+    role: str | None = None
+    competition_level: str | None = None
+    event_name: str | None = None
+    tags: list[str] | None = None
 
 
 def _admin_error_to_http(exc: httpx.HTTPStatusError) -> HTTPException:
@@ -132,12 +136,20 @@ async def analyze_video_endpoint(
             duration_sec=int(duration),
         )
         try:
+            # object_key is intentionally NOT saved — the R2 object is
+            # deleted below, so keeping the key would just lead to 404s
+            # on Watch/Re-analyze. Privacy also: we don't retain dance
+            # videos of real people after the scoring run.
             await supabase_admin.insert_video_analysis(
                 user_id=user_id,
                 filename=body.filename,
                 duration=duration,
                 result=result,
-                object_key=body.object_key,
+                object_key=None,
+                role=body.role,
+                competition_level=body.competition_level,
+                event_name=body.event_name,
+                tags=body.tags,
             )
         except Exception:
             pass
@@ -157,7 +169,7 @@ async def analyze_video_endpoint(
             os.unlink(tmp_path)
         except OSError:
             pass
-        # R2 object is kept so users can re-analyze or re-watch without
-        # re-uploading. Users can delete via the UI; the lifecycle rule
-        # on the bucket is the backstop for orphaned uploads that never
-        # got a successful analysis.
+        # Delete from R2 right after analysis — privacy first. Users
+        # who want to re-score must re-upload. The 24h lifecycle rule
+        # on the bucket is the backstop for orphaned uploads.
+        r2.delete_object(body.object_key)

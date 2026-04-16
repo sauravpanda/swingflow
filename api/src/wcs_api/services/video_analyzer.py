@@ -27,6 +27,70 @@ from google.genai import types as genai_types
 from ..settings import settings
 
 
+def _extract_beat_context(video_path: str) -> str | None:
+    """Pull audio out of the video, run librosa beat tracking, and return a
+    prompt-ready string. Gemini's native audio understanding is good, but
+    giving it actual beat timestamps as context consistently tightens up
+    timing judgments (the canonical wcs-analyzer behavior).
+
+    Silent-fail on any error — this is a best-effort enrichment, not a
+    blocker.
+    """
+    try:
+        import librosa  # lazy import — heavy module
+
+        wav_path = tempfile.NamedTemporaryFile(delete=False, suffix=".wav").name
+        try:
+            subprocess.run(
+                [
+                    "ffmpeg",
+                    "-y",
+                    "-i",
+                    video_path,
+                    "-vn",
+                    "-ac",
+                    "1",
+                    "-ar",
+                    "22050",
+                    wav_path,
+                ],
+                capture_output=True,
+                check=True,
+                timeout=60,
+            )
+            y, sr = librosa.load(wav_path, sr=22050, mono=True)
+            tempo_raw, beat_times = librosa.beat.beat_track(
+                y=y, sr=sr, units="time"
+            )
+            if beat_times is None or len(beat_times) < 4:
+                return None
+            bpm = (
+                float(tempo_raw)
+                if not hasattr(tempo_raw, "__iter__")
+                else float(list(tempo_raw)[0])
+            )
+            # Show first ~12 seconds of beats as a prior (~24 beats at 120 BPM).
+            preview = [t for t in beat_times[:24].tolist()]
+            beats_str = ", ".join(f"{t:.2f}" for t in preview)
+            return (
+                "DETECTED MUSIC CONTEXT (from librosa beat tracking):\n"
+                f"- Estimated BPM: {bpm:.1f}\n"
+                f"- First beat times in seconds: {beats_str}\n"
+                "Use this as a strong prior for timing judgments — when a "
+                "dancer's weight change or anchor settle lands within "
+                "~100ms of a detected beat, count it as on-beat. Anchor "
+                "steps should land near beats 5 and 6 of each 8-count "
+                "phrase.\n"
+            )
+        finally:
+            try:
+                os.unlink(wav_path)
+            except OSError:
+                pass
+    except Exception:
+        return None
+
+
 # ─────────────────────────────────────────────────────────────────────
 # Prompts — ported from wcs-analyzer/src/wcs_analyzer/prompts.py
 # ─────────────────────────────────────────────────────────────────────
@@ -514,6 +578,12 @@ def analyze_video_path(video_path: str) -> dict[str, Any]:
 
     try:
         prompt = GEMINI_VIDEO_PROMPT
+
+        # Prepend librosa-derived beat context to ground timing judgments.
+        beat_context = _extract_beat_context(video_path)
+        if beat_context:
+            prompt = f"{beat_context}\n\n{prompt}"
+
         if settings.enable_pattern_prepass:
             pre_pass_context = _run_pattern_pre_pass(
                 client, settings.gemini_model, uploaded

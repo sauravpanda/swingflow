@@ -310,13 +310,25 @@ export function uploadToPresignedUrl(
   });
 }
 
+export type VideoAnalyzeOptions = {
+  role?: string;
+  competitionLevel?: string;
+  eventName?: string;
+  tags?: string[];
+};
+
 export async function analyzeVideoFromKey(
   objectKey: string,
-  filename: string
+  filename: string,
+  options: VideoAnalyzeOptions = {}
 ): Promise<VideoAnalysisResponse> {
   return postJson<VideoAnalysisResponse>("/analyze/video", {
     object_key: objectKey,
     filename,
+    role: options.role || null,
+    competition_level: options.competitionLevel || null,
+    event_name: options.eventName || null,
+    tags: options.tags && options.tags.length ? options.tags : null,
   });
 }
 

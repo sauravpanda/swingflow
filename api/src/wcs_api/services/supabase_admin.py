@@ -76,18 +76,32 @@ async def insert_video_analysis(
     duration: float | None,
     result: dict[str, Any],
     object_key: str | None = None,
+    role: str | None = None,
+    competition_level: str | None = None,
+    event_name: str | None = None,
+    tags: list[str] | None = None,
 ) -> None:
+    record: dict[str, Any] = {
+        "user_id": user_id,
+        "filename": filename,
+        "duration": duration,
+        "result": result,
+        "object_key": object_key,
+    }
+    if role:
+        record["role"] = role
+    if competition_level:
+        record["competition_level"] = competition_level
+    if event_name:
+        record["event_name"] = event_name
+    if tags:
+        record["tags"] = tags
+
     async with httpx.AsyncClient(timeout=10) as client:
         r = await client.post(
             _rest("video_analyses"),
             headers={**_headers(), "Prefer": "return=minimal"},
-            json={
-                "user_id": user_id,
-                "filename": filename,
-                "duration": duration,
-                "result": result,
-                "object_key": object_key,
-            },
+            json=record,
         )
         r.raise_for_status()
 

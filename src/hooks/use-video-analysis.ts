@@ -8,6 +8,7 @@ import {
   isWcsApiConfigured,
   uploadToPresignedUrl,
   type VideoAnalysisResponse,
+  type VideoAnalyzeOptions,
   type VideoQuota,
 } from "@/lib/wcs-api";
 
@@ -61,7 +62,7 @@ export function useVideoAnalysis() {
   }, [refreshQuota]);
 
   const analyze = useCallback(
-    async (file: File) => {
+    async (file: File, options: VideoAnalyzeOptions = {}) => {
       if (!isWcsApiConfigured) {
         setState({
           ...INITIAL,
@@ -72,18 +73,19 @@ export function useVideoAnalysis() {
       }
       setState({ ...INITIAL, status: "uploading" });
       try {
-        // 1) Get a presigned PUT URL scoped to this user.
         const { uploadUrl, objectKey } = await getPresignedUploadUrl(
           file.name,
           file.type || "application/octet-stream"
         );
-        // 2) Upload straight to R2 (bypasses Railway's proxy body limit).
         await uploadToPresignedUrl(uploadUrl, file, (percent) => {
           setState((s) => ({ ...s, uploadProgress: percent }));
         });
-        // 3) Kick off analysis on the stored object.
         setState((s) => ({ ...s, status: "analyzing", uploadProgress: 100 }));
-        const result = await analyzeVideoFromKey(objectKey, file.name);
+        const result = await analyzeVideoFromKey(
+          objectKey,
+          file.name,
+          options
+        );
         setState({
           status: "success",
           result,

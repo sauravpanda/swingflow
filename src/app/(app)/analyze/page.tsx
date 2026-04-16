@@ -17,6 +17,8 @@ import {
   Play,
   RotateCcw,
   Trash2,
+  Target,
+  Quote,
 } from "lucide-react";
 import { useVideoAnalysis } from "@/hooks/use-video-analysis";
 import { useAnalysisHistory, type AnalysisRecord } from "@/hooks/use-analysis-history";
@@ -26,6 +28,9 @@ import {
   getViewUrl,
   type VideoScoreResult,
 } from "@/lib/wcs-api";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { TimelineView } from "@/components/analyze/timeline-view";
 
 const CATEGORY_LABELS: Record<keyof VideoScoreResult["categories"], string> = {
   timing: "Timing & Rhythm",
@@ -62,6 +67,12 @@ export default function AnalyzePage() {
   const [file, setFile] = useState<File | null>(null);
   const [localError, setLocalError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // Optional metadata — captured pre-upload so it gets saved with the analysis.
+  const [role, setRole] = useState("");
+  const [competitionLevel, setCompetitionLevel] = useState("");
+  const [eventName, setEventName] = useState("");
+  const [tagsInput, setTagsInput] = useState("");
 
   const handleFileChange = useCallback(
     async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -109,10 +120,18 @@ export default function AnalyzePage() {
   );
 
   const handleAnalyze = useCallback(() => {
-    if (file) {
-      analyze(file).then(() => history.refresh());
-    }
-  }, [file, analyze, history]);
+    if (!file) return;
+    const tags = tagsInput
+      .split(",")
+      .map((t) => t.trim())
+      .filter(Boolean);
+    analyze(file, {
+      role: role.trim() || undefined,
+      competitionLevel: competitionLevel.trim() || undefined,
+      eventName: eventName.trim() || undefined,
+      tags: tags.length ? tags : undefined,
+    }).then(() => history.refresh());
+  }, [file, analyze, history, role, competitionLevel, eventName, tagsInput]);
 
   const handleClear = useCallback(() => {
     setFile(null);
@@ -176,8 +195,8 @@ export default function AnalyzePage() {
         </CardContent>
       </Card>
 
-      {/* Paywall */}
-      {isPaywalled && (
+      {/* Paywall — hide when showing a fresh result so the score owns the hero slot */}
+      {isPaywalled && state.status !== "success" && (
         <Card className="border-primary/40">
           <CardContent className="py-6 space-y-3 text-center">
             <Sparkles className="h-8 w-8 text-primary mx-auto" />
@@ -249,6 +268,64 @@ export default function AnalyzePage() {
               <p className="text-sm text-destructive">{localError}</p>
             )}
 
+            {file && state.status === "idle" && (
+              <div className="space-y-2.5 rounded-lg border border-border p-3">
+                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  Optional tags (saved with the analysis)
+                </p>
+                <div className="grid grid-cols-2 gap-2.5">
+                  <div className="space-y-1">
+                    <Label htmlFor="role" className="text-xs">
+                      Role
+                    </Label>
+                    <Input
+                      id="role"
+                      placeholder="lead / follow / solo"
+                      value={role}
+                      onChange={(e) => setRole(e.target.value)}
+                      className="h-8 text-sm"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="level" className="text-xs">
+                      Level
+                    </Label>
+                    <Input
+                      id="level"
+                      placeholder="novice, intermediate, all-star…"
+                      value={competitionLevel}
+                      onChange={(e) => setCompetitionLevel(e.target.value)}
+                      className="h-8 text-sm"
+                    />
+                  </div>
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="event" className="text-xs">
+                    Event
+                  </Label>
+                  <Input
+                    id="event"
+                    placeholder="Boogie by the Bay 2026 J&J"
+                    value={eventName}
+                    onChange={(e) => setEventName(e.target.value)}
+                    className="h-8 text-sm"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="tags" className="text-xs">
+                    Tags
+                  </Label>
+                  <Input
+                    id="tags"
+                    placeholder="strictly-swing, showcase, 2026 (comma separated)"
+                    value={tagsInput}
+                    onChange={(e) => setTagsInput(e.target.value)}
+                    className="h-8 text-sm"
+                  />
+                </div>
+              </div>
+            )}
+
             {file && (
               <>
                 {state.status === "uploading" && (
@@ -299,11 +376,41 @@ export default function AnalyzePage() {
 
       {/* Result */}
       {state.status === "success" && state.result && (
-        <ScoreResultCard
-          result={state.result.result}
-          duration={state.result.duration}
-          onClear={handleClear}
-        />
+        <>
+          <ScoreResultCard
+            result={state.result.result}
+            duration={state.result.duration}
+            onClear={handleClear}
+          />
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Pattern timeline</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <TimelineView
+                result={state.result.result}
+                duration={state.result.duration}
+              />
+            </CardContent>
+          </Card>
+          {/* Paywall pushed below the result when both are present */}
+          {isPaywalled && (
+            <Card className="border-primary/40">
+              <CardContent className="py-5 text-center space-y-2">
+                <p className="text-sm">
+                  <Sparkles className="h-4 w-4 text-primary inline-block mr-1.5 -mt-0.5" />
+                  That was your free analysis for the month. Upgrade for 10
+                  per month and 5-minute clips.
+                </p>
+                <Link href="/billing">
+                  <Button size="sm" className="mt-1">
+                    Upgrade to Basic — $10/mo
+                  </Button>
+                </Link>
+              </CardContent>
+            </Card>
+          )}
+        </>
       )}
 
       {/* Past analyses */}
@@ -424,15 +531,43 @@ function HistoryRow({
           <span className="font-medium truncate block">
             {record.filename || "Untitled"}
           </span>
-          <span className="text-xs text-muted-foreground">
-            {new Date(record.created_at).toLocaleDateString("en-US", {
-              month: "short",
-              day: "numeric",
-              hour: "2-digit",
-              minute: "2-digit",
-            })}
-            {record.duration ? ` · ${formatDuration(record.duration)}` : ""}
-          </span>
+          <div className="text-xs text-muted-foreground flex flex-wrap items-center gap-1.5 mt-0.5">
+            <span>
+              {new Date(record.created_at).toLocaleDateString("en-US", {
+                month: "short",
+                day: "numeric",
+                hour: "2-digit",
+                minute: "2-digit",
+              })}
+            </span>
+            {record.duration ? (
+              <span>· {formatDuration(record.duration)}</span>
+            ) : null}
+            {record.role && (
+              <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4">
+                {record.role}
+              </Badge>
+            )}
+            {record.competition_level && (
+              <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4">
+                {record.competition_level}
+              </Badge>
+            )}
+            {record.event_name && (
+              <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4">
+                {record.event_name}
+              </Badge>
+            )}
+            {(record.tags ?? []).slice(0, 4).map((t) => (
+              <Badge
+                key={t}
+                variant="secondary"
+                className="text-[9px] px-1.5 py-0 h-4"
+              >
+                #{t}
+              </Badge>
+            ))}
+          </div>
         </div>
         {overall && (
           <div className="flex items-center gap-2 shrink-0 ml-3">
@@ -504,21 +639,19 @@ function HistoryRow({
             <p className="text-xs text-destructive">{rowError}</p>
           )}
 
-          {videoUrl && (
-            <video
-              src={videoUrl}
-              controls
-              preload="metadata"
-              className="w-full rounded-md bg-black"
-            />
-          )}
-
           {currentResult && (
-            <ScoreResultCard
-              result={currentResult}
-              duration={record.duration ?? 0}
-              onClear={() => setExpanded(false)}
-            />
+            <>
+              <TimelineView
+                result={currentResult}
+                duration={record.duration ?? 0}
+                videoSrc={videoUrl}
+              />
+              <ScoreResultCard
+                result={currentResult}
+                duration={record.duration ?? 0}
+                onClear={() => setExpanded(false)}
+              />
+            </>
           )}
         </div>
       )}
@@ -537,7 +670,7 @@ function ScoreResultCard({
 }) {
   return (
     <div className="space-y-4">
-      <Card>
+      <Card className="bg-gradient-to-b from-card to-muted/20">
         <CardHeader className="pb-3">
           <CardTitle className="flex items-center justify-between">
             <span className="flex items-center gap-2">
@@ -549,16 +682,33 @@ function ScoreResultCard({
             </span>
           </CardTitle>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex items-baseline justify-center gap-2 py-2">
-            <span className="text-5xl font-bold tabular-nums">
-              {result.overall.score.toFixed(1)}
-            </span>
-            <span className="text-2xl text-muted-foreground">/ 10</span>
-            <Badge className="ml-3 text-base">{result.overall.grade}</Badge>
+        <CardContent className="space-y-5">
+          <div className="flex flex-col items-center gap-3 py-4">
+            <div className="flex items-baseline gap-2">
+              <span className="text-7xl font-bold tabular-nums leading-none">
+                {result.overall.score.toFixed(1)}
+              </span>
+              <span className="text-2xl text-muted-foreground">/10</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <Badge className="text-sm px-3 py-0.5">
+                {result.overall.grade}
+              </Badge>
+              {result.overall.confidence === "low" && (
+                <Badge variant="outline" className="text-xs">
+                  low confidence
+                </Badge>
+              )}
+            </div>
+            {result.overall.impression && (
+              <p className="text-sm text-muted-foreground italic text-center max-w-lg pt-2">
+                <Quote className="inline h-3 w-3 mr-1 -mt-0.5 opacity-50" />
+                {result.overall.impression}
+              </p>
+            )}
           </div>
 
-          <div className="space-y-3">
+          <div className="space-y-3.5 pt-2 border-t border-border">
             {(Object.keys(CATEGORY_LABELS) as Array<keyof typeof CATEGORY_LABELS>).map(
               (key) => {
                 const cat = result.categories[key];
@@ -571,7 +721,11 @@ function ScoreResultCard({
                       </span>
                     </div>
                     <Progress value={cat.score * 10} className="h-1.5" />
-                    <p className="text-xs text-muted-foreground">{cat.notes}</p>
+                    {cat.notes && (
+                      <p className="text-xs text-muted-foreground pt-0.5">
+                        {cat.notes}
+                      </p>
+                    )}
                   </div>
                 );
               }
@@ -582,12 +736,18 @@ function ScoreResultCard({
 
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-base">Strengths</CardTitle>
+          <CardTitle className="text-base flex items-center gap-2">
+            <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+            Strengths
+          </CardTitle>
         </CardHeader>
         <CardContent>
-          <ul className="space-y-1.5 text-sm text-muted-foreground">
+          <ul className="space-y-2.5 text-sm">
             {result.strengths.map((s, i) => (
-              <li key={i}>• {s}</li>
+              <li key={i} className="flex items-start gap-2.5">
+                <CheckCircle2 className="h-4 w-4 text-emerald-400 mt-0.5 shrink-0" />
+                <span className="text-muted-foreground">{s}</span>
+              </li>
             ))}
           </ul>
         </CardContent>
@@ -595,12 +755,18 @@ function ScoreResultCard({
 
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-base">Areas to improve</CardTitle>
+          <CardTitle className="text-base flex items-center gap-2">
+            <Target className="h-4 w-4 text-amber-400" />
+            Areas to improve
+          </CardTitle>
         </CardHeader>
         <CardContent>
-          <ul className="space-y-1.5 text-sm text-muted-foreground">
+          <ul className="space-y-2.5 text-sm">
             {result.improvements.map((s, i) => (
-              <li key={i}>• {s}</li>
+              <li key={i} className="flex items-start gap-2.5">
+                <Target className="h-4 w-4 text-amber-400 mt-0.5 shrink-0" />
+                <span className="text-muted-foreground">{s}</span>
+              </li>
             ))}
           </ul>
         </CardContent>
