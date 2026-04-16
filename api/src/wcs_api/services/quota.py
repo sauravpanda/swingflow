@@ -33,6 +33,7 @@ async def get_video_quota_status(user_id: str) -> VideoQuotaStatus:
         since_iso=_start_of_month_iso(),
     )
 
+    # Plan defaults
     if plan == "basic":
         limit = settings.basic_monthly_video
         max_seconds = settings.basic_max_video_seconds
@@ -40,6 +41,17 @@ async def get_video_quota_status(user_id: str) -> VideoQuotaStatus:
         plan = "free"
         limit = settings.free_monthly_video
         max_seconds = settings.free_max_video_seconds
+
+    # Per-user overrides on the profiles row take priority. Set these
+    # via the Supabase Table Editor to grant extra quota or longer
+    # clips to specific users (beta testers, contest winners, refunds).
+    if profile:
+        override_limit = profile.get("monthly_video_override")
+        override_seconds = profile.get("max_video_seconds_override")
+        if isinstance(override_limit, int) and override_limit >= 0:
+            limit = override_limit
+        if isinstance(override_seconds, int) and override_seconds > 0:
+            max_seconds = override_seconds
 
     return VideoQuotaStatus(
         plan=plan,
