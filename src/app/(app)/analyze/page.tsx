@@ -78,11 +78,39 @@ function scoreBarColor(score: number): string {
   return "bg-rose-500";
 }
 
-function ScoreBar({ score }: { score: number }) {
+function ScoreBar({
+  score,
+  scoreLow,
+  scoreHigh,
+}: {
+  score: number;
+  scoreLow?: number;
+  scoreHigh?: number;
+}) {
+  // If Gemini returned an uncertainty range, render it as a faint band
+  // behind the actual-score fill. Range [low, high] maps to [low*10%,
+  // high*10%] horizontally. Only render when the interval has width.
+  const hasRange =
+    typeof scoreLow === "number" &&
+    typeof scoreHigh === "number" &&
+    scoreHigh > scoreLow;
   return (
-    <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
+    <div className="relative h-1.5 w-full rounded-full bg-muted overflow-hidden">
+      {hasRange && (
+        <div
+          className="absolute inset-y-0 bg-foreground/15"
+          style={{
+            left: `${Math.max(0, scoreLow! * 10)}%`,
+            width: `${Math.min(
+              100 - scoreLow! * 10,
+              (scoreHigh! - scoreLow!) * 10
+            )}%`,
+          }}
+          title={`Uncertainty range: ${scoreLow!.toFixed(1)}–${scoreHigh!.toFixed(1)}`}
+        />
+      )}
       <div
-        className={`h-full ${scoreBarColor(score)} transition-all`}
+        className={`relative h-full ${scoreBarColor(score)} transition-all`}
         style={{ width: `${Math.min(100, score * 10)}%` }}
       />
     </div>
@@ -1008,11 +1036,23 @@ function ScoreResultCard({
                   <div key={key} className="space-y-1">
                     <div className="flex items-center justify-between text-sm">
                       <span className="font-medium">{CATEGORY_LABELS[key]}</span>
-                      <span className="font-mono tabular-nums">
+                      <span className="font-mono tabular-nums text-right">
                         {cat.score.toFixed(1)} / 10
+                        {typeof cat.score_low === "number" &&
+                          typeof cat.score_high === "number" &&
+                          cat.score_high > cat.score_low && (
+                            <span className="block text-[10px] text-muted-foreground font-normal">
+                              [{cat.score_low.toFixed(1)}–
+                              {cat.score_high.toFixed(1)}]
+                            </span>
+                          )}
                       </span>
                     </div>
-                    <ScoreBar score={cat.score} />
+                    <ScoreBar
+                      score={cat.score}
+                      scoreLow={cat.score_low}
+                      scoreHigh={cat.score_high}
+                    />
                     {cat.notes && (
                       <p className="text-xs text-muted-foreground pt-0.5">
                         {cat.notes}
@@ -1031,6 +1071,10 @@ function ScoreResultCard({
 
       {(result.lead || result.follow) && (
         <PartnerCards lead={result.lead} follow={result.follow} />
+      )}
+
+      {result.pattern_summary && result.pattern_summary.length > 0 && (
+        <PatternSummaryCard summary={result.pattern_summary} />
       )}
 
       <Card>
@@ -1162,6 +1206,106 @@ function TechniqueBreakdown({
         ))}
       </div>
     </details>
+  );
+}
+
+const QUALITY_STYLES: Record<
+  string,
+  { label: string; badge: string; dot: string }
+> = {
+  strong: {
+    label: "strong",
+    badge: "border-emerald-500/40 text-emerald-300 bg-emerald-500/10",
+    dot: "bg-emerald-500",
+  },
+  solid: {
+    label: "solid",
+    badge: "border-primary/40 text-primary bg-primary/10",
+    dot: "bg-primary",
+  },
+  needs_work: {
+    label: "needs work",
+    badge: "border-amber-500/40 text-amber-300 bg-amber-500/10",
+    dot: "bg-amber-500",
+  },
+  weak: {
+    label: "weak",
+    badge: "border-rose-500/40 text-rose-300 bg-rose-500/10",
+    dot: "bg-rose-500",
+  },
+};
+
+const TIMING_LABELS: Record<string, string> = {
+  on_beat: "on beat",
+  slightly_off: "slightly off",
+  off_beat: "off beat",
+};
+
+function PatternSummaryCard({
+  summary,
+}: {
+  summary: NonNullable<VideoScoreResult["pattern_summary"]>;
+}) {
+  const totalOccurrences = summary.reduce((a, b) => a + b.count, 0);
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <CardTitle className="text-base flex items-center justify-between">
+          <span>Patterns</span>
+          <span className="text-xs font-normal text-muted-foreground tabular-nums">
+            {summary.length} unique · {totalOccurrences} total
+          </span>
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        <ul className="space-y-2">
+          {summary.map((p) => {
+            const qStyle =
+              (p.quality && QUALITY_STYLES[p.quality]) ||
+              QUALITY_STYLES.solid;
+            return (
+              <li
+                key={p.name}
+                className="flex items-start gap-3 rounded-md border border-border p-2.5"
+              >
+                <span
+                  className={`mt-1 h-2 w-2 rounded-full shrink-0 ${qStyle.dot}`}
+                />
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                    <span className="font-medium text-sm">{p.name}</span>
+                    <Badge
+                      variant="outline"
+                      className="text-[10px] tabular-nums px-1.5 py-0 h-4"
+                    >
+                      {p.count}×
+                    </Badge>
+                    {p.quality && (
+                      <Badge
+                        variant="outline"
+                        className={`text-[10px] px-1.5 py-0 h-4 ${qStyle.badge}`}
+                      >
+                        {qStyle.label}
+                      </Badge>
+                    )}
+                    {p.timing && (
+                      <span className="text-[10px] text-muted-foreground">
+                        {TIMING_LABELS[p.timing] ?? p.timing}
+                      </span>
+                    )}
+                  </div>
+                  {p.notes && (
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {p.notes}
+                    </p>
+                  )}
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      </CardContent>
+    </Card>
   );
 }
 

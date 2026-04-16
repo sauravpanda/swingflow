@@ -82,6 +82,7 @@ async def insert_video_analysis(
     event_date: str | None = None,
     stage: str | None = None,
     tags: list[str] | None = None,
+    usage: dict[str, Any] | None = None,
 ) -> None:
     record: dict[str, Any] = {
         "user_id": user_id,
@@ -102,6 +103,11 @@ async def insert_video_analysis(
         record["stage"] = stage
     if tags:
         record["tags"] = tags
+    if usage:
+        record["model"] = usage.get("model")
+        record["prompt_tokens"] = usage.get("prompt_tokens")
+        record["response_tokens"] = usage.get("response_tokens")
+        record["cost_usd_micros"] = usage.get("cost_usd_micros")
 
     async with httpx.AsyncClient(timeout=10) as client:
         r = await client.post(
@@ -128,13 +134,19 @@ async def insert_usage_event(
     kind: str,
     duration_sec: int | None = None,
     job_id: str | None = None,
+    usage: dict[str, Any] | None = None,
 ) -> None:
-    record = {
+    record: dict[str, Any] = {
         "user_id": user_id,
         "kind": kind,
         "duration_sec": duration_sec,
         "job_id": job_id,
     }
+    if usage:
+        record["model"] = usage.get("model")
+        record["prompt_tokens"] = usage.get("prompt_tokens")
+        record["response_tokens"] = usage.get("response_tokens")
+        record["cost_usd_micros"] = usage.get("cost_usd_micros")
     async with httpx.AsyncClient(timeout=10) as client:
         r = await client.post(
             _rest("usage_events"),

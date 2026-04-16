@@ -13,6 +13,8 @@ import {
   RefreshCw,
   ShieldAlert,
   MessageSquare,
+  DollarSign,
+  Coins,
 } from "lucide-react";
 import { getAdminStats, type AdminStats } from "@/lib/wcs-api";
 
@@ -137,6 +139,44 @@ export default function AdminPage() {
         />
       </div>
 
+      {/* Gemini spend — admin only */}
+      <Card className="border-amber-500/30 bg-amber-500/5">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <DollarSign className="h-4 w-4 text-amber-400" />
+            Gemini spend
+            <Badge variant="secondary" className="ml-2 text-[10px]">
+              admin-only
+            </Badge>
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <SpendTile
+              label="Total"
+              usd={stats.cost_total_usd}
+            />
+            <SpendTile
+              label="Last 30 days"
+              usd={stats.cost_last_30d_usd}
+            />
+            <SpendTile
+              label="Last 7 days"
+              usd={stats.cost_last_7d_usd}
+            />
+            <div className="rounded-lg border border-border bg-card p-3">
+              <p className="text-xs text-muted-foreground flex items-center gap-1">
+                <Coins className="h-3 w-3" />
+                Total tokens
+              </p>
+              <p className="text-lg font-bold tabular-nums mt-1">
+                {(stats.total_tokens ?? 0).toLocaleString()}
+              </p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Recent signups */}
       <Card>
         <CardHeader>
@@ -223,17 +263,32 @@ export default function AdminPage() {
               {stats.recent_analyses.map((a) => (
                 <div
                   key={a.id}
-                  className="flex items-center justify-between text-sm"
+                  className="flex items-center justify-between text-sm gap-3"
                 >
                   <div className="min-w-0 flex-1">
-                    <span className="truncate block max-w-[200px] font-medium">
+                    <span className="truncate block max-w-[240px] font-medium">
                       {a.filename || "untitled"}
                     </span>
                     <span className="text-xs text-muted-foreground">
                       {a.email}
+                      {a.model ? (
+                        <>
+                          {" · "}
+                          <span className="font-mono">{a.model}</span>
+                        </>
+                      ) : null}
                     </span>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
+                    {a.cost_usd !== undefined && a.cost_usd > 0 && (
+                      <Badge
+                        variant="outline"
+                        className="text-xs tabular-nums border-amber-500/40 text-amber-300"
+                        title="Gemini spend for this analysis"
+                      >
+                        ${a.cost_usd.toFixed(3)}
+                      </Badge>
+                    )}
                     {a.duration && (
                       <span className="text-xs text-muted-foreground tabular-nums">
                         {Math.round(a.duration)}s
@@ -278,5 +333,17 @@ function StatCard({
         </div>
       </CardContent>
     </Card>
+  );
+}
+
+function SpendTile({ label, usd }: { label: string; usd: number | undefined }) {
+  const value = usd ?? 0;
+  return (
+    <div className="rounded-lg border border-border bg-card p-3">
+      <p className="text-xs text-muted-foreground">{label}</p>
+      <p className="text-lg font-bold tabular-nums mt-1">
+        ${value.toFixed(2)}
+      </p>
+    </div>
   );
 }
