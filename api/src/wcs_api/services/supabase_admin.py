@@ -75,6 +75,7 @@ async def insert_video_analysis(
     filename: str | None,
     duration: float | None,
     result: dict[str, Any],
+    object_key: str | None = None,
 ) -> None:
     async with httpx.AsyncClient(timeout=10) as client:
         r = await client.post(
@@ -85,6 +86,7 @@ async def insert_video_analysis(
                 "filename": filename,
                 "duration": duration,
                 "result": result,
+                "object_key": object_key,
             },
         )
         r.raise_for_status()
@@ -118,6 +120,24 @@ async def insert_usage_event(
             _rest("usage_events"),
             headers={**_headers(), "Prefer": "return=minimal"},
             json=record,
+        )
+        r.raise_for_status()
+
+
+async def clear_video_analysis_object_key(
+    object_key: str, user_id: str
+) -> None:
+    """When a user deletes their R2 video, clear the object_key on any of
+    their video_analyses rows that referenced it so the UI knows the
+    source is no longer available."""
+    async with httpx.AsyncClient(timeout=10) as client:
+        r = await client.patch(
+            _rest(
+                f"video_analyses?user_id=eq.{user_id}"
+                f"&object_key=eq.{object_key}"
+            ),
+            headers={**_headers(), "Prefer": "return=minimal"},
+            json={"object_key": None},
         )
         r.raise_for_status()
 

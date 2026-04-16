@@ -14,10 +14,18 @@ import {
   X,
   CheckCircle2,
   AlertCircle,
+  Play,
+  RotateCcw,
+  Trash2,
 } from "lucide-react";
 import { useVideoAnalysis } from "@/hooks/use-video-analysis";
 import { useAnalysisHistory, type AnalysisRecord } from "@/hooks/use-analysis-history";
-import type { VideoScoreResult } from "@/lib/wcs-api";
+import {
+  analyzeVideoFromKey,
+  deleteUploadedVideo,
+  getViewUrl,
+  type VideoScoreResult,
+} from "@/lib/wcs-api";
 
 const CATEGORY_LABELS: Record<keyof VideoScoreResult["categories"], string> = {
   timing: "Timing & Rhythm",
@@ -306,7 +314,11 @@ export default function AnalyzePage() {
           </CardHeader>
           <CardContent className="space-y-2">
             {history.records.map((rec) => (
-              <HistoryRow key={rec.id} record={rec} />
+              <HistoryRow
+                key={rec.id}
+                record={rec}
+                onReanalyzed={history.refresh}
+              />
             ))}
           </CardContent>
         </Card>
@@ -315,14 +327,97 @@ export default function AnalyzePage() {
   );
 }
 
-function HistoryRow({ record }: { record: AnalysisRecord }) {
+function HistoryRow({
+  record,
+  onReanalyzed,
+}: {
+  record: AnalysisRecord;
+  onReanalyzed: () => void;
+}) {
   const [expanded, setExpanded] = useState(false);
-  const overall = record.result?.overall;
+  const [videoUrl, setVideoUrl] = useState<string | null>(null);
+  const [loadingVideo, setLoadingVideo] = useState(false);
+  const [reanalyzing, setReanalyzing] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleted, setDeleted] = useState(false);
+  const [currentResult, setCurrentResult] = useState<
+    VideoScoreResult | null
+  >(record.result ?? null);
+  const [rowError, setRowError] = useState<string | null>(null);
+  const overall = currentResult?.overall;
+
+  const canViewOrReanalyze = Boolean(record.object_key) && !deleted;
+
+  const handleWatch = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!record.object_key || videoUrl) {
+      setExpanded(true);
+      return;
+    }
+    setLoadingVideo(true);
+    setRowError(null);
+    try {
+      const url = await getViewUrl(record.object_key);
+      setVideoUrl(url);
+      setExpanded(true);
+    } catch (err) {
+      setRowError(
+        err instanceof Error ? err.message : "Could not load video"
+      );
+    } finally {
+      setLoadingVideo(false);
+    }
+  };
+
+  const handleReanalyze = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!record.object_key) return;
+    setReanalyzing(true);
+    setRowError(null);
+    try {
+      const resp = await analyzeVideoFromKey(
+        record.object_key,
+        record.filename ?? "video.mp4"
+      );
+      setCurrentResult(resp.result);
+      setExpanded(true);
+      onReanalyzed();
+    } catch (err) {
+      setRowError(
+        err instanceof Error ? err.message : "Re-analysis failed"
+      );
+    } finally {
+      setReanalyzing(false);
+    }
+  };
+
+  const handleDelete = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!record.object_key) return;
+    const ok = window.confirm(
+      "Delete the source video from storage? Your scoring result stays — only the video file is removed. This cannot be undone."
+    );
+    if (!ok) return;
+    setDeleting(true);
+    setRowError(null);
+    try {
+      await deleteUploadedVideo(record.object_key);
+      setDeleted(true);
+      setVideoUrl(null);
+      onReanalyzed();
+    } catch (err) {
+      setRowError(
+        err instanceof Error ? err.message : "Delete failed"
+      );
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   return (
     <div className="border border-border rounded-lg">
-      <button
-        type="button"
-        className="w-full flex items-center justify-between p-3 text-sm text-left hover:bg-muted/30 transition-colors"
+      <div
+        className="w-full flex items-center justify-between p-3 text-sm cursor-pointer hover:bg-muted/30 transition-colors"
         onClick={() => setExpanded((p) => !p)}
       >
         <div className="min-w-0 flex-1">
@@ -336,9 +431,7 @@ function HistoryRow({ record }: { record: AnalysisRecord }) {
               hour: "2-digit",
               minute: "2-digit",
             })}
-            {record.duration
-              ? ` · ${formatDuration(record.duration)}`
-              : ""}
+            {record.duration ? ` · ${formatDuration(record.duration)}` : ""}
           </span>
         </div>
         {overall && (
@@ -351,14 +444,82 @@ function HistoryRow({ record }: { record: AnalysisRecord }) {
             </Badge>
           </div>
         )}
-      </button>
-      {expanded && record.result && (
-        <div className="border-t border-border p-3">
-          <ScoreResultCard
-            result={record.result}
-            duration={record.duration ?? 0}
-            onClear={() => setExpanded(false)}
-          />
+      </div>
+      {expanded && (
+        <div className="border-t border-border p-3 space-y-3">
+          {canViewOrReanalyze && (
+            <div className="flex items-center gap-2 flex-wrap">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={handleWatch}
+                disabled={loadingVideo || reanalyzing || deleting}
+              >
+                {loadingVideo ? (
+                  <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Play className="mr-2 h-3.5 w-3.5" />
+                )}
+                {videoUrl ? "Reload video" : "Watch"}
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={handleReanalyze}
+                disabled={reanalyzing || loadingVideo || deleting}
+              >
+                {reanalyzing ? (
+                  <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <RotateCcw className="mr-2 h-3.5 w-3.5" />
+                )}
+                Re-analyze (1 quota)
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="text-muted-foreground hover:text-destructive ml-auto"
+                onClick={handleDelete}
+                disabled={deleting || reanalyzing || loadingVideo}
+              >
+                {deleting ? (
+                  <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Trash2 className="mr-2 h-3.5 w-3.5" />
+                )}
+                Delete video
+              </Button>
+            </div>
+          )}
+
+          {!canViewOrReanalyze && (
+            <p className="text-xs text-muted-foreground">
+              {deleted
+                ? "Video deleted from storage. The scoring result above is preserved."
+                : "Source video isn\u2019t available (older entry — video was removed after scoring)."}
+            </p>
+          )}
+
+          {rowError && (
+            <p className="text-xs text-destructive">{rowError}</p>
+          )}
+
+          {videoUrl && (
+            <video
+              src={videoUrl}
+              controls
+              preload="metadata"
+              className="w-full rounded-md bg-black"
+            />
+          )}
+
+          {currentResult && (
+            <ScoreResultCard
+              result={currentResult}
+              duration={record.duration ?? 0}
+              onClear={() => setExpanded(false)}
+            />
+          )}
         </div>
       )}
     </div>

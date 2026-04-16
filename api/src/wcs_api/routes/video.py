@@ -137,6 +137,7 @@ async def analyze_video_endpoint(
                 filename=body.filename,
                 duration=duration,
                 result=result,
+                object_key=body.object_key,
             )
         except Exception:
             pass
@@ -156,5 +157,7 @@ async def analyze_video_endpoint(
             os.unlink(tmp_path)
         except OSError:
             pass
-        # Clean up the R2 object — the 24h lifecycle rule is a backstop.
-        r2.delete_object(body.object_key)
+        # R2 object is kept so users can re-analyze or re-watch without
+        # re-uploading. Users can delete via the UI; the lifecycle rule
+        # on the bucket is the backstop for orphaned uploads that never
+        # got a successful analysis.

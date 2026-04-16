@@ -10,6 +10,7 @@ export type AnalysisRecord = {
   filename: string | null;
   duration: number | null;
   result: VideoScoreResult;
+  object_key: string | null;
   created_at: string;
 };
 
@@ -28,7 +29,7 @@ export function useAnalysisHistory() {
     const sb = getSupabase();
     const { data } = await sb
       .from("video_analyses")
-      .select("id, filename, duration, result, created_at")
+      .select("id, filename, duration, result, object_key, created_at")
       .order("created_at", { ascending: false })
       .limit(20);
     setRecords((data as AnalysisRecord[]) ?? []);

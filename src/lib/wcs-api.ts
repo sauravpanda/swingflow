@@ -319,3 +319,16 @@ export async function analyzeVideoFromKey(
     filename,
   });
 }
+
+export async function getViewUrl(objectKey: string): Promise<string> {
+  const data = await postJson<{ url: string }>("/uploads/view", {
+    object_key: objectKey,
+  });
+  return data.url;
+}
+
+export async function deleteUploadedVideo(objectKey: string): Promise<void> {
+  await postJson<{ ok: boolean }>("/uploads/delete", {
+    object_key: objectKey,
+  });
+}
