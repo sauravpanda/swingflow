@@ -2,7 +2,7 @@ import os
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from ..auth import verify_jwt
 from ..services import quota, r2, supabase_admin
@@ -25,6 +25,13 @@ class VideoAnalyzeBody(BaseModel):
     event_date: str | None = None  # ISO date string (YYYY-MM-DD)
     stage: str | None = None
     tags: list[str] | None = None
+    # Free-text description of which dancer / couple to focus on
+    # when multiple people are in frame (e.g. "couple in the red
+    # dress and blue shirt", "the lead on the far right"). Fed into
+    # Gemini's DANCER IDENTIFICATION block. Capped at 200 chars to
+    # keep the prompt overhead bounded and prevent prompt injection
+    # via a multi-paragraph dump.
+    dancer_description: str | None = Field(default=None, max_length=200)
 
 
 def _admin_error_to_http(exc: httpx.HTTPStatusError) -> HTTPException:
@@ -142,6 +149,7 @@ async def analyze_video_endpoint(
                     "event_date": body.event_date,
                     "stage": body.stage,
                     "tags": body.tags,
+                    "dancer_description": body.dancer_description,
                 },
             )
         except VideoAnalysisError as exc:
@@ -176,6 +184,7 @@ async def analyze_video_endpoint(
                 event_date=body.event_date,
                 stage=body.stage,
                 tags=body.tags,
+                dancer_description=body.dancer_description,
                 usage=usage,
             )
         except Exception:

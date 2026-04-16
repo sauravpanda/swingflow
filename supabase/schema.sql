@@ -111,6 +111,11 @@ create table if not exists public.video_analyses (
   event_date        date,            -- optional: when the event happened (separate from created_at)
   stage             text,            -- optional: prelims / quarters / semis / finals
   tags              text[] default '{}',  -- optional free-form user tags
+  -- When there's more than one couple in frame, the user can
+  -- describe which dancer(s) we should focus on (e.g. "couple in
+  -- the red dress and blue shirt", "the lead on the far right").
+  -- Prepended to the Gemini prompt as a DANCER IDENTIFICATION block.
+  dancer_description text,
   share_token       text,            -- NULL = not shared; set = public read via /shared?t=<token>
   -- Cost / usage tracking (admin-only, never exposed to user UI).
   model             text,
@@ -141,7 +146,10 @@ alter table public.video_analyses
   -- navigate) so Slack/iMessage/Twitter link-preview unfurls don't
   -- inflate the count.
   add column if not exists share_view_count      integer not null default 0,
-  add column if not exists share_last_viewed_at  timestamptz;
+  add column if not exists share_last_viewed_at  timestamptz,
+  -- Free-text identifier used to focus scoring on a specific
+  -- dancer/couple when the video has multiple people in frame.
+  add column if not exists dancer_description    text;
 
 create index if not exists video_analyses_user_active_idx
   on public.video_analyses(user_id, created_at desc)

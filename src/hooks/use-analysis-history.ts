@@ -17,6 +17,7 @@ export type AnalysisRecord = {
   event_date: string | null;
   stage: string | null;
   tags: string[] | null;
+  dancer_description: string | null;
   share_token: string | null;
   share_view_count: number | null;
   share_last_viewed_at: string | null;
@@ -64,7 +65,7 @@ export function useAnalysisHistory() {
     const activePromise = sb
       .from("video_analyses")
       .select(
-        "id, filename, duration, result, object_key, role, competition_level, event_name, event_date, stage, tags, share_token, share_view_count, share_last_viewed_at, deleted_at, created_at"
+        "id, filename, duration, result, object_key, role, competition_level, event_name, event_date, stage, tags, dancer_description, share_token, share_view_count, share_last_viewed_at, deleted_at, created_at"
       )
       .is("deleted_at", null)
       .order("created_at", { ascending: false })
