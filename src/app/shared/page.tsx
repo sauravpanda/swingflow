@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { fetchSharedAnalysis, type SharedAnalysis } from "@/lib/wcs-api";
 import { TimelineView } from "@/components/analyze/timeline-view";
+import { Analytics } from "@/lib/analytics";
 
 function scoreBarColor(score: number): string {
   if (score >= 8) return "bg-emerald-500";
@@ -56,7 +57,10 @@ function SharedAnalysisContent() {
     }
     setLoading(true);
     fetchSharedAnalysis(token)
-      .then(setAnalysis)
+      .then((a) => {
+        setAnalysis(a);
+        Analytics.sharedAnalysisViewed();
+      })
       .catch((err) =>
         setError(err instanceof Error ? err.message : "Could not load analysis")
       )

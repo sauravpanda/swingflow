@@ -11,6 +11,7 @@ import {
   type VideoAnalyzeOptions,
   type VideoQuota,
 } from "@/lib/wcs-api";
+import { Analytics } from "@/lib/analytics";
 
 export type VideoAnalysisStatus =
   | "idle"
@@ -72,6 +73,11 @@ export function useVideoAnalysis() {
         return;
       }
       setState({ ...INITIAL, status: "uploading" });
+      const sizeMb = file.size / (1024 * 1024);
+      Analytics.videoUploadStarted({
+        size_mb: +sizeMb.toFixed(1),
+        content_type: file.type || "application/octet-stream",
+      });
       try {
         const { uploadUrl, objectKey } = await getPresignedUploadUrl(
           file.name,
@@ -80,12 +86,22 @@ export function useVideoAnalysis() {
         await uploadToPresignedUrl(uploadUrl, file, (percent) => {
           setState((s) => ({ ...s, uploadProgress: percent }));
         });
+        Analytics.videoUploadSucceeded({ size_mb: +sizeMb.toFixed(1) });
         setState((s) => ({ ...s, status: "analyzing", uploadProgress: 100 }));
+        Analytics.videoAnalysisStarted();
         const result = await analyzeVideoFromKey(
           objectKey,
           file.name,
           options
         );
+        Analytics.videoAnalysisSucceeded({
+          score: result.result?.overall?.score,
+          grade: result.result?.overall?.grade,
+          duration_sec: Math.round(result.duration ?? 0),
+          role: options.role,
+          level: options.competitionLevel,
+          stage: options.stage,
+        });
         setState({
           status: "success",
           result,
@@ -95,6 +111,7 @@ export function useVideoAnalysis() {
         refreshQuota();
       } catch (e) {
         const message = e instanceof Error ? e.message : "Analysis failed";
+        Analytics.videoAnalysisFailed({ message });
         setState({ ...INITIAL, status: "error", error: message });
       }
     },

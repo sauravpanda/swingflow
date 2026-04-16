@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { useProfile } from "@/hooks/use-profile";
 import { createCheckoutSession, createPortalSession } from "@/lib/wcs-api";
+import { Analytics } from "@/lib/analytics";
 
 const BASIC_BENEFITS = [
   "10 dance video analyses per month",
@@ -33,6 +34,7 @@ export default function BillingPage() {
   const [actError, setActError] = useState<string | null>(null);
 
   const handleUpgrade = async () => {
+    Analytics.upgradeClicked({ source: "/billing" });
     setActing(true);
     setActError(null);
     try {
@@ -48,6 +50,7 @@ export default function BillingPage() {
   };
 
   const handleManage = async () => {
+    Analytics.manageSubscriptionClicked();
     setActing(true);
     setActError(null);
     try {
