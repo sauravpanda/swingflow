@@ -142,15 +142,25 @@ export default function BillingPage() {
                 <Sparkles className="h-5 w-5 text-primary" />
                 Upgrade to Basic
               </span>
-              <span className="text-2xl font-bold">
-                $10
+              <div className="flex items-baseline gap-1.5">
+                <span className="text-base font-normal text-muted-foreground line-through">
+                  $20
+                </span>
+                <span className="text-2xl font-bold">$10</span>
                 <span className="text-sm font-normal text-muted-foreground">
                   /mo
                 </span>
-              </span>
+              </div>
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
+            <Badge
+              variant="secondary"
+              className="bg-amber-500/20 text-amber-200 border-amber-500/40"
+            >
+              <Sparkles className="h-3 w-3 mr-1" />
+              Launch pricing — 50% off
+            </Badge>
             <ul className="space-y-2 text-sm">
               {BASIC_BENEFITS.map((benefit) => (
                 <li key={benefit} className="flex items-start gap-2">
@@ -171,6 +181,7 @@ export default function BillingPage() {
                 <Sparkles className="mr-2 h-4 w-4" />
               )}
               Upgrade to Basic — $10/mo
+              <span className="ml-2 text-xs opacity-70 line-through">$20</span>
             </Button>
           </CardContent>
         </Card>
