@@ -39,6 +39,11 @@ export type ChartRecord = {
   stage: string | null;
   competition_level: string | null;
   tags: string[] | null;
+  // When the user entered an event date on the upload form (the
+  // month the video was actually recorded), the chart buckets by
+  // that instead of created_at — so a clip from a 2024 competition
+  // uploaded today lands in 2024, not today.
+  event_date: string | null;
   deleted_at: string | null;
   created_at: string;
 };
@@ -78,7 +83,7 @@ export function useAnalysisHistory() {
     const chartPromise = sb
       .from("video_analyses")
       .select(
-        "id, filename, created_at, deleted_at, event_name, stage, competition_level, tags, result"
+        "id, filename, created_at, event_date, deleted_at, event_name, stage, competition_level, tags, result"
       )
       .order("created_at", { ascending: true })
       .limit(1000);
@@ -93,6 +98,7 @@ export function useAnalysisHistory() {
       id: string;
       filename: string | null;
       created_at: string;
+      event_date: string | null;
       deleted_at: string | null;
       event_name: string | null;
       stage: string | null;
@@ -107,6 +113,7 @@ export function useAnalysisHistory() {
       stage: r.stage,
       competition_level: r.competition_level,
       tags: r.tags,
+      event_date: r.event_date,
       deleted_at: r.deleted_at,
       created_at: r.created_at,
     }));

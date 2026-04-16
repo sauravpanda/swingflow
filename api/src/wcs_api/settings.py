@@ -38,7 +38,7 @@ class Settings(BaseSettings):
     r2_secret_access_key: str = ""
     r2_bucket: str = "swingflow-uploads"
     r2_upload_ttl_seconds: int = 3600
-    free_monthly_video: int = 1
+    free_monthly_video: int = 2
     free_max_video_seconds: int = 120
     basic_monthly_video: int = 10
     basic_max_video_seconds: int = 300

@@ -24,7 +24,7 @@ const BASIC_BENEFITS = [
 ];
 
 const FREE_FEATURES = [
-  "1 dance video analysis per month, up to 2 minutes",
+  "2 dance video analyses per month, up to 2 minutes each",
   "Precise cloud music analysis — unlimited songs",
 ];
 

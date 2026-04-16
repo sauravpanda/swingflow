@@ -33,7 +33,7 @@ Includes WCS pattern presets, tempo ramp for progressive difficulty, timing accu
 Guided warm-up routines in 5, 15, or 30-minute sessions. Covers joint mobility, body isolation, walking practice, triple step drills, anchor variations, and pattern work.
 
 ### Accounts & Plan Tiers
-- **Free** — 1 video analysis / month, 2-minute clips, unlimited music analysis
+- **Free** — 2 video analyses / month, 2-minute clips, unlimited music analysis
 - **Basic ($10/mo)** — 10 video analyses / month, 5-minute clips, unlimited music analysis
 - Per-user quota overrides on the `profiles` table for beta testers and refunds
 - Google-auth-free: email + password via Supabase Auth
