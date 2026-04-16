@@ -19,6 +19,13 @@ class Settings(BaseSettings):
 
     gemini_api_key: str = ""
     gemini_model: str = "gemini-2.0-flash-exp"
+    # When enabled, the video analyzer runs a dedicated Gemini call that
+    # asks ONLY about the pattern timeline, then feeds the result into
+    # the main scoring call as context. Per wcs-analyzer's docs, this
+    # consistently outperforms asking the main prompt to enumerate
+    # patterns while also scoring the dance. Costs one extra Gemini
+    # call per analysis (~doubles Gemini spend).
+    enable_pattern_prepass: bool = True
     max_video_bytes: int = 100 * 1024 * 1024  # 100 MB
     free_monthly_video: int = 1
     free_max_video_seconds: int = 120
