@@ -78,6 +78,64 @@ function scoreBarColor(score: number): string {
   return "bg-rose-500";
 }
 
+/**
+ * Derive a pattern summary from the flat patterns_identified array.
+ * Mirrors the backend `_summarize_patterns` so analyses stored before
+ * the backend started returning `pattern_summary` still get the
+ * aggregated pattern card.
+ */
+function derivePatternSummary(
+  patterns: VideoScoreResult["patterns_identified"]
+): NonNullable<VideoScoreResult["pattern_summary"]> {
+  if (!patterns || patterns.length === 0) return [];
+  const counts = new Map<string, number>();
+  const displayNames = new Map<string, string>();
+  const qualities = new Map<string, string[]>();
+  const timings = new Map<string, string[]>();
+  const notes = new Map<string, string[]>();
+
+  for (const p of patterns) {
+    const raw = (p.name || "").trim();
+    if (!raw) continue;
+    const key = raw.toLowerCase().replace(/\s+/g, " ");
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+    if (!displayNames.has(key)) displayNames.set(key, raw);
+    if (p.quality) {
+      const list = qualities.get(key) ?? [];
+      list.push(p.quality);
+      qualities.set(key, list);
+    }
+    if (p.timing) {
+      const list = timings.get(key) ?? [];
+      list.push(p.timing);
+      timings.set(key, list);
+    }
+    const note = (p.notes || "").trim();
+    if (note) {
+      const list = notes.get(key) ?? [];
+      if (!list.includes(note)) list.push(note);
+      notes.set(key, list);
+    }
+  }
+
+  const mostCommon = (items?: string[]): string | null => {
+    if (!items || items.length === 0) return null;
+    const freq = new Map<string, number>();
+    for (const it of items) freq.set(it, (freq.get(it) ?? 0) + 1);
+    return Array.from(freq.entries()).sort((a, b) => b[1] - a[1])[0][0];
+  };
+
+  return Array.from(counts.entries())
+    .sort((a, b) => b[1] - a[1])
+    .map(([key, count]) => ({
+      name: displayNames.get(key)!,
+      count,
+      quality: mostCommon(qualities.get(key)),
+      timing: mostCommon(timings.get(key)),
+      notes: (notes.get(key) ?? []).slice(0, 3).join(" · ") || null,
+    }));
+}
+
 function ScoreBar({
   score,
   scoreLow,
@@ -1073,9 +1131,19 @@ function ScoreResultCard({
         <PartnerCards lead={result.lead} follow={result.follow} />
       )}
 
-      {result.pattern_summary && result.pattern_summary.length > 0 && (
-        <PatternSummaryCard summary={result.pattern_summary} />
-      )}
+      {(() => {
+        // Prefer the server-computed summary. For analyses stored
+        // before the backend started returning pattern_summary, fall
+        // back to deriving it from the flat patterns_identified list
+        // so every historical analysis still gets the card.
+        const summary =
+          result.pattern_summary && result.pattern_summary.length > 0
+            ? result.pattern_summary
+            : derivePatternSummary(result.patterns_identified);
+        return summary.length > 0 ? (
+          <PatternSummaryCard summary={summary} />
+        ) : null;
+      })()}
 
       <Card>
         <CardHeader className="pb-3">
