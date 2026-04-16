@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from .routes import billing, health, music, video
+from .routes import admin, billing, health, music, video
 from .settings import settings
 
 app = FastAPI(title="wcs-api", version="0.1.0")
@@ -18,3 +18,4 @@ app.include_router(health.router)
 app.include_router(music.router)
 app.include_router(video.router)
 app.include_router(billing.router)
+app.include_router(admin.router)

@@ -9,6 +9,7 @@ class Settings(BaseSettings):
     supabase_service_role_key: str = ""
 
     allowed_origins: str = "http://localhost:3000"
+    admin_emails: str = "saurav@browser-use.com"
 
     max_music_bytes: int = 25 * 1024 * 1024
     max_music_seconds: int = 480
@@ -27,7 +28,7 @@ class Settings(BaseSettings):
     # patterns_identified, the pre-pass is an opt-in precision mode for
     # cases where the main call mis-identifies patterns. Default off.
     enable_pattern_prepass: bool = False
-    max_video_bytes: int = 100 * 1024 * 1024  # 100 MB
+    max_video_bytes: int = 250 * 1024 * 1024  # 250 MB
     free_monthly_video: int = 1
     free_max_video_seconds: int = 120
     basic_monthly_video: int = 10
