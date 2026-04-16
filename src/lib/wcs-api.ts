@@ -172,6 +172,12 @@ export type VideoScoreResult = {
   follow?: VideoPartnerScore;
   estimated_bpm?: number;
   song_style?: string;
+  // The tier Gemini actually observed (Newcomer / Novice /
+  // Intermediate / Advanced / All-Star / Champion), independent
+  // of the user's self-declared level. When the two disagree we
+  // render an explicit "Scored as X · Declared Y" note on the
+  // score hero so the mismatch doesn't look like a contradiction.
+  observed_level?: string;
   // Non-empty when the server sanity check flagged implausible
   // results (e.g. "intro lasted 60s") that even one retry couldn't
   // fully fix. Surfaced as a low-confidence hint in the UI.

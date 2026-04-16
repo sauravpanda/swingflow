@@ -1189,6 +1189,39 @@ function ScoreResultCard({
                 {levelContext.label}
               </span>
             )}
+            {(() => {
+              // When Gemini's observed tier differs from the user's
+              // declared level, make the mismatch explicit instead of
+              // letting the impression text contradict the label.
+              const declared = (competitionLevel || "").trim().toLowerCase();
+              const observed = (result.observed_level || "").trim();
+              if (!observed) return null;
+              if (
+                declared &&
+                observed.toLowerCase() === declared
+              )
+                return null;
+              if (!declared) {
+                return (
+                  <span className="text-xs text-muted-foreground">
+                    Scored as{" "}
+                    <span className="font-medium text-foreground">
+                      {observed}
+                    </span>
+                  </span>
+                );
+              }
+              return (
+                <span className="text-xs text-muted-foreground">
+                  Scored as{" "}
+                  <span className="font-medium text-emerald-300">
+                    {observed}
+                  </span>
+                  {" · Declared "}
+                  <span className="font-medium">{competitionLevel}</span>
+                </span>
+              );
+            })()}
             <div className="flex items-center gap-2">
               <Badge className="text-sm px-3 py-0.5">
                 {result.overall.grade}
