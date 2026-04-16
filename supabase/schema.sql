@@ -6,12 +6,14 @@
 -- ────────────────────────────────────────────────────────────
 
 create table if not exists public.profiles (
-  id                 uuid primary key references auth.users(id) on delete cascade,
-  email              text,
-  plan               text not null default 'free' check (plan in ('free', 'basic')),
-  stripe_customer_id text unique,
-  created_at         timestamptz not null default now(),
-  updated_at         timestamptz not null default now()
+  id                          uuid primary key references auth.users(id) on delete cascade,
+  email                       text,
+  plan                        text not null default 'free' check (plan in ('free', 'basic')),
+  stripe_customer_id          text unique,
+  monthly_video_override      int,    -- per-user override; NULL = plan default
+  max_video_seconds_override  int,    -- per-user override; NULL = plan default
+  created_at                  timestamptz not null default now(),
+  updated_at                  timestamptz not null default now()
 );
 
 -- Migration: older versions used 'pro' as the paid tier name. Rename to
