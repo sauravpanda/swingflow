@@ -128,6 +128,8 @@ export type VideoCategoryScore = {
 
 export type VideoPatternIdentified = {
   name: string;
+  start_time?: number;
+  end_time?: number;
   quality?: "strong" | "solid" | "needs_work" | "weak" | string;
   timing?: "on_beat" | "slightly_off" | "off_beat" | string;
   notes?: string;

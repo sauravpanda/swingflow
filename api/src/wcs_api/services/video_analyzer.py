@@ -194,6 +194,8 @@ Respond in this exact JSON format. Fill `reasoning` BEFORE `score` in each categ
   "patterns_identified": [
     {
       "name": "<e.g., sugar push, left side pass, whip>",
+      "start_time": <seconds from video start, float>,
+      "end_time": <seconds from video start, float>,
       "quality": "<strong|solid|needs_work|weak>",
       "timing": "<on_beat|slightly_off|off_beat>",
       "notes": "<what was good or needs improvement in this pattern>"
@@ -216,7 +218,13 @@ Respond in this exact JSON format. Fill `reasoning` BEFORE `score` in each categ
   "song_style": "<e.g., blues, contemporary, lyrical>"
 }
 
-Only output valid JSON, no other text.\
+Constraints on patterns_identified:
+- Cover the full video end-to-end with non-overlapping contiguous time ranges, in chronological order.
+- Each range should correspond to one WCS pattern.
+- If a segment is unclear, name it "unknown" and explain in notes.
+- start_time and end_time are decimal seconds from the video start.
+
+Only output valid JSON, no other text. Do not include // comments inside the JSON.\
 """
 
 
