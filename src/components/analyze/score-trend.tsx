@@ -14,6 +14,10 @@ type Point = {
   stage: string | null;
   competition_level: string | null;
   tags: string[] | null;
+  // True when the bucket date came from the upload's `event_date`
+  // rather than `created_at` — useful for the hover tooltip so
+  // viewers understand why a clip sits where it does.
+  from_event_date: boolean;
   deleted: boolean;
 };
 
@@ -52,15 +56,35 @@ function buildBuckets(records: ChartRecord[]): MonthBucket[] {
   const points: Point[] = [];
   for (const r of records) {
     if (typeof r.score !== "number" || Number.isNaN(r.score)) continue;
+    // Prefer the user-entered event_date so footage from a 2024
+    // event clusters in 2024, even if uploaded later. Falls back to
+    // created_at when no event date was supplied.
+    let date: Date;
+    let fromEvent = false;
+    if (r.event_date) {
+      // Postgres stores as 'YYYY-MM-DD'. Append midnight UTC to
+      // avoid the constructor interpreting a bare date as UTC and
+      // then shifting it into the previous day in western timezones.
+      const parsed = new Date(`${r.event_date}T00:00:00`);
+      if (!Number.isNaN(parsed.getTime())) {
+        date = parsed;
+        fromEvent = true;
+      } else {
+        date = new Date(r.created_at);
+      }
+    } else {
+      date = new Date(r.created_at);
+    }
     points.push({
       id: r.id,
-      date: new Date(r.created_at),
+      date,
       score: r.score,
       filename: r.filename,
       event_name: r.event_name,
       stage: r.stage,
       competition_level: r.competition_level,
       tags: r.tags,
+      from_event_date: fromEvent,
       deleted: Boolean(r.deleted_at),
     });
   }
@@ -317,7 +341,8 @@ function TrendSVG({
           </g>
         ))}
 
-        {/* Average polyline */}
+        {/* Average polyline connecting months with data. Sits behind
+            the per-month markers so the markers read as anchors. */}
         {pathD && (
           <path
             d={pathD}
@@ -327,20 +352,67 @@ function TrendSVG({
             strokeWidth={2}
             strokeLinecap="round"
             strokeLinejoin="round"
-            opacity={0.7}
+            opacity={0.5}
           />
         )}
 
-        {/* Average-per-month markers */}
-        {avgPath.map((p, i) => (
-          <circle
-            key={`avg-${i}`}
-            cx={p.x}
-            cy={p.y}
-            r={3}
-            className="fill-primary"
-          />
-        ))}
+        {/* Per-month monthly-average visual:
+            - thick primary range bar covering min → max (so a
+              dancer with a wide spread sees that spread at a glance)
+            - large primary circle at the monthly avg, labelled
+              with the numeric avg so a single-month chart still
+              communicates meaningfully */}
+        {buckets.map((b, i) => {
+          if (b.points.length === 0) return null;
+          const scores = b.points.map((p) => p.score);
+          const minS = Math.min(...scores);
+          const maxS = Math.max(...scores);
+          const x = xFor(i);
+          const avgY = yFor(b.avg);
+          return (
+            <g key={`avg-${i}`}>
+              {maxS > minS && (
+                <line
+                  x1={x}
+                  x2={x}
+                  y1={yFor(maxS)}
+                  y2={yFor(minS)}
+                  stroke="currentColor"
+                  className="text-primary"
+                  strokeWidth={6}
+                  strokeOpacity={0.18}
+                  strokeLinecap="round"
+                />
+              )}
+              <circle
+                cx={x}
+                cy={avgY}
+                r={5.5}
+                className="fill-primary"
+                stroke="white"
+                strokeOpacity={0.35}
+                strokeWidth={1.5}
+              >
+                <title>
+                  {b.label} {b.year}: avg {b.avg.toFixed(1)} across{" "}
+                  {b.points.length} analys{b.points.length === 1 ? "is" : "es"}
+                  {maxS > minS
+                    ? ` · range ${minS.toFixed(1)}–${maxS.toFixed(1)}`
+                    : ""}
+                </title>
+              </circle>
+              <text
+                x={x + 9}
+                y={avgY + 3}
+                className="fill-foreground"
+                fontSize={10}
+                fontWeight={600}
+              >
+                {b.avg.toFixed(1)}
+              </text>
+            </g>
+          );
+        })}
 
         {/* Individual analysis dots. Soft-deleted rows render as
             hollow outlines so the user can tell them apart from

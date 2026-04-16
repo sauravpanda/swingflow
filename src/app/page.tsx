@@ -74,7 +74,7 @@ export default function HomePage() {
                 </Button>
               </div>
               <p className="text-xs text-muted-foreground pt-2">
-                No credit card required · 1 video analysis / month free ·
+                No credit card required · 2 video analyses / month free ·
                 Unlimited music analysis
               </p>
             </div>
@@ -382,7 +382,7 @@ export default function HomePage() {
                     </li>
                     <li className="flex items-start gap-2">
                       <Check className="h-4 w-4 text-primary mt-0.5 shrink-0" />
-                      <span>1 dance video analysis / month (up to 2 min)</span>
+                      <span>2 dance video analyses / month (up to 2 min each)</span>
                     </li>
                     <li className="flex items-start gap-2">
                       <Check className="h-4 w-4 text-primary mt-0.5 shrink-0" />
