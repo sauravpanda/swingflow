@@ -346,3 +346,40 @@ export async function deleteUploadedVideo(objectKey: string): Promise<void> {
     object_key: objectKey,
   });
 }
+
+// ───────────────────────────────────────────────────────────────────
+// Public shared-analysis read (no JWT)
+// ───────────────────────────────────────────────────────────────────
+
+export type SharedAnalysis = {
+  id: string;
+  filename: string | null;
+  duration: number | null;
+  result: VideoScoreResult;
+  role?: string | null;
+  competition_level?: string | null;
+  event_name?: string | null;
+  stage?: string | null;
+  tags?: string[] | null;
+  created_at: string;
+};
+
+export async function fetchSharedAnalysis(
+  token: string
+): Promise<SharedAnalysis> {
+  if (!API_URL) throw new Error("NEXT_PUBLIC_WCS_API_URL is not set");
+  const res = await fetch(
+    `${API_URL}/shared/${encodeURIComponent(token)}`
+  );
+  if (!res.ok) {
+    let detail = res.statusText;
+    try {
+      const body = await res.json();
+      if (body?.detail) detail = String(body.detail);
+    } catch {
+      // ignore
+    }
+    throw new Error(`Shared analysis fetch failed (${res.status}): ${detail}`);
+  }
+  return (await res.json()) as SharedAnalysis;
+}

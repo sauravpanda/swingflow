@@ -19,6 +19,9 @@ import {
   Trash2,
   Target,
   Quote,
+  Share2,
+  Link2Off,
+  Copy,
 } from "lucide-react";
 import { useVideoAnalysis } from "@/hooks/use-video-analysis";
 import { useAnalysisHistory, type AnalysisRecord } from "@/hooks/use-analysis-history";
@@ -460,6 +463,8 @@ export default function AnalyzePage() {
                 record={rec}
                 onReanalyzed={history.refresh}
                 onDeleted={history.remove}
+                onShare={history.enableSharing}
+                onStopShare={history.disableSharing}
               />
             ))}
           </CardContent>
@@ -473,10 +478,14 @@ function HistoryRow({
   record,
   onReanalyzed,
   onDeleted,
+  onShare,
+  onStopShare,
 }: {
   record: AnalysisRecord;
   onReanalyzed: () => void;
   onDeleted: (id: string) => Promise<void> | void;
+  onShare: (id: string) => Promise<string>;
+  onStopShare: (id: string) => Promise<void>;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
@@ -485,6 +494,8 @@ function HistoryRow({
   const [deletingVideo, setDeletingVideo] = useState(false);
   const [deletingAnalysis, setDeletingAnalysis] = useState(false);
   const [videoDeleted, setVideoDeleted] = useState(false);
+  const [sharing, setSharing] = useState(false);
+  const [shareMessage, setShareMessage] = useState<string | null>(null);
   const [currentResult, setCurrentResult] = useState<
     VideoScoreResult | null
   >(record.result ?? null);
@@ -492,6 +503,10 @@ function HistoryRow({
   const overall = currentResult?.overall;
 
   const canViewOrReanalyze = Boolean(record.object_key) && !videoDeleted;
+  const shareUrl =
+    record.share_token && typeof window !== "undefined"
+      ? `${window.location.origin}/shared?t=${record.share_token}`
+      : null;
 
   const handleWatch = async (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -554,6 +569,58 @@ function HistoryRow({
       setRowError(err instanceof Error ? err.message : "Delete failed");
     } finally {
       setDeletingVideo(false);
+    }
+  };
+
+  const handleShare = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setSharing(true);
+    setShareMessage(null);
+    setRowError(null);
+    try {
+      const token = await onShare(record.id);
+      const url = `${window.location.origin}/shared?t=${token}`;
+      try {
+        await navigator.clipboard.writeText(url);
+        setShareMessage("Link copied to clipboard");
+      } catch {
+        setShareMessage(url);
+      }
+      setTimeout(() => setShareMessage(null), 5000);
+    } catch (err) {
+      setRowError(err instanceof Error ? err.message : "Share failed");
+    } finally {
+      setSharing(false);
+    }
+  };
+
+  const handleCopyShareLink = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!shareUrl) return;
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      setShareMessage("Link copied to clipboard");
+      setTimeout(() => setShareMessage(null), 3000);
+    } catch {
+      setShareMessage(shareUrl);
+    }
+  };
+
+  const handleStopShare = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const ok = window.confirm(
+      "Stop sharing this analysis? The existing link will stop working immediately."
+    );
+    if (!ok) return;
+    setSharing(true);
+    try {
+      await onStopShare(record.id);
+      setShareMessage("Sharing disabled");
+      setTimeout(() => setShareMessage(null), 3000);
+    } catch (err) {
+      setRowError(err instanceof Error ? err.message : "Failed to stop sharing");
+    } finally {
+      setSharing(false);
     }
   };
 
@@ -710,6 +777,48 @@ function HistoryRow({
               </>
             )}
 
+            {shareUrl ? (
+              <>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={handleCopyShareLink}
+                  disabled={sharing}
+                >
+                  <Copy className="mr-2 h-3.5 w-3.5" />
+                  Copy share link
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="text-muted-foreground hover:text-destructive"
+                  onClick={handleStopShare}
+                  disabled={sharing}
+                >
+                  {sharing ? (
+                    <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Link2Off className="mr-2 h-3.5 w-3.5" />
+                  )}
+                  Stop sharing
+                </Button>
+              </>
+            ) : (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={handleShare}
+                disabled={sharing}
+              >
+                {sharing ? (
+                  <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Share2 className="mr-2 h-3.5 w-3.5" />
+                )}
+                Share link
+              </Button>
+            )}
+
             <Button
               size="sm"
               variant="ghost"
@@ -725,6 +834,10 @@ function HistoryRow({
               Delete analysis
             </Button>
           </div>
+
+          {shareMessage && (
+            <p className="text-xs text-primary">{shareMessage}</p>
+          )}
 
           {!canViewOrReanalyze && (
             <p className="text-xs text-muted-foreground">

@@ -16,6 +16,7 @@ export type AnalysisRecord = {
   event_name: string | null;
   stage: string | null;
   tags: string[] | null;
+  share_token: string | null;
   created_at: string;
 };
 
@@ -35,7 +36,7 @@ export function useAnalysisHistory() {
     const { data } = await sb
       .from("video_analyses")
       .select(
-        "id, filename, duration, result, object_key, role, competition_level, event_name, stage, tags, created_at"
+        "id, filename, duration, result, object_key, role, competition_level, event_name, stage, tags, share_token, created_at"
       )
       .order("created_at", { ascending: false })
       .limit(20);
@@ -51,12 +52,37 @@ export function useAnalysisHistory() {
     async (id: string) => {
       if (!isSupabaseConfigured) return;
       const sb = getSupabase();
-      // RLS: users can only delete rows where auth.uid() = user_id
       await sb.from("video_analyses").delete().eq("id", id);
       setRecords((rs) => rs.filter((r) => r.id !== id));
     },
     []
   );
 
-  return { records, loading, refresh, remove };
+  /** Generate (or regenerate) a share_token on a row. Returns the token. */
+  const enableSharing = useCallback(async (id: string): Promise<string> => {
+    if (!isSupabaseConfigured) throw new Error("Supabase not configured");
+    const sb = getSupabase();
+    const token = crypto.randomUUID().replace(/-/g, "");
+    const { error } = await sb
+      .from("video_analyses")
+      .update({ share_token: token })
+      .eq("id", id);
+    if (error) throw new Error(error.message);
+    setRecords((rs) =>
+      rs.map((r) => (r.id === id ? { ...r, share_token: token } : r))
+    );
+    return token;
+  }, []);
+
+  /** Revoke sharing by nulling the token. Any existing links stop working. */
+  const disableSharing = useCallback(async (id: string): Promise<void> => {
+    if (!isSupabaseConfigured) return;
+    const sb = getSupabase();
+    await sb.from("video_analyses").update({ share_token: null }).eq("id", id);
+    setRecords((rs) =>
+      rs.map((r) => (r.id === id ? { ...r, share_token: null } : r))
+    );
+  }, []);
+
+  return { records, loading, refresh, remove, enableSharing, disableSharing };
 }

@@ -141,6 +141,24 @@ async def insert_usage_event(
         r.raise_for_status()
 
 
+async def get_shared_analysis(token: str) -> dict[str, Any] | None:
+    """Unauthenticated read of a video analysis by its share token.
+    Intentionally returns only the public-safe subset of fields (no
+    user_id, object_key, or stripe_customer_id)."""
+    async with httpx.AsyncClient(timeout=10) as client:
+        r = await client.get(
+            _rest(
+                f"video_analyses?share_token=eq.{token}"
+                "&select=id,filename,duration,result,role,"
+                "competition_level,event_name,stage,tags,created_at"
+            ),
+            headers=_headers(),
+        )
+        r.raise_for_status()
+        rows = r.json()
+        return rows[0] if rows else None
+
+
 async def clear_video_analysis_object_key(
     object_key: str, user_id: str
 ) -> None:

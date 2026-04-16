@@ -12,6 +12,9 @@ import {
   Zap,
   UserPlus,
   History,
+  ShieldCheck,
+  Share2,
+  HelpCircle,
 } from "lucide-react";
 
 export default function HomePage() {
@@ -454,6 +457,95 @@ export default function HomePage() {
           </div>
         </section>
 
+        {/* ─── Privacy callout ─── */}
+        <section className="container mx-auto px-4 py-12">
+          <Card className="border-border/60 bg-card/40 backdrop-blur">
+            <CardContent className="p-6 sm:p-8 grid gap-6 sm:grid-cols-3 items-start">
+              <div className="flex items-start gap-3">
+                <ShieldCheck className="h-6 w-6 text-emerald-400 shrink-0 mt-0.5" />
+                <div>
+                  <h3 className="font-semibold text-sm">
+                    Videos deleted after scoring
+                  </h3>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    We only keep the structured result — not your raw clip.
+                    Uploads auto-delete from storage the moment the scoring
+                    run finishes.
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-start gap-3">
+                <Share2 className="h-6 w-6 text-primary shrink-0 mt-0.5" />
+                <div>
+                  <h3 className="font-semibold text-sm">
+                    Share privately with a link
+                  </h3>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Send a coach or partner a private share link to your
+                    score. Revoke whenever — old links stop working
+                    immediately.
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-start gap-3">
+                <Zap className="h-6 w-6 text-violet-400 shrink-0 mt-0.5" />
+                <div>
+                  <h3 className="font-semibold text-sm">
+                    Your data, your call
+                  </h3>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Delete any analysis from history in one click. Cancel
+                    anytime. No data held hostage.
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </section>
+
+        {/* ─── FAQ ─── */}
+        <section className="container mx-auto px-4 py-16 sm:py-20">
+          <div className="text-center max-w-2xl mx-auto mb-10 space-y-3">
+            <div className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-primary">
+              <HelpCircle className="h-4 w-4" />
+              FAQ
+            </div>
+            <h2 className="text-3xl sm:text-4xl font-bold tracking-tight">
+              Common questions
+            </h2>
+          </div>
+          <div className="max-w-3xl mx-auto space-y-3">
+            <FaqItem
+              q="What dance style is this scored against?"
+              a="West Coast Swing using the WSDC rubric — timing, technique, teamwork, presentation. We're WCS-first today. Support for Lindy Hop, Salsa, Bachata, and others is planned."
+            />
+            <FaqItem
+              q="Is my video stored anywhere?"
+              a="No. Your video uploads directly to private storage, we download it once to score, then delete it immediately. Only the structured result (scores, notes, timestamps) is kept in your history."
+            />
+            <FaqItem
+              q="How accurate is the scoring?"
+              a="The model is calibrated against novice, intermediate, and champion-level reference examples, and we ground timing judgments in actual detected beats from the music. Think of it as 'a well-read judge' — consistent and specific, not a replacement for a human coach for advanced nuance."
+            />
+            <FaqItem
+              q="How long does an analysis take?"
+              a="Typically 30–90 seconds per clip, depending on video length and current load. The upload phase depends on your connection."
+            />
+            <FaqItem
+              q="Can I share my score with a coach?"
+              a="Yes. Each analysis has a Share button that generates a private link. Send it to anyone — no account required on their side. You can revoke the link any time."
+            />
+            <FaqItem
+              q="What if I run out of free videos?"
+              a="Basic is $10/month with 10 analyses and 5-minute clips. Your free tier resets monthly. Cancel anytime, access stays until the end of the period."
+            />
+            <FaqItem
+              q="Do you support video longer than 5 minutes?"
+              a="Not on Basic. Much longer clips dilute the rubric feedback anyway — the sweet spot for useful judging is a 1–3 minute routine or an entire J&J heat."
+            />
+          </div>
+        </section>
+
         {/* ─── CTA ─── */}
         <section className="container mx-auto px-4 py-20 text-center">
           <div className="max-w-2xl mx-auto space-y-5">
@@ -509,6 +601,20 @@ function FeatureCard({
         <p className="text-sm text-muted-foreground">{description}</p>
       </CardContent>
     </Card>
+  );
+}
+
+function FaqItem({ q, a }: { q: string; a: string }) {
+  return (
+    <details className="group rounded-lg border border-border/60 bg-card/40 backdrop-blur">
+      <summary className="cursor-pointer list-none p-4 flex items-center justify-between font-medium text-sm hover:bg-muted/30 rounded-lg transition-colors">
+        <span>{q}</span>
+        <span className="text-muted-foreground text-lg leading-none group-open:rotate-45 transition-transform">
+          +
+        </span>
+      </summary>
+      <div className="px-4 pb-4 text-sm text-muted-foreground">{a}</div>
+    </details>
   );
 }
 
