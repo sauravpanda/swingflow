@@ -310,12 +310,37 @@ export function uploadToPresignedUrl(
   });
 }
 
+export type VideoAnalyzeOptions = {
+  role?: string;
+  competitionLevel?: string;
+  eventName?: string;
+  tags?: string[];
+};
+
 export async function analyzeVideoFromKey(
   objectKey: string,
-  filename: string
+  filename: string,
+  options: VideoAnalyzeOptions = {}
 ): Promise<VideoAnalysisResponse> {
   return postJson<VideoAnalysisResponse>("/analyze/video", {
     object_key: objectKey,
     filename,
+    role: options.role || null,
+    competition_level: options.competitionLevel || null,
+    event_name: options.eventName || null,
+    tags: options.tags && options.tags.length ? options.tags : null,
+  });
+}
+
+export async function getViewUrl(objectKey: string): Promise<string> {
+  const data = await postJson<{ url: string }>("/uploads/view", {
+    object_key: objectKey,
+  });
+  return data.url;
+}
+
+export async function deleteUploadedVideo(objectKey: string): Promise<void> {
+  await postJson<{ ok: boolean }>("/uploads/delete", {
+    object_key: objectKey,
   });
 }

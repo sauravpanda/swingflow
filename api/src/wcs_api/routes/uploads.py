@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 
 from ..auth import verify_jwt
-from ..services import r2
+from ..services import r2, supabase_admin
 from ..settings import settings
 
 router = APIRouter(prefix="/uploads", tags=["uploads"])
@@ -11,6 +11,54 @@ router = APIRouter(prefix="/uploads", tags=["uploads"])
 class PresignBody(BaseModel):
     filename: str | None = None
     content_type: str = "application/octet-stream"
+
+
+class ObjectKeyBody(BaseModel):
+    object_key: str
+
+
+@router.post("/delete")
+async def delete_video(
+    body: ObjectKeyBody, user: dict = Depends(verify_jwt)
+) -> dict:
+    """User-initiated delete: remove the R2 object and clear the
+    reference on any of the user's video_analyses rows so the UI
+    reflects the deletion immediately."""
+    if not r2.object_key_belongs_to_user(body.object_key, user["sub"]):
+        raise HTTPException(
+            status_code=403, detail="object does not belong to user"
+        )
+    r2.delete_object(body.object_key)
+    try:
+        await supabase_admin.clear_video_analysis_object_key(
+            object_key=body.object_key, user_id=user["sub"]
+        )
+    except Exception:
+        pass
+    return {"ok": True}
+
+
+class ViewBody(BaseModel):
+    object_key: str
+
+
+@router.post("/view")
+async def presign_view(body: ViewBody, user: dict = Depends(verify_jwt)) -> dict:
+    """Issue a short-lived presigned GET URL so the user can stream their
+    own past upload from R2. Object-key prefix must match the user id."""
+    if not r2.object_key_belongs_to_user(body.object_key, user["sub"]):
+        raise HTTPException(status_code=403, detail="object does not belong to user")
+    if (
+        not settings.r2_account_id
+        or not settings.r2_access_key_id
+        or not settings.r2_secret_access_key
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="uploads not configured (R2_* env vars missing)",
+        )
+    url = r2.generate_presigned_get(body.object_key, expires_in=3600)
+    return {"url": url, "expiresIn": 3600}
 
 
 @router.post("/presign")

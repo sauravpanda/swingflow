@@ -75,6 +75,14 @@ def delete_object(object_key: str) -> None:
         pass
 
 
+def generate_presigned_get(object_key: str, expires_in: int = 3600) -> str:
+    return _client().generate_presigned_url(
+        "get_object",
+        Params={"Bucket": settings.r2_bucket, "Key": object_key},
+        ExpiresIn=expires_in,
+    )
+
+
 def object_key_belongs_to_user(object_key: str, user_id: str) -> bool:
     """Guard against a user analyzing another user's upload by key-guessing."""
     return object_key.startswith(f"uploads/{user_id}/")

@@ -14,10 +14,23 @@ import {
   X,
   CheckCircle2,
   AlertCircle,
+  Play,
+  RotateCcw,
+  Trash2,
+  Target,
+  Quote,
 } from "lucide-react";
 import { useVideoAnalysis } from "@/hooks/use-video-analysis";
 import { useAnalysisHistory, type AnalysisRecord } from "@/hooks/use-analysis-history";
-import type { VideoScoreResult } from "@/lib/wcs-api";
+import {
+  analyzeVideoFromKey,
+  deleteUploadedVideo,
+  getViewUrl,
+  type VideoScoreResult,
+} from "@/lib/wcs-api";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { TimelineView } from "@/components/analyze/timeline-view";
 
 const CATEGORY_LABELS: Record<keyof VideoScoreResult["categories"], string> = {
   timing: "Timing & Rhythm",
@@ -54,6 +67,12 @@ export default function AnalyzePage() {
   const [file, setFile] = useState<File | null>(null);
   const [localError, setLocalError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // Optional metadata — captured pre-upload so it gets saved with the analysis.
+  const [role, setRole] = useState("");
+  const [competitionLevel, setCompetitionLevel] = useState("");
+  const [eventName, setEventName] = useState("");
+  const [tagsInput, setTagsInput] = useState("");
 
   const handleFileChange = useCallback(
     async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -101,10 +120,18 @@ export default function AnalyzePage() {
   );
 
   const handleAnalyze = useCallback(() => {
-    if (file) {
-      analyze(file).then(() => history.refresh());
-    }
-  }, [file, analyze, history]);
+    if (!file) return;
+    const tags = tagsInput
+      .split(",")
+      .map((t) => t.trim())
+      .filter(Boolean);
+    analyze(file, {
+      role: role.trim() || undefined,
+      competitionLevel: competitionLevel.trim() || undefined,
+      eventName: eventName.trim() || undefined,
+      tags: tags.length ? tags : undefined,
+    }).then(() => history.refresh());
+  }, [file, analyze, history, role, competitionLevel, eventName, tagsInput]);
 
   const handleClear = useCallback(() => {
     setFile(null);
@@ -168,8 +195,8 @@ export default function AnalyzePage() {
         </CardContent>
       </Card>
 
-      {/* Paywall */}
-      {isPaywalled && (
+      {/* Paywall — hide when showing a fresh result so the score owns the hero slot */}
+      {isPaywalled && state.status !== "success" && (
         <Card className="border-primary/40">
           <CardContent className="py-6 space-y-3 text-center">
             <Sparkles className="h-8 w-8 text-primary mx-auto" />
@@ -241,6 +268,64 @@ export default function AnalyzePage() {
               <p className="text-sm text-destructive">{localError}</p>
             )}
 
+            {file && state.status === "idle" && (
+              <div className="space-y-2.5 rounded-lg border border-border p-3">
+                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  Optional tags (saved with the analysis)
+                </p>
+                <div className="grid grid-cols-2 gap-2.5">
+                  <div className="space-y-1">
+                    <Label htmlFor="role" className="text-xs">
+                      Role
+                    </Label>
+                    <Input
+                      id="role"
+                      placeholder="lead / follow / solo"
+                      value={role}
+                      onChange={(e) => setRole(e.target.value)}
+                      className="h-8 text-sm"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="level" className="text-xs">
+                      Level
+                    </Label>
+                    <Input
+                      id="level"
+                      placeholder="novice, intermediate, all-star…"
+                      value={competitionLevel}
+                      onChange={(e) => setCompetitionLevel(e.target.value)}
+                      className="h-8 text-sm"
+                    />
+                  </div>
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="event" className="text-xs">
+                    Event
+                  </Label>
+                  <Input
+                    id="event"
+                    placeholder="Boogie by the Bay 2026 J&J"
+                    value={eventName}
+                    onChange={(e) => setEventName(e.target.value)}
+                    className="h-8 text-sm"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="tags" className="text-xs">
+                    Tags
+                  </Label>
+                  <Input
+                    id="tags"
+                    placeholder="strictly-swing, showcase, 2026 (comma separated)"
+                    value={tagsInput}
+                    onChange={(e) => setTagsInput(e.target.value)}
+                    className="h-8 text-sm"
+                  />
+                </div>
+              </div>
+            )}
+
             {file && (
               <>
                 {state.status === "uploading" && (
@@ -291,11 +376,41 @@ export default function AnalyzePage() {
 
       {/* Result */}
       {state.status === "success" && state.result && (
-        <ScoreResultCard
-          result={state.result.result}
-          duration={state.result.duration}
-          onClear={handleClear}
-        />
+        <>
+          <ScoreResultCard
+            result={state.result.result}
+            duration={state.result.duration}
+            onClear={handleClear}
+          />
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Pattern timeline</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <TimelineView
+                result={state.result.result}
+                duration={state.result.duration}
+              />
+            </CardContent>
+          </Card>
+          {/* Paywall pushed below the result when both are present */}
+          {isPaywalled && (
+            <Card className="border-primary/40">
+              <CardContent className="py-5 text-center space-y-2">
+                <p className="text-sm">
+                  <Sparkles className="h-4 w-4 text-primary inline-block mr-1.5 -mt-0.5" />
+                  That was your free analysis for the month. Upgrade for 10
+                  per month and 5-minute clips.
+                </p>
+                <Link href="/billing">
+                  <Button size="sm" className="mt-1">
+                    Upgrade to Basic — $10/mo
+                  </Button>
+                </Link>
+              </CardContent>
+            </Card>
+          )}
+        </>
       )}
 
       {/* Past analyses */}
@@ -306,7 +421,11 @@ export default function AnalyzePage() {
           </CardHeader>
           <CardContent className="space-y-2">
             {history.records.map((rec) => (
-              <HistoryRow key={rec.id} record={rec} />
+              <HistoryRow
+                key={rec.id}
+                record={rec}
+                onReanalyzed={history.refresh}
+              />
             ))}
           </CardContent>
         </Card>
@@ -315,31 +434,140 @@ export default function AnalyzePage() {
   );
 }
 
-function HistoryRow({ record }: { record: AnalysisRecord }) {
+function HistoryRow({
+  record,
+  onReanalyzed,
+}: {
+  record: AnalysisRecord;
+  onReanalyzed: () => void;
+}) {
   const [expanded, setExpanded] = useState(false);
-  const overall = record.result?.overall;
+  const [videoUrl, setVideoUrl] = useState<string | null>(null);
+  const [loadingVideo, setLoadingVideo] = useState(false);
+  const [reanalyzing, setReanalyzing] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleted, setDeleted] = useState(false);
+  const [currentResult, setCurrentResult] = useState<
+    VideoScoreResult | null
+  >(record.result ?? null);
+  const [rowError, setRowError] = useState<string | null>(null);
+  const overall = currentResult?.overall;
+
+  const canViewOrReanalyze = Boolean(record.object_key) && !deleted;
+
+  const handleWatch = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!record.object_key || videoUrl) {
+      setExpanded(true);
+      return;
+    }
+    setLoadingVideo(true);
+    setRowError(null);
+    try {
+      const url = await getViewUrl(record.object_key);
+      setVideoUrl(url);
+      setExpanded(true);
+    } catch (err) {
+      setRowError(
+        err instanceof Error ? err.message : "Could not load video"
+      );
+    } finally {
+      setLoadingVideo(false);
+    }
+  };
+
+  const handleReanalyze = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!record.object_key) return;
+    setReanalyzing(true);
+    setRowError(null);
+    try {
+      const resp = await analyzeVideoFromKey(
+        record.object_key,
+        record.filename ?? "video.mp4"
+      );
+      setCurrentResult(resp.result);
+      setExpanded(true);
+      onReanalyzed();
+    } catch (err) {
+      setRowError(
+        err instanceof Error ? err.message : "Re-analysis failed"
+      );
+    } finally {
+      setReanalyzing(false);
+    }
+  };
+
+  const handleDelete = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!record.object_key) return;
+    const ok = window.confirm(
+      "Delete the source video from storage? Your scoring result stays — only the video file is removed. This cannot be undone."
+    );
+    if (!ok) return;
+    setDeleting(true);
+    setRowError(null);
+    try {
+      await deleteUploadedVideo(record.object_key);
+      setDeleted(true);
+      setVideoUrl(null);
+      onReanalyzed();
+    } catch (err) {
+      setRowError(
+        err instanceof Error ? err.message : "Delete failed"
+      );
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   return (
     <div className="border border-border rounded-lg">
-      <button
-        type="button"
-        className="w-full flex items-center justify-between p-3 text-sm text-left hover:bg-muted/30 transition-colors"
+      <div
+        className="w-full flex items-center justify-between p-3 text-sm cursor-pointer hover:bg-muted/30 transition-colors"
         onClick={() => setExpanded((p) => !p)}
       >
         <div className="min-w-0 flex-1">
           <span className="font-medium truncate block">
             {record.filename || "Untitled"}
           </span>
-          <span className="text-xs text-muted-foreground">
-            {new Date(record.created_at).toLocaleDateString("en-US", {
-              month: "short",
-              day: "numeric",
-              hour: "2-digit",
-              minute: "2-digit",
-            })}
-            {record.duration
-              ? ` · ${formatDuration(record.duration)}`
-              : ""}
-          </span>
+          <div className="text-xs text-muted-foreground flex flex-wrap items-center gap-1.5 mt-0.5">
+            <span>
+              {new Date(record.created_at).toLocaleDateString("en-US", {
+                month: "short",
+                day: "numeric",
+                hour: "2-digit",
+                minute: "2-digit",
+              })}
+            </span>
+            {record.duration ? (
+              <span>· {formatDuration(record.duration)}</span>
+            ) : null}
+            {record.role && (
+              <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4">
+                {record.role}
+              </Badge>
+            )}
+            {record.competition_level && (
+              <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4">
+                {record.competition_level}
+              </Badge>
+            )}
+            {record.event_name && (
+              <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4">
+                {record.event_name}
+              </Badge>
+            )}
+            {(record.tags ?? []).slice(0, 4).map((t) => (
+              <Badge
+                key={t}
+                variant="secondary"
+                className="text-[9px] px-1.5 py-0 h-4"
+              >
+                #{t}
+              </Badge>
+            ))}
+          </div>
         </div>
         {overall && (
           <div className="flex items-center gap-2 shrink-0 ml-3">
@@ -351,14 +579,80 @@ function HistoryRow({ record }: { record: AnalysisRecord }) {
             </Badge>
           </div>
         )}
-      </button>
-      {expanded && record.result && (
-        <div className="border-t border-border p-3">
-          <ScoreResultCard
-            result={record.result}
-            duration={record.duration ?? 0}
-            onClear={() => setExpanded(false)}
-          />
+      </div>
+      {expanded && (
+        <div className="border-t border-border p-3 space-y-3">
+          {canViewOrReanalyze && (
+            <div className="flex items-center gap-2 flex-wrap">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={handleWatch}
+                disabled={loadingVideo || reanalyzing || deleting}
+              >
+                {loadingVideo ? (
+                  <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Play className="mr-2 h-3.5 w-3.5" />
+                )}
+                {videoUrl ? "Reload video" : "Watch"}
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={handleReanalyze}
+                disabled={reanalyzing || loadingVideo || deleting}
+              >
+                {reanalyzing ? (
+                  <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <RotateCcw className="mr-2 h-3.5 w-3.5" />
+                )}
+                Re-analyze (1 quota)
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="text-muted-foreground hover:text-destructive ml-auto"
+                onClick={handleDelete}
+                disabled={deleting || reanalyzing || loadingVideo}
+              >
+                {deleting ? (
+                  <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Trash2 className="mr-2 h-3.5 w-3.5" />
+                )}
+                Delete video
+              </Button>
+            </div>
+          )}
+
+          {!canViewOrReanalyze && (
+            <p className="text-xs text-muted-foreground">
+              {deleted
+                ? "Video deleted from storage. The scoring result above is preserved."
+                : "Source video isn\u2019t available (older entry — video was removed after scoring)."}
+            </p>
+          )}
+
+          {rowError && (
+            <p className="text-xs text-destructive">{rowError}</p>
+          )}
+
+          {currentResult && (
+            <>
+              <TimelineView
+                result={currentResult}
+                duration={record.duration ?? 0}
+                videoSrc={videoUrl}
+              />
+              <ScoreResultCard
+                result={currentResult}
+                duration={record.duration ?? 0}
+                onClear={() => setExpanded(false)}
+              />
+            </>
+          )}
         </div>
       )}
     </div>
@@ -376,7 +670,7 @@ function ScoreResultCard({
 }) {
   return (
     <div className="space-y-4">
-      <Card>
+      <Card className="bg-gradient-to-b from-card to-muted/20">
         <CardHeader className="pb-3">
           <CardTitle className="flex items-center justify-between">
             <span className="flex items-center gap-2">
@@ -388,16 +682,33 @@ function ScoreResultCard({
             </span>
           </CardTitle>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex items-baseline justify-center gap-2 py-2">
-            <span className="text-5xl font-bold tabular-nums">
-              {result.overall.score.toFixed(1)}
-            </span>
-            <span className="text-2xl text-muted-foreground">/ 10</span>
-            <Badge className="ml-3 text-base">{result.overall.grade}</Badge>
+        <CardContent className="space-y-5">
+          <div className="flex flex-col items-center gap-3 py-4">
+            <div className="flex items-baseline gap-2">
+              <span className="text-7xl font-bold tabular-nums leading-none">
+                {result.overall.score.toFixed(1)}
+              </span>
+              <span className="text-2xl text-muted-foreground">/10</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <Badge className="text-sm px-3 py-0.5">
+                {result.overall.grade}
+              </Badge>
+              {result.overall.confidence === "low" && (
+                <Badge variant="outline" className="text-xs">
+                  low confidence
+                </Badge>
+              )}
+            </div>
+            {result.overall.impression && (
+              <p className="text-sm text-muted-foreground italic text-center max-w-lg pt-2">
+                <Quote className="inline h-3 w-3 mr-1 -mt-0.5 opacity-50" />
+                {result.overall.impression}
+              </p>
+            )}
           </div>
 
-          <div className="space-y-3">
+          <div className="space-y-3.5 pt-2 border-t border-border">
             {(Object.keys(CATEGORY_LABELS) as Array<keyof typeof CATEGORY_LABELS>).map(
               (key) => {
                 const cat = result.categories[key];
@@ -410,7 +721,11 @@ function ScoreResultCard({
                       </span>
                     </div>
                     <Progress value={cat.score * 10} className="h-1.5" />
-                    <p className="text-xs text-muted-foreground">{cat.notes}</p>
+                    {cat.notes && (
+                      <p className="text-xs text-muted-foreground pt-0.5">
+                        {cat.notes}
+                      </p>
+                    )}
                   </div>
                 );
               }
@@ -421,12 +736,18 @@ function ScoreResultCard({
 
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-base">Strengths</CardTitle>
+          <CardTitle className="text-base flex items-center gap-2">
+            <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+            Strengths
+          </CardTitle>
         </CardHeader>
         <CardContent>
-          <ul className="space-y-1.5 text-sm text-muted-foreground">
+          <ul className="space-y-2.5 text-sm">
             {result.strengths.map((s, i) => (
-              <li key={i}>• {s}</li>
+              <li key={i} className="flex items-start gap-2.5">
+                <CheckCircle2 className="h-4 w-4 text-emerald-400 mt-0.5 shrink-0" />
+                <span className="text-muted-foreground">{s}</span>
+              </li>
             ))}
           </ul>
         </CardContent>
@@ -434,12 +755,18 @@ function ScoreResultCard({
 
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-base">Areas to improve</CardTitle>
+          <CardTitle className="text-base flex items-center gap-2">
+            <Target className="h-4 w-4 text-amber-400" />
+            Areas to improve
+          </CardTitle>
         </CardHeader>
         <CardContent>
-          <ul className="space-y-1.5 text-sm text-muted-foreground">
+          <ul className="space-y-2.5 text-sm">
             {result.improvements.map((s, i) => (
-              <li key={i}>• {s}</li>
+              <li key={i} className="flex items-start gap-2.5">
+                <Target className="h-4 w-4 text-amber-400 mt-0.5 shrink-0" />
+                <span className="text-muted-foreground">{s}</span>
+              </li>
             ))}
           </ul>
         </CardContent>

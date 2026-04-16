@@ -27,6 +27,70 @@ from google.genai import types as genai_types
 from ..settings import settings
 
 
+def _extract_beat_context(video_path: str) -> str | None:
+    """Pull audio out of the video, run librosa beat tracking, and return a
+    prompt-ready string. Gemini's native audio understanding is good, but
+    giving it actual beat timestamps as context consistently tightens up
+    timing judgments (the canonical wcs-analyzer behavior).
+
+    Silent-fail on any error — this is a best-effort enrichment, not a
+    blocker.
+    """
+    try:
+        import librosa  # lazy import — heavy module
+
+        wav_path = tempfile.NamedTemporaryFile(delete=False, suffix=".wav").name
+        try:
+            subprocess.run(
+                [
+                    "ffmpeg",
+                    "-y",
+                    "-i",
+                    video_path,
+                    "-vn",
+                    "-ac",
+                    "1",
+                    "-ar",
+                    "22050",
+                    wav_path,
+                ],
+                capture_output=True,
+                check=True,
+                timeout=60,
+            )
+            y, sr = librosa.load(wav_path, sr=22050, mono=True)
+            tempo_raw, beat_times = librosa.beat.beat_track(
+                y=y, sr=sr, units="time"
+            )
+            if beat_times is None or len(beat_times) < 4:
+                return None
+            bpm = (
+                float(tempo_raw)
+                if not hasattr(tempo_raw, "__iter__")
+                else float(list(tempo_raw)[0])
+            )
+            # Show first ~12 seconds of beats as a prior (~24 beats at 120 BPM).
+            preview = [t for t in beat_times[:24].tolist()]
+            beats_str = ", ".join(f"{t:.2f}" for t in preview)
+            return (
+                "DETECTED MUSIC CONTEXT (from librosa beat tracking):\n"
+                f"- Estimated BPM: {bpm:.1f}\n"
+                f"- First beat times in seconds: {beats_str}\n"
+                "Use this as a strong prior for timing judgments — when a "
+                "dancer's weight change or anchor settle lands within "
+                "~100ms of a detected beat, count it as on-beat. Anchor "
+                "steps should land near beats 5 and 6 of each 8-count "
+                "phrase.\n"
+            )
+        finally:
+            try:
+                os.unlink(wav_path)
+            except OSError:
+                pass
+    except Exception:
+        return None
+
+
 # ─────────────────────────────────────────────────────────────────────
 # Prompts — ported from wcs-analyzer/src/wcs_analyzer/prompts.py
 # ─────────────────────────────────────────────────────────────────────
@@ -285,12 +349,48 @@ def _strip_code_fence(text: str) -> str:
 
 
 def _safe_parse_json(text: str) -> dict[str, Any] | None:
-    cleaned = _strip_code_fence(text)
+    cleaned = _strip_code_fence(text).strip()
+
+    # Happy path
     try:
         parsed = json.loads(cleaned)
+        return parsed if isinstance(parsed, dict) else None
     except json.JSONDecodeError:
+        pass
+
+    # Tolerant fallback: try to extract the first complete top-level JSON
+    # object by depth-counting braces. Handles trailing garbage, markdown
+    # fragments, or partial truncation past a valid object.
+    start = cleaned.find("{")
+    if start < 0:
         return None
-    return parsed if isinstance(parsed, dict) else None
+    depth = 0
+    in_string = False
+    escape = False
+    for i in range(start, len(cleaned)):
+        ch = cleaned[i]
+        if escape:
+            escape = False
+            continue
+        if ch == "\\":
+            escape = True
+            continue
+        if ch == '"':
+            in_string = not in_string
+            continue
+        if in_string:
+            continue
+        if ch == "{":
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth == 0:
+                try:
+                    parsed = json.loads(cleaned[start : i + 1])
+                    return parsed if isinstance(parsed, dict) else None
+                except json.JSONDecodeError:
+                    return None
+    return None
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -358,8 +458,12 @@ def _max_interval(categories: dict[str, dict[str, Any]]) -> float:
 def _build_gen_config(model: str) -> genai_types.GenerateContentConfig:
     config_kwargs: dict[str, Any] = {
         "system_instruction": SYSTEM_PROMPT,
-        "max_output_tokens": 8192,
+        # Rich schema (reasoning + sub-scores + off-beat moments +
+        # patterns + lead/follow) produces long outputs. 8192 was
+        # truncating mid-JSON on real dance videos with many events.
+        "max_output_tokens": 32768,
         "temperature": 0.0,
+        "response_mime_type": "application/json",
     }
     # Extended thinking — Gemini 3.x accepts thinking_config. We pass it
     # on a best-effort basis and fall back silently for older models.
@@ -474,6 +578,12 @@ def analyze_video_path(video_path: str) -> dict[str, Any]:
 
     try:
         prompt = GEMINI_VIDEO_PROMPT
+
+        # Prepend librosa-derived beat context to ground timing judgments.
+        beat_context = _extract_beat_context(video_path)
+        if beat_context:
+            prompt = f"{beat_context}\n\n{prompt}"
+
         if settings.enable_pattern_prepass:
             pre_pass_context = _run_pattern_pre_pass(
                 client, settings.gemini_model, uploaded
