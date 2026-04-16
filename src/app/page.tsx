@@ -361,16 +361,25 @@ export default function HomePage() {
 
               {/* Basic */}
               <Card className="border-primary/50 bg-card/40 backdrop-blur ring-1 ring-primary/30 relative">
-                <div className="absolute -top-3 left-1/2 -translate-x-1/2">
+                <div className="absolute -top-3 left-1/2 -translate-x-1/2 flex gap-2">
                   <Badge className="px-3">
                     <Sparkles className="h-3 w-3 mr-1" />
                     Most popular
+                  </Badge>
+                  <Badge
+                    variant="secondary"
+                    className="px-2 bg-amber-500/20 text-amber-200 border-amber-500/40"
+                  >
+                    Save 50%
                   </Badge>
                 </div>
                 <CardContent className="p-6 space-y-4 pt-8">
                   <div className="flex items-baseline justify-between">
                     <h3 className="text-xl font-bold">Basic</h3>
-                    <div className="flex items-baseline gap-1">
+                    <div className="flex items-baseline gap-1.5">
+                      <span className="text-base text-muted-foreground line-through">
+                        $20
+                      </span>
                       <span className="text-2xl font-bold">$10</span>
                       <span className="text-sm text-muted-foreground">
                         /mo
@@ -378,7 +387,10 @@ export default function HomePage() {
                     </div>
                   </div>
                   <p className="text-sm text-muted-foreground">
-                    Serious practice. More videos, longer clips.
+                    Serious practice. More videos, longer clips.{" "}
+                    <span className="text-amber-200">
+                      Launch pricing — $10/mo while it lasts.
+                    </span>
                   </p>
                   <ul className="space-y-2 text-sm pt-2">
                     <li className="flex items-start gap-2">
@@ -401,7 +413,7 @@ export default function HomePage() {
                     </li>
                   </ul>
                   <Button className="w-full mt-4" asChild>
-                    <Link href="/login">Upgrade to Basic</Link>
+                    <Link href="/login">Upgrade to Basic — $10/mo</Link>
                   </Button>
                 </CardContent>
               </Card>
