@@ -12,6 +12,7 @@ import {
   Activity,
   RefreshCw,
   ShieldAlert,
+  MessageSquare,
 } from "lucide-react";
 import { getAdminStats, type AdminStats } from "@/lib/wcs-api";
 
@@ -163,6 +164,50 @@ export default function AdminPage() {
             </div>
           ) : (
             <p className="text-sm text-muted-foreground">No signups yet.</p>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Recent feature requests */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center justify-between">
+            <span className="flex items-center gap-2">
+              <MessageSquare className="h-4 w-4" />
+              Recent feature requests
+            </span>
+            <Badge variant="secondary">
+              {stats.total_feature_requests} total
+            </Badge>
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {stats.recent_feature_requests?.length ? (
+            <div className="space-y-3">
+              {stats.recent_feature_requests.map((f) => (
+                <div
+                  key={f.id}
+                  className="border border-border rounded-lg p-3 space-y-1.5"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <p className="font-medium text-sm">{f.title}</p>
+                    <span className="text-xs text-muted-foreground tabular-nums shrink-0">
+                      {formatDate(f.created_at)}
+                    </span>
+                  </div>
+                  {f.description && (
+                    <p className="text-xs text-muted-foreground whitespace-pre-wrap">
+                      {f.description}
+                    </p>
+                  )}
+                  <p className="text-xs text-muted-foreground italic">
+                    — {f.email || "anonymous"}
+                  </p>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">No feedback yet.</p>
           )}
         </CardContent>
       </Card>

@@ -209,6 +209,7 @@ export type AdminStats = {
   total_music_analyses: number;
   active_users_7d: number;
   active_users_30d: number;
+  total_feature_requests: number;
   recent_signups: Array<{
     id: string;
     email: string;
@@ -221,6 +222,13 @@ export type AdminStats = {
     duration: number;
     created_at: string;
     email: string;
+  }>;
+  recent_feature_requests: Array<{
+    id: string;
+    email: string | null;
+    title: string;
+    description: string | null;
+    created_at: string;
   }>;
 };
 
