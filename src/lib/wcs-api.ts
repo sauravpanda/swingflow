@@ -172,6 +172,10 @@ export type VideoScoreResult = {
   follow?: VideoPartnerScore;
   estimated_bpm?: number;
   song_style?: string;
+  // Non-empty when the server sanity check flagged implausible
+  // results (e.g. "intro lasted 60s") that even one retry couldn't
+  // fully fix. Surfaced as a low-confidence hint in the UI.
+  sanity_warnings?: string[];
 };
 
 export type VideoQuota = {

@@ -609,11 +609,96 @@ def _run_pattern_pre_pass(
 # Main entry point
 # ─────────────────────────────────────────────────────────────────────
 
-def analyze_video_path(video_path: str) -> dict[str, Any]:
+def _build_user_context(context: dict[str, Any] | None) -> str:
+    """Turn the optional tag/role/level/event metadata from the
+    upload form into a short context block for Gemini. Keeps the
+    model grounded on what the user *says* they are (and is at),
+    while still scoring against the objective WSDC rubric.
+    """
+    if not context:
+        return ""
+    fields = []
+    if context.get("role"):
+        fields.append(f"- Role: {context['role']}")
+    if context.get("competition_level"):
+        fields.append(f"- Self-reported level: {context['competition_level']}")
+    if context.get("event_name"):
+        event_line = f"- Event: {context['event_name']}"
+        if context.get("stage"):
+            event_line += f" ({context['stage']})"
+        fields.append(event_line)
+    elif context.get("stage"):
+        fields.append(f"- Stage: {context['stage']}")
+    if context.get("event_date"):
+        fields.append(f"- Event date: {context['event_date']}")
+    if context.get("tags"):
+        tags = context["tags"]
+        if isinstance(tags, (list, tuple)) and tags:
+            fields.append(f"- Tags: {', '.join(str(t) for t in tags)}")
+
+    if not fields:
+        return ""
+    return (
+        "USER-PROVIDED CONTEXT:\n"
+        + "\n".join(fields)
+        + "\n\nCalibrate your scoring against the self-reported level — "
+        "a Novice scoring 6/10 is different from a Champion scoring 6/10, "
+        "and your reasoning should reflect the dancer's stated tier. "
+        "If the video clearly shows a dancer at a different level than "
+        "what they self-report, score based on what you observe and say "
+        "so in the reasoning. Use the event / stage info to decide how "
+        "formal the scoring should feel (Finals on the floor vs. a "
+        "practice social).\n"
+    )
+
+
+def _build_sanity_retry_prompt(
+    issues: list[str], previous_raw: str
+) -> str:
+    """Construct a correction prompt for a second Gemini pass when
+    the first response tripped sanity checks. We include the prior
+    response so the model can patch it rather than start over.
+    """
+    issue_lines = "\n".join(f"- {i}" for i in issues)
+    return (
+        "SANITY CHECK FAILED on your previous response. "
+        "The following issues were detected:\n"
+        f"{issue_lines}\n\n"
+        "Revise your response to fix these specific issues. "
+        "Non-dance labels like 'intro', 'waiting', 'starter step', "
+        "or 'unknown' should be 1-8 seconds — if one of yours is "
+        "longer, what's actually happening in that span? Walking "
+        "on, counting beats, and the first real pattern are "
+        "different entries. Every pattern window should be 3-8 "
+        "seconds — if yours is longer, it's a merge of repeats. "
+        "Cover the full video with no gaps larger than ~8 seconds. "
+        "Return the complete revised JSON in the same format as "
+        "before.\n\n"
+        f"YOUR PREVIOUS RESPONSE (for reference, do not copy blindly):\n"
+        f"{previous_raw[:6000]}\n"
+    )
+
+
+def analyze_video_path(
+    video_path: str,
+    duration_sec: float | None = None,
+    context: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     """Upload video → optional pattern pre-pass → WSDC scoring call → parse.
 
     Returns a dict shaped for the Swingflow frontend plus rich audit
     fields (reasoning, score_low/high, off_beat_moments, patterns).
+
+    `context` is optional user-provided metadata (role, level, event,
+    stage, tags) from the upload form. When present, it's prepended
+    to the prompt so Gemini can calibrate scoring against the
+    self-reported tier.
+
+    `duration_sec` feeds the post-hoc sanity check (pattern density
+    expectation + gap detection). When a sanity issue is found, we
+    do ONE retry with the issues as corrective feedback. Retries
+    cost one extra Gemini call (~$0.30 on 3.x Pro) but fix the
+    "intro lasted 60s" class of hallucination without user intervention.
     """
     if not settings.gemini_api_key:
         raise VideoAnalysisError("GEMINI_API_KEY not configured")
@@ -638,8 +723,17 @@ def analyze_video_path(video_path: str) -> dict[str, Any]:
     total_prompt_tokens = 0
     total_response_tokens = 0
 
+    sanity_warnings: list[str] = []
+
     try:
         prompt = GEMINI_VIDEO_PROMPT
+
+        # User-provided metadata (level, role, event, stage, tags)
+        # sits at the top of the prompt so Gemini calibrates against
+        # the stated tier. Empty string when no context was supplied.
+        user_context = _build_user_context(context)
+        if user_context:
+            prompt = f"{user_context}\n{prompt}"
 
         # Prepend librosa-derived beat context to ground timing judgments.
         beat_context = _extract_beat_context(video_path)
@@ -661,18 +755,50 @@ def analyze_video_path(video_path: str) -> dict[str, Any]:
         )
         total_prompt_tokens += int(main_usage.get("prompt_tokens", 0))
         total_response_tokens += int(main_usage.get("response_tokens", 0))
+
+        parsed = _safe_parse_json(raw)
+        if parsed is None:
+            raise VideoAnalysisError(
+                f"Gemini returned unparseable JSON: {raw[:200]}"
+            )
+
+        # Sanity check: if the response has obvious implausibilities
+        # (e.g. "intro lasted 60s" or only 2 patterns for a 2-minute
+        # clip), do ONE corrective retry with the specific issues
+        # fed back to the model. If the retry still has issues, we
+        # accept it and surface the warnings in the response so the
+        # frontend can display a "low confidence" badge.
+        issues = _sanity_check(parsed, duration_sec)
+        if issues:
+            retry_prompt = _build_sanity_retry_prompt(issues, raw)
+            try:
+                retry_raw, retry_usage = _call_gemini(
+                    client,
+                    settings.gemini_model,
+                    contents=[uploaded, retry_prompt],
+                )
+                total_prompt_tokens += int(retry_usage.get("prompt_tokens", 0))
+                total_response_tokens += int(retry_usage.get("response_tokens", 0))
+                retry_parsed = _safe_parse_json(retry_raw)
+                if retry_parsed is not None:
+                    # Only accept the retry if it's strictly better —
+                    # otherwise keep the original + warnings.
+                    retry_issues = _sanity_check(retry_parsed, duration_sec)
+                    if len(retry_issues) < len(issues):
+                        parsed = retry_parsed
+                        sanity_warnings = retry_issues
+                    else:
+                        sanity_warnings = issues
+                else:
+                    sanity_warnings = issues
+            except VideoAnalysisError:
+                sanity_warnings = issues
     finally:
         # Best-effort cleanup of the Gemini-side file.
         try:
             client.files.delete(name=uploaded.name)
         except Exception:
             pass
-
-    parsed = _safe_parse_json(raw)
-    if parsed is None:
-        raise VideoAnalysisError(
-            f"Gemini returned unparseable JSON: {raw[:200]}"
-        )
 
     from .pricing import estimate_cost_micros, pricing_updated_on
 
@@ -685,9 +811,12 @@ def analyze_video_path(video_path: str) -> dict[str, Any]:
             settings.gemini_model, total_prompt_tokens, total_response_tokens
         ),
         "pricing_updated_on": pricing_updated_on(),
+        "sanity_retry": bool(sanity_warnings),
     }
 
-    return _shape_response(parsed, usage=usage)
+    return _shape_response(
+        parsed, usage=usage, sanity_warnings=sanity_warnings
+    )
 
 
 def _sanitize_patterns(
@@ -804,10 +933,118 @@ def _summarize_patterns(
     return summary
 
 
+def _sanity_check(
+    parsed: dict[str, Any],
+    duration_sec: float | None,
+) -> list[str]:
+    """Return a human-readable list of implausibility issues in
+    Gemini's response. Empty list = response looks reasonable.
+
+    The goal is to catch "model hallucinated a 60s intro" or
+    "claimed there's only 2 patterns in a 2-minute clip" before
+    we persist the result. Callers should use the issue list as
+    a correction prompt for a single retry.
+    """
+    issues: list[str] = []
+
+    patterns = parsed.get("patterns_identified") or []
+    if not isinstance(patterns, list):
+        return ["patterns_identified is missing or not a list"]
+
+    # 1. Non-dance labels that are suspiciously long. A real WCS
+    # intro / starter step / anchor-only moment is a few seconds;
+    # 15s+ means the model grouped 'walking onstage' or 'waiting'
+    # into one block and probably missed actual dancing inside it.
+    NON_DANCE = {
+        "intro",
+        "introduction",
+        "waiting",
+        "wait",
+        "unknown",
+        "starter step",
+        "pause",
+        "break",
+        "setup",
+        "preparation",
+    }
+    MAX_NON_DANCE_SEC = 15.0
+    MAX_ANY_PATTERN_SEC = 15.0
+
+    for p in patterns:
+        if not isinstance(p, dict):
+            continue
+        name = (p.get("name") or "").strip().lower()
+        try:
+            start = float(p.get("start_time"))
+            end = float(p.get("end_time"))
+        except (TypeError, ValueError):
+            continue
+        span = end - start
+        if span <= 0:
+            continue
+        if name in NON_DANCE and span > MAX_NON_DANCE_SEC:
+            issues.append(
+                f'"{name}" from {start:.0f}s to {end:.0f}s is '
+                f"{span:.0f}s long — too long for a non-dance segment; "
+                "something is actually happening in that window"
+            )
+        elif span > MAX_ANY_PATTERN_SEC:
+            issues.append(
+                f'pattern "{name}" at {start:.0f}s spans {span:.0f}s '
+                "— way too long for a single WCS window; likely merged repeats"
+            )
+
+    # 2. Not enough patterns for the video length. WCS runs at
+    # roughly one pattern per 4-6 seconds, so a 90s clip should
+    # have ~15-25 entries. Flag if we're under half that density.
+    if duration_sec and duration_sec > 30:
+        expected_min = max(5, int(duration_sec / 10))
+        if len(patterns) < expected_min:
+            issues.append(
+                f"only {len(patterns)} patterns identified for "
+                f"{int(duration_sec)}s of video — expected at least "
+                f"{expected_min} based on typical WCS pattern density"
+            )
+
+    # 3. Large uncovered gaps in the timeline. If the model skipped
+    # a 20-second stretch, it almost certainly missed patterns.
+    MAX_GAP_SEC = 10.0
+    timed = []
+    for p in patterns:
+        if not isinstance(p, dict):
+            continue
+        try:
+            timed.append(
+                (float(p.get("start_time")), float(p.get("end_time")))
+            )
+        except (TypeError, ValueError):
+            continue
+    timed.sort()
+    prev_end = 0.0
+    for start, end in timed:
+        gap = start - prev_end
+        if gap > MAX_GAP_SEC:
+            issues.append(
+                f"{gap:.0f}s gap between {prev_end:.0f}s and {start:.0f}s "
+                "has no pattern labeled"
+            )
+        prev_end = max(prev_end, end)
+    if duration_sec and duration_sec - prev_end > MAX_GAP_SEC:
+        issues.append(
+            f"last {duration_sec - prev_end:.0f}s of the video "
+            "(from ~{prev:.0f}s onwards) has no pattern labeled".format(
+                prev=prev_end
+            )
+        )
+
+    return issues
+
+
 def _shape_response(
     parsed: dict[str, Any],
     *,
     usage: dict[str, Any] | None = None,
+    sanity_warnings: list[str] | None = None,
 ) -> dict[str, Any]:
     """Map Gemini's rich response into the API's return shape.
 
@@ -848,6 +1085,7 @@ def _shape_response(
         "follow": parsed.get("follow"),
         "estimated_bpm": parsed.get("estimated_bpm"),
         "song_style": parsed.get("song_style"),
+        "sanity_warnings": sanity_warnings or [],
         "usage": usage,
     }
 

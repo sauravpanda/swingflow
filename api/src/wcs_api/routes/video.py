@@ -128,7 +128,22 @@ async def analyze_video_endpoint(
             )
 
         try:
-            result = analyze_video_path(tmp_path)
+            # Pass user-provided metadata as prompt context so the
+            # model calibrates against self-reported tier. Duration
+            # feeds the sanity-check heuristics (pattern density,
+            # gap detection) downstream.
+            result = analyze_video_path(
+                tmp_path,
+                duration_sec=duration,
+                context={
+                    "role": body.role,
+                    "competition_level": body.competition_level,
+                    "event_name": body.event_name,
+                    "event_date": body.event_date,
+                    "stage": body.stage,
+                    "tags": body.tags,
+                },
+            )
         except VideoAnalysisError as exc:
             raise HTTPException(status_code=502, detail=str(exc))
 

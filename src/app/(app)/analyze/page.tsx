@@ -1096,6 +1096,15 @@ function ScoreResultCard({
                   low confidence
                 </Badge>
               )}
+              {result.sanity_warnings && result.sanity_warnings.length > 0 && (
+                <Badge
+                  variant="outline"
+                  className="text-xs border-amber-500/40 text-amber-300"
+                  title={result.sanity_warnings.join("\n")}
+                >
+                  plausibility warnings ({result.sanity_warnings.length})
+                </Badge>
+              )}
             </div>
             {result.overall.impression && (
               <p className="text-sm text-muted-foreground italic text-center max-w-lg pt-2">
