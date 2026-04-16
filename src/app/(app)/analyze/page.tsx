@@ -41,6 +41,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { TimelineView } from "@/components/analyze/timeline-view";
+import { Analytics } from "@/lib/analytics";
 
 const ROLE_OPTIONS = ["Lead", "Follow", "Solo"] as const;
 const LEVEL_OPTIONS = [
@@ -187,11 +188,16 @@ export default function AnalyzePage() {
       .split(",")
       .map((t) => t.trim())
       .filter(Boolean);
+    // <input type="month"> gives us "YYYY-MM"; Postgres date column wants
+    // "YYYY-MM-DD" so we pin to the first of the month.
+    const normalizedDate = eventDate
+      ? `${eventDate}-01`
+      : undefined;
     analyze(file, {
       role: role || undefined,
       competitionLevel: competitionLevel || undefined,
       eventName: eventName.trim() || undefined,
-      eventDate: eventDate || undefined,
+      eventDate: normalizedDate,
       stage: stage || undefined,
       tags: tags.length ? tags : undefined,
     }).then(() => history.refresh());
@@ -278,7 +284,7 @@ export default function AnalyzePage() {
             <p className="text-sm text-muted-foreground">
               Upgrade to Basic for 10 videos / month and 5-minute clips.
             </p>
-            <Link href="/billing">
+            <Link href="/billing" onClick={() => Analytics.upgradeClicked({ source: "/analyze-paywall" })}>
               <Button className="w-full">Upgrade to Basic — $10/mo</Button>
             </Link>
           </CardContent>
@@ -348,7 +354,7 @@ export default function AnalyzePage() {
                   Optional tags (saved with the analysis)
                 </p>
 
-                <div className="grid grid-cols-2 gap-2.5">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                   <SelectWithOther
                     id="role"
                     label="Role"
@@ -371,7 +377,7 @@ export default function AnalyzePage() {
                   />
                 </div>
 
-                <div className="grid grid-cols-2 gap-2.5">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                   <div className="space-y-1">
                     <Label htmlFor="event" className="text-xs">
                       Event
@@ -386,11 +392,11 @@ export default function AnalyzePage() {
                   </div>
                   <div className="space-y-1">
                     <Label htmlFor="event-date" className="text-xs">
-                      Event date
+                      Event month
                     </Label>
                     <Input
                       id="event-date"
-                      type="date"
+                      type="month"
                       value={eventDate}
                       onChange={(e) => setEventDate(e.target.value)}
                       className="h-8 text-sm"
@@ -600,6 +606,7 @@ function HistoryRow({
         record.object_key,
         record.filename ?? "video.mp4"
       );
+      Analytics.analysisReanalyzed();
       setCurrentResult(resp.result);
       setExpanded(true);
       onReanalyzed();
@@ -640,6 +647,7 @@ function HistoryRow({
     setRowError(null);
     try {
       const token = await onShare(record.id);
+      Analytics.shareLinkCreated();
       const url = `${window.location.origin}/shared?t=${token}`;
       try {
         await navigator.clipboard.writeText(url);
@@ -676,6 +684,7 @@ function HistoryRow({
     setSharing(true);
     try {
       await onStopShare(record.id);
+      Analytics.shareLinkRevoked();
       setShareMessage("Sharing disabled");
       setTimeout(() => setShareMessage(null), 3000);
     } catch (err) {
@@ -694,17 +703,15 @@ function HistoryRow({
     setDeletingAnalysis(true);
     setRowError(null);
     try {
-      // Clean up the R2 object first if it still exists — otherwise the
-      // analysis row goes away but a ghost upload lingers until the 24h
-      // lifecycle rule collects it.
       if (record.object_key && !videoDeleted) {
         try {
           await deleteUploadedVideo(record.object_key);
         } catch {
-          // Non-fatal — row deletion is the important part.
+          // Non-fatal.
         }
       }
       await onDeleted(record.id);
+      Analytics.analysisDeleted();
     } catch (err) {
       setRowError(err instanceof Error ? err.message : "Delete failed");
       setDeletingAnalysis(false);
@@ -747,7 +754,7 @@ function HistoryRow({
               <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4">
                 {record.event_name}
                 {record.event_date
-                  ? ` · ${new Date(record.event_date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`
+                  ? ` · ${new Date(record.event_date).toLocaleDateString("en-US", { month: "short", year: "numeric" })}`
                   : ""}
               </Badge>
             )}
@@ -961,10 +968,10 @@ function ScoreResultCard({
         <CardContent className="space-y-5">
           <div className="flex flex-col items-center gap-3 py-4">
             <div className="flex items-baseline gap-2">
-              <span className="text-7xl font-bold tabular-nums leading-none">
+              <span className="text-5xl sm:text-7xl font-bold tabular-nums leading-none">
                 {result.overall.score.toFixed(1)}
               </span>
-              <span className="text-2xl text-muted-foreground">/10</span>
+              <span className="text-xl sm:text-2xl text-muted-foreground">/10</span>
             </div>
             <div className="flex items-center gap-2">
               <Badge className="text-sm px-3 py-0.5">

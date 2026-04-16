@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { getSupabase, isSupabaseConfigured } from "@/lib/supabase";
 import { useUser } from "@/hooks/use-user";
+import { Analytics } from "@/lib/analytics";
 
 export default function FeedbackPage() {
   const { user } = useUser();
@@ -46,6 +47,7 @@ export default function FeedbackPage() {
       setError(insertError.message);
       return;
     }
+    Analytics.feedbackSubmitted();
     setSubmitted(true);
     setTitle("");
     setDescription("");

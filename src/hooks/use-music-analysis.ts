@@ -6,6 +6,7 @@ import {
   isWcsApiConfigured,
   type MusicAnalysisResult,
 } from "@/lib/wcs-api";
+import { Analytics } from "@/lib/analytics";
 
 export type MusicAnalysisStatus = "idle" | "loading" | "success" | "error";
 
@@ -36,6 +37,10 @@ export function useMusicAnalysis() {
     setState({ status: "loading", result: null, error: null });
     try {
       const result = await analyzeMusic(file);
+      Analytics.musicAnalysisCompleted({
+        bpm: result.bpm,
+        duration: result.duration,
+      });
       setState({ status: "success", result, error: null });
     } catch (e) {
       const message = e instanceof Error ? e.message : "Analysis failed";
