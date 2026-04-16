@@ -26,6 +26,7 @@ import {
 } from "lucide-react";
 import { useVideoAnalysis } from "@/hooks/use-video-analysis";
 import { useAnalysisHistory, type AnalysisRecord } from "@/hooks/use-analysis-history";
+import { getLevelContext } from "@/lib/level-context";
 import {
   analyzeVideoFromKey,
   deleteUploadedVideo,
@@ -395,6 +396,11 @@ export default function AnalyzePage() {
         </Card>
       )}
 
+      {/* How scoring works — quietly collapsed by default so it
+          doesn't dominate the page, but always accessible for users
+          wondering what their score is based on. */}
+      {state.status !== "success" && <HowScoringWorksInfo />}
+
       {/* Uploader */}
       {!isPaywalled && state.status !== "success" && (
         <Card>
@@ -610,6 +616,7 @@ export default function AnalyzePage() {
           <ScoreResultCard
             result={state.result.result}
             duration={state.result.duration}
+            competitionLevel={competitionLevel || undefined}
             onClear={handleClear}
           />
           <Card>
@@ -1120,6 +1127,7 @@ function HistoryRow({
               <ScoreResultCard
                 result={currentResult}
                 duration={record.duration ?? 0}
+                competitionLevel={record.competition_level}
                 onClear={() => setExpanded(false)}
               />
             </>
@@ -1133,12 +1141,18 @@ function HistoryRow({
 function ScoreResultCard({
   result,
   duration,
+  competitionLevel,
   onClear,
 }: {
   result: VideoScoreResult;
   duration: number;
+  competitionLevel?: string | null;
   onClear: () => void;
 }) {
+  const levelContext = getLevelContext(
+    result.overall.score,
+    competitionLevel
+  );
   return (
     <div className="space-y-4">
       <Card className="bg-gradient-to-b from-card to-muted/20">
@@ -1161,6 +1175,20 @@ function ScoreResultCard({
               </span>
               <span className="text-xl sm:text-2xl text-muted-foreground">/10</span>
             </div>
+            {levelContext && (
+              <span
+                className={`text-xs font-medium ${
+                  levelContext.tone === "above"
+                    ? "text-emerald-300"
+                    : levelContext.tone === "below"
+                    ? "text-amber-300"
+                    : "text-muted-foreground"
+                }`}
+                title={`Heuristic tier range for ${levelContext.matchedLevel}. Compares against typical WCS scoring bands, not peer data.`}
+              >
+                {levelContext.label}
+              </span>
+            )}
             <div className="flex items-center gap-2">
               <Badge className="text-sm px-3 py-0.5">
                 {result.overall.grade}
@@ -1289,6 +1317,130 @@ function ScoreResultCard({
         Analyze another video
       </Button>
     </div>
+  );
+}
+
+function HowScoringWorksInfo() {
+  return (
+    <Card className="border-primary/20 bg-primary/5">
+      <CardContent className="p-0">
+        <details className="group">
+          <summary className="flex items-center justify-between cursor-pointer list-none p-4 text-sm font-medium">
+            <span className="flex items-center gap-2">
+              <Sparkles className="h-4 w-4 text-primary" />
+              How scoring works
+            </span>
+            <span className="text-xs text-muted-foreground group-open:hidden">
+              Show details ▾
+            </span>
+            <span className="text-xs text-muted-foreground hidden group-open:inline">
+              Hide ▴
+            </span>
+          </summary>
+          <div className="px-4 pb-4 space-y-4 text-xs text-muted-foreground">
+            <div>
+              <p className="font-medium text-foreground mb-1.5">
+                WSDC-style scoring · 4 weighted categories
+              </p>
+              <ul className="space-y-1">
+                <li>
+                  <span className="font-mono text-foreground">30%</span>{" "}
+                  <span className="font-medium text-foreground">
+                    Timing & Rhythm
+                  </span>{" "}
+                  — on-beat dancing, triple-step precision, anchor-step
+                  placement, musical breaks
+                </li>
+                <li>
+                  <span className="font-mono text-foreground">30%</span>{" "}
+                  <span className="font-medium text-foreground">
+                    Technique
+                  </span>{" "}
+                  — posture, extension, footwork (heel-toe rolling), slot
+                  discipline, frame
+                </li>
+                <li>
+                  <span className="font-mono text-foreground">20%</span>{" "}
+                  <span className="font-medium text-foreground">Teamwork</span>{" "}
+                  — connection quality, shared weight, responsiveness,
+                  matched energy
+                </li>
+                <li>
+                  <span className="font-mono text-foreground">20%</span>{" "}
+                  <span className="font-medium text-foreground">
+                    Presentation
+                  </span>{" "}
+                  — musicality, styling, stage presence, creative movement
+                </li>
+              </ul>
+            </div>
+
+            <div>
+              <p className="font-medium text-foreground mb-1.5">
+                What affects your score
+              </p>
+              <ul className="space-y-1">
+                <li>
+                  <span className="font-medium text-foreground">Level</span>{" "}
+                  — calibrates the rubric. A Novice at 6.5 and a Champion
+                  at 6.5 are judged against different expectations in the
+                  written feedback.
+                </li>
+                <li>
+                  <span className="font-medium text-foreground">
+                    Focus on (who)
+                  </span>{" "}
+                  — when multiple dancers are in frame, this restricts
+                  scoring to the identified dancer(s) only.
+                </li>
+                <li>
+                  <span className="font-medium text-foreground">
+                    Role / Event / Stage / Tags
+                  </span>{" "}
+                  — context for the reasoning. Doesn&apos;t change the
+                  rubric; helps you filter and compare later.
+                </li>
+                <li>
+                  <span className="font-medium text-foreground">
+                    Audio quality
+                  </span>{" "}
+                  — the model listens to the music to judge on-beat
+                  dancing. Phone-mic clips are fine; completely silent
+                  video hurts Timing scoring.
+                </li>
+              </ul>
+            </div>
+
+            <div>
+              <p className="font-medium text-foreground mb-1.5">
+                What doesn&apos;t affect it
+              </p>
+              <ul className="space-y-1">
+                <li>
+                  Video quality and camera angle (within reason) — the
+                  model is tolerant of handheld phone footage
+                </li>
+                <li>
+                  Filename or tags — stored for your reference, not shown
+                  to the model
+                </li>
+                <li>
+                  Other analyses in your history — each clip is scored
+                  independently
+                </li>
+              </ul>
+            </div>
+
+            <p className="italic">
+              Scoring is a tool for reflection — use it to spot patterns
+              over time rather than as a definitive judgment on any one
+              run. The uncertainty band next to each score is the model&apos;s
+              honest confidence interval.
+            </p>
+          </div>
+        </details>
+      </CardContent>
+    </Card>
   );
 }
 

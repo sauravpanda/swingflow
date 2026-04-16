@@ -31,10 +31,26 @@ export type AnalysisRecord = {
  * history (including soft-deleted rows) without paying for the big
  * result JSON per row.
  */
+export type ChartMetric =
+  | "overall"
+  | "timing"
+  | "technique"
+  | "teamwork"
+  | "presentation";
+
 export type ChartRecord = {
   id: string;
   filename: string | null;
   score: number | null;
+  // Per-category scores so the dashboard trend chart can slice by
+  // Timing / Technique / Teamwork / Presentation in addition to
+  // the overall score. Null when the stored result lacks that
+  // category (shouldn't happen for any post-MVP analyses, but
+  // we defend against it).
+  timing: number | null;
+  technique: number | null;
+  teamwork: number | null;
+  presentation: number | null;
   event_name: string | null;
   stage: string | null;
   competition_level: string | null;
@@ -105,18 +121,25 @@ export function useAnalysisHistory() {
       competition_level: string | null;
       tags: string[] | null;
       result: VideoScoreResult | null;
-    }): ChartRecord => ({
-      id: r.id,
-      filename: r.filename,
-      score: r.result?.overall?.score ?? null,
-      event_name: r.event_name,
-      stage: r.stage,
-      competition_level: r.competition_level,
-      tags: r.tags,
-      event_date: r.event_date,
-      deleted_at: r.deleted_at,
-      created_at: r.created_at,
-    }));
+    }): ChartRecord => {
+      const cats = r.result?.categories;
+      return {
+        id: r.id,
+        filename: r.filename,
+        score: r.result?.overall?.score ?? null,
+        timing: cats?.timing?.score ?? null,
+        technique: cats?.technique?.score ?? null,
+        teamwork: cats?.teamwork?.score ?? null,
+        presentation: cats?.presentation?.score ?? null,
+        event_name: r.event_name,
+        stage: r.stage,
+        competition_level: r.competition_level,
+        tags: r.tags,
+        event_date: r.event_date,
+        deleted_at: r.deleted_at,
+        created_at: r.created_at,
+      };
+    });
     setChartRecords(chartData);
 
     setLoading(false);
