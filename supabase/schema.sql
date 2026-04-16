@@ -96,8 +96,12 @@ create table if not exists public.video_analyses (
   event_name        text,            -- optional: "Boogie by the Bay 2026 J&J"
   stage             text,            -- optional: prelims / quarters / semis / finals
   tags              text[] default '{}',  -- optional free-form user tags
+  share_token       text,            -- NULL = not shared; set = public read via /shared?t=<token>
   created_at        timestamptz not null default now()
 );
+create unique index if not exists video_analyses_share_token_idx
+  on public.video_analyses(share_token)
+  where share_token is not null;
 create index if not exists video_analyses_user_idx
   on public.video_analyses(user_id, created_at desc);
 
