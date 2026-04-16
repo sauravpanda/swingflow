@@ -9,6 +9,7 @@ import {
   Video,
   CreditCard,
   Settings,
+  MessageSquare,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -18,6 +19,7 @@ const navItems = [
   { href: "/analyze", label: "Analyze", icon: Video },
   { href: "/practice", label: "Practice", icon: Timer },
   { href: "/billing", label: "Billing", icon: CreditCard },
+  { href: "/feedback", label: "Feedback", icon: MessageSquare },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 

@@ -99,6 +99,27 @@ drop policy if exists video_analyses_self_select on public.video_analyses;
 create policy video_analyses_self_select on public.video_analyses
   for select using (auth.uid() = user_id);
 
+create table if not exists public.feature_requests (
+  id          uuid primary key default gen_random_uuid(),
+  user_id     uuid references public.profiles(id) on delete set null,
+  email       text,
+  title       text not null,
+  description text,
+  created_at  timestamptz not null default now()
+);
+create index if not exists feature_requests_created_idx
+  on public.feature_requests(created_at desc);
+
+alter table public.feature_requests enable row level security;
+
+drop policy if exists feature_requests_self_insert on public.feature_requests;
+create policy feature_requests_self_insert on public.feature_requests
+  for insert with check (auth.uid() = user_id);
+
+drop policy if exists feature_requests_self_select on public.feature_requests;
+create policy feature_requests_self_select on public.feature_requests
+  for select using (auth.uid() = user_id);
+
 -- ────────────────────────────────────────────────────────────
 -- Auto-create profile row when a new auth.users row appears
 -- ────────────────────────────────────────────────────────────

@@ -7,10 +7,11 @@ import {
   Video,
   Sparkles,
   Check,
-  Github,
   ArrowRight,
   Timer,
   Zap,
+  UserPlus,
+  History,
 } from "lucide-react";
 
 export default function HomePage() {
@@ -28,15 +29,6 @@ export default function HomePage() {
             <span className="text-lg font-semibold">SwingFlow</span>
           </div>
           <div className="flex items-center gap-2">
-            <a
-              href="https://github.com/sauravpanda/swingflow"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center justify-center h-9 w-9 rounded-md border border-border hover:bg-accent transition-colors"
-              aria-label="GitHub"
-            >
-              <Github className="h-4 w-4" />
-            </a>
             <Button variant="ghost" asChild>
               <Link href="/login">Sign in</Link>
             </Button>
@@ -86,11 +78,52 @@ export default function HomePage() {
           </div>
         </section>
 
-        {/* ─── Feature 1: Music analysis with the phrase-beat-grid mockup ─── */}
+        {/* ─── How it works ─── */}
         <section
           id="how-it-works"
-          className="container mx-auto px-4 py-16 sm:py-24"
+          className="border-t border-border/60 bg-card/20"
         >
+          <div className="container mx-auto px-4 py-16 sm:py-24">
+            <div className="text-center max-w-2xl mx-auto mb-12 space-y-3">
+              <div className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-primary">
+                <Sparkles className="h-4 w-4" />
+                How it works
+              </div>
+              <h2 className="text-3xl sm:text-4xl font-bold tracking-tight">
+                From song to feedback in four steps
+              </h2>
+            </div>
+            <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6 relative">
+              <ProcessStep
+                step={1}
+                icon={<UserPlus className="h-5 w-5" />}
+                title="Create your account"
+                description="Free, no credit card. Email and password, that's it."
+              />
+              <ProcessStep
+                step={2}
+                icon={<Music className="h-5 w-5" />}
+                title="Upload a song"
+                description="Get precise BPM, downbeats, 8-count phrases, and every anchor position marked — instantly."
+              />
+              <ProcessStep
+                step={3}
+                icon={<Video className="h-5 w-5" />}
+                title="Record your dance"
+                description="Upload a clip. Get WSDC-style scoring on timing, technique, teamwork, and presentation in about 60 seconds."
+              />
+              <ProcessStep
+                step={4}
+                icon={<History className="h-5 w-5" />}
+                title="Review and iterate"
+                description="Past analyses stay in your history. Compare, track progress, drill the weak spots."
+              />
+            </div>
+          </div>
+        </section>
+
+        {/* ─── Feature 1: Music analysis with the phrase-beat-grid mockup ─── */}
+        <section className="container mx-auto px-4 py-16 sm:py-24">
           <div className="grid lg:grid-cols-2 gap-10 items-center">
             <div className="space-y-5 order-2 lg:order-1">
               <div className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-primary">
@@ -476,5 +509,32 @@ function FeatureCard({
         <p className="text-sm text-muted-foreground">{description}</p>
       </CardContent>
     </Card>
+  );
+}
+
+function ProcessStep({
+  step,
+  icon,
+  title,
+  description,
+}: {
+  step: number;
+  icon: React.ReactNode;
+  title: string;
+  description: string;
+}) {
+  return (
+    <div className="relative text-center space-y-3">
+      <div className="relative mx-auto">
+        <div className="h-14 w-14 mx-auto rounded-xl bg-primary/10 text-primary flex items-center justify-center border border-primary/30">
+          {icon}
+        </div>
+        <div className="absolute -top-2 -right-2 sm:left-1/2 sm:-translate-x-1/2 sm:right-auto sm:top-auto sm:-bottom-2 h-6 w-6 rounded-full bg-primary text-primary-foreground text-xs font-bold flex items-center justify-center">
+          {step}
+        </div>
+      </div>
+      <h3 className="font-semibold pt-3">{title}</h3>
+      <p className="text-sm text-muted-foreground">{description}</p>
+    </div>
   );
 }
