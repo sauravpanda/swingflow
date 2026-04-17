@@ -61,18 +61,29 @@ export function TimelineView({
   const [playing, setPlaying] = useState(false);
   const [hovered, setHovered] = useState<VideoPatternIdentified | null>(null);
   const [selected, setSelected] = useState<VideoPatternIdentified | null>(null);
+  // Video element's actual playback duration, captured on
+  // loadedmetadata. Preferred over the ffprobe-reported `duration`
+  // prop because the video element is the source of truth for the
+  // playhead's position — any mismatch between the two would make
+  // pattern blocks visually drift as the video plays. Zero means
+  // "not loaded yet; use the prop".
+  const [videoDuration, setVideoDuration] = useState(0);
   // On touch devices there's no hover — tap sticks a selection that
   // shows the same detail card below the timeline.
   const detail = hovered ?? selected;
 
   const effectiveDuration = useMemo(() => {
+    // Video element wins once metadata loads — that's the exact
+    // timeline the playhead moves along, so patterns positioned
+    // against it stay in sync.
+    if (videoDuration > 0) return videoDuration;
     if (duration > 0) return duration;
     const fromPatterns = (result.patterns_identified ?? []).reduce(
       (m, p) => Math.max(m, p.end_time ?? 0),
       0
     );
     return Math.max(fromPatterns, 1);
-  }, [duration, result.patterns_identified]);
+  }, [videoDuration, duration, result.patterns_identified]);
 
   useEffect(() => {
     const v = videoRef.current;
@@ -80,21 +91,54 @@ export function TimelineView({
     const onTime = () => setCurrentTime(v.currentTime);
     const onPlay = () => setPlaying(true);
     const onPause = () => setPlaying(false);
+    const onLoadedMetadata = () => {
+      if (v.duration && Number.isFinite(v.duration)) {
+        setVideoDuration(v.duration);
+      }
+    };
     v.addEventListener("timeupdate", onTime);
     v.addEventListener("play", onPlay);
     v.addEventListener("pause", onPause);
+    v.addEventListener("loadedmetadata", onLoadedMetadata);
+    // If metadata already loaded (e.g. the element was remounted
+    // with a cached video), pick up duration immediately.
+    if (v.readyState >= 1) onLoadedMetadata();
     return () => {
       v.removeEventListener("timeupdate", onTime);
       v.removeEventListener("play", onPlay);
       v.removeEventListener("pause", onPause);
+      v.removeEventListener("loadedmetadata", onLoadedMetadata);
     };
   }, [videoSrc]);
 
+  // Reset captured duration when the src changes so we re-latch
+  // onto the new video's metadata instead of reusing the old one.
+  useEffect(() => {
+    setVideoDuration(0);
+  }, [videoSrc]);
+
   const seek = (t: number) => {
-    setCurrentTime(t);
+    const clamped = Math.max(0, Math.min(t, effectiveDuration));
+    setCurrentTime(clamped);
     const v = videoRef.current;
     if (v) {
-      v.currentTime = t;
+      // Some browsers (Safari especially) silently ignore
+      // `currentTime` assignment before metadata loads. Wait for
+      // readyState >= 1 so the seek actually lands.
+      if (v.readyState < 1) {
+        const onReady = () => {
+          v.currentTime = clamped;
+          v.removeEventListener("loadedmetadata", onReady);
+          if (!playing) {
+            v.play().catch(() => {
+              /* user gesture required */
+            });
+          }
+        };
+        v.addEventListener("loadedmetadata", onReady);
+        return;
+      }
+      v.currentTime = clamped;
       if (!playing) {
         v.play().catch(() => {
           /* user gesture required */
@@ -147,8 +191,14 @@ export function TimelineView({
           aria-label="Pattern timeline"
         >
           {patterns.map((p, i) => {
-            const start = p.start_time ?? 0;
-            const end = p.end_time ?? start;
+            // Clamp start/end to the effective timeline so patterns
+            // whose model-reported end_time slightly overshoots the
+            // video don't render off the right edge. Also guards
+            // against negative start_times from bad model output.
+            const rawStart = p.start_time ?? 0;
+            const rawEnd = p.end_time ?? rawStart;
+            const start = Math.max(0, Math.min(rawStart, effectiveDuration));
+            const end = Math.max(start, Math.min(rawEnd, effectiveDuration));
             const left = (start / effectiveDuration) * 100;
             const width = Math.max(
               0.8,
