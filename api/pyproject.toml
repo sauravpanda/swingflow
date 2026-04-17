@@ -29,4 +29,9 @@ build-backend = "hatchling.build"
 packages = ["src/wcs_api"]
 
 [tool.uv.sources]
-beat-this = { git = "https://github.com/CPJKU/beat_this.git" }
+# Pinned to a specific commit so `uv lock` regen doesn't silently
+# pull HEAD of a third-party git repo into our container. Supply-
+# chain hygiene — bump the rev manually after reviewing upstream
+# changes. CPJKU is the Johannes Kepler University Linz CP lab
+# (authors of the Beat This! ISMIR 2024 paper).
+beat-this = { git = "https://github.com/CPJKU/beat_this.git", rev = "9d787b9797eaa325856a20897187734175467074" }
