@@ -402,20 +402,11 @@ export default function HomePage() {
                     <Sparkles className="h-3 w-3 mr-1" />
                     Most popular
                   </Badge>
-                  <Badge
-                    variant="secondary"
-                    className="px-2 bg-amber-500/20 text-amber-200 border-amber-500/40"
-                  >
-                    Save 50%
-                  </Badge>
                 </div>
                 <CardContent className="p-6 space-y-4 pt-8">
                   <div className="flex items-baseline justify-between">
                     <h3 className="text-xl font-bold">Basic</h3>
-                    <div className="flex items-baseline gap-1.5">
-                      <span className="text-base text-muted-foreground line-through">
-                        $20
-                      </span>
+                    <div className="flex items-baseline gap-1">
                       <span className="text-2xl font-bold">$10</span>
                       <span className="text-sm text-muted-foreground">
                         /mo
@@ -424,9 +415,11 @@ export default function HomePage() {
                   </div>
                   <p className="text-sm text-muted-foreground">
                     Serious practice. More videos, longer clips.{" "}
-                    <span className="text-amber-200">
-                      Launch pricing — $10/mo while it lasts.
-                    </span>
+                    <span className="text-foreground font-medium">
+                      Break-even pricing
+                    </span>{" "}
+                    — each analysis costs ~$1 to run on a frontier AI
+                    model; 10 at $10/mo is cost-recovery, not profit.
                   </p>
                   <ul className="space-y-2 text-sm pt-2">
                     <li className="flex items-start gap-2">
