@@ -478,7 +478,9 @@ Respond in this exact JSON format. Fill `reasoning` BEFORE `score` in each categ
       "end_time": <seconds from video start, float>,
       "quality": "<strong|solid|needs_work|weak>",
       "timing": "<on_beat|slightly_off|off_beat>",
-      "notes": "<what was good or needs improvement in this pattern>"
+      "notes": "<what was good or needs improvement in this pattern>",
+      "styling": "<brief description of styling observed during this pattern — body rolls, arm styling, footwork flourishes, musical hits, syncopations. Use null when nothing notable. DO NOT invent styling that wasn't there.>",
+      "coaching_tip": "<one concrete, actionable suggestion specific to THIS pattern (e.g. 'stretch the anchor 2 extra beats to match the blues pocket', 'less arm on the lead into this whip — drive from the core'). Use null for patterns that execute cleanly and don't need targeted work.>"
     }
   ],
   "highlights": ["<notable positive moments with approximate timestamps>"],
@@ -507,6 +509,7 @@ Constraints on patterns_identified:
 - If a segment is truly unclear, name it "unknown", keep it short (≤8s), and explain in notes.
 - start_time and end_time are decimal seconds from the video start.
 - Use the beat grid in the context (if provided) to anchor window boundaries near anchor steps (beats 5–6).
+- `styling` and `coaching_tip`: populate when there's something real to say. Return null (not empty string) when a pattern is unremarkable — it's better to say nothing than to invent filler. These should feel like a coach's post-dance notes, not AI-generated text.
 
 Only output valid JSON, no other text. Do not include // comments inside the JSON.\
 """
@@ -1196,6 +1199,11 @@ def _summarize_patterns(
     qualities: dict[str, list[str]] = defaultdict(list)
     timings: dict[str, list[str]] = defaultdict(list)
     notes: dict[str, list[str]] = defaultdict(list)
+    # Keep styling + coaching_tips dedup'd per pattern too — an
+    # expressive dancer may land the same body-roll on multiple
+    # sugar pushes, and we only want to surface that once.
+    stylings: dict[str, list[str]] = defaultdict(list)
+    tips: dict[str, list[str]] = defaultdict(list)
 
     for p in patterns:
         raw_name = (p.get("name") or "").strip()
@@ -1213,6 +1221,12 @@ def _summarize_patterns(
         n = (p.get("notes") or "").strip()
         if n and n not in notes[key]:
             notes[key].append(n)
+        styling_val = (p.get("styling") or "").strip()
+        if styling_val and styling_val not in stylings[key]:
+            stylings[key].append(styling_val)
+        tip_val = (p.get("coaching_tip") or "").strip()
+        if tip_val and tip_val not in tips[key]:
+            tips[key].append(tip_val)
 
     def _most_common(items: list[str]) -> str | None:
         return Counter(items).most_common(1)[0][0] if items else None
@@ -1226,6 +1240,12 @@ def _summarize_patterns(
                 "quality": _most_common(qualities[key]),
                 "timing": _most_common(timings[key]),
                 "notes": " · ".join(notes[key][:3]) if notes[key] else None,
+                "styling": (
+                    " · ".join(stylings[key][:2]) if stylings[key] else None
+                ),
+                "coaching_tip": (
+                    " · ".join(tips[key][:2]) if tips[key] else None
+                ),
             }
         )
     return summary
