@@ -11,7 +11,11 @@ app.add_middleware(
     allow_origins=settings.allowed_origins_list,
     allow_credentials=True,
     allow_methods=["GET", "POST", "OPTIONS"],
-    allow_headers=["Authorization", "Content-Type"],
+    # X-Swingflow-View is sent by fetchSharedAnalysis so the backend
+    # knows it's a real frontend load (not a Slackbot unfurl). Custom
+    # request headers require explicit CORS allow-list entries or the
+    # preflight fails and the browser reports "Failed to fetch".
+    allow_headers=["Authorization", "Content-Type", "X-Swingflow-View"],
 )
 
 app.include_router(health.router)
