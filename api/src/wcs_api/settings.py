@@ -24,14 +24,13 @@ class Settings(BaseSettings):
     # `limit: 0`. Production can override to `gemini-2.5-flash` via
     # the `GEMINI_MODEL` env var on Railway until billing is enabled.
     gemini_model: str = "gemini-3.1-pro-preview"
-    # When enabled, runs a dedicated Gemini call asking ONLY about the
-    # pattern timeline, then injects the result as context into the
-    # main scoring call. wcs-analyzer found this improves scoring
-    # quality, but it doubles Gemini spend per video. Since we now ask
-    # the main prompt to emit start_time/end_time directly in
-    # patterns_identified, the pre-pass is an opt-in precision mode for
-    # cases where the main call mis-identifies patterns. Default off.
-    enable_pattern_prepass: bool = False
+    # Dedicated Gemini pass focused only on pattern identification.
+    # Enabled by default — users were reporting "everything defaults
+    # to sugar push / basic," and a focused pre-pass with thinking_
+    # level=high + detailed pattern reference materially improves
+    # pattern distinction (whip vs side pass, tuck vs underarm,
+    # etc.). Roughly doubles per-analysis Gemini cost.
+    enable_pattern_prepass: bool = True
     max_video_bytes: int = 500 * 1024 * 1024  # 500 MB — we upload direct to R2 now, no proxy
     r2_account_id: str = ""
     r2_access_key_id: str = ""
