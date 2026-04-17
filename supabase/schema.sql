@@ -79,7 +79,10 @@ alter table public.profiles      enable row level security;
 alter table public.subscriptions enable row level security;
 alter table public.usage_events  enable row level security;
 
--- Profiles: user reads/updates own row. Service role bypasses RLS automatically.
+-- Profiles: user reads/updates own row. RLS scopes which ROWS
+-- (their own); column-level GRANTs (below) restrict which COLUMNS
+-- they can touch so they can't self-grant Basic plan or bump their
+-- quota overrides. Service role bypasses RLS + GRANTs automatically.
 drop policy if exists profiles_self_select on public.profiles;
 create policy profiles_self_select on public.profiles
   for select using (auth.uid() = id);
@@ -87,6 +90,14 @@ create policy profiles_self_select on public.profiles
 drop policy if exists profiles_self_update on public.profiles;
 create policy profiles_self_update on public.profiles
   for update using (auth.uid() = id);
+
+-- Authenticated users may only update their own `email` column.
+-- Everything else (plan, monthly_video_override, max_video_seconds_
+-- override, stripe_customer_id) is service-role-only — those are
+-- set by the backend when Stripe webhooks fire or when an admin
+-- manually grants overrides via the service key.
+revoke update on public.profiles from authenticated;
+grant update (email) on public.profiles to authenticated;
 
 -- Subscriptions: user reads own. Only service role writes (Stripe webhook).
 drop policy if exists subscriptions_self_select on public.subscriptions;
@@ -174,6 +185,27 @@ drop policy if exists video_analyses_self_delete on public.video_analyses;
 create policy video_analyses_self_delete on public.video_analyses
   for delete using (auth.uid() = user_id);
 
+-- Authenticated users can update only the fields they have business
+-- editing: share_token (Share / Stop sharing), deleted_at (soft-delete
+-- from the list), filename + optional metadata (tags / role / event /
+-- level / stage / dancer_description). Everything score-related —
+-- result, duration, model, token counts, cost_usd_micros, share_view_
+-- count, share_last_viewed_at — is service-role-only so users can't
+-- tamper with their own scores or inflate view counts.
+revoke update on public.video_analyses from authenticated;
+grant update (
+  share_token,
+  deleted_at,
+  filename,
+  role,
+  competition_level,
+  event_name,
+  event_date,
+  stage,
+  tags,
+  dancer_description
+) on public.video_analyses to authenticated;
+
 create table if not exists public.feature_requests (
   id          uuid primary key default gen_random_uuid(),
   user_id     uuid references public.profiles(id) on delete set null,
@@ -222,7 +254,14 @@ create trigger on_auth_user_created
 -- Current-month usage view (calendar month reset)
 -- ────────────────────────────────────────────────────────────
 
-create or replace view public.current_month_usage as
+-- security_invoker=on makes the view run as the CALLER, not the view
+-- owner — so the underlying usage_events RLS scoping (user sees only
+-- their own rows) is enforced when the Supabase JS client queries the
+-- view. Without this, views default to security_invoker=off and
+-- bypass RLS, leaking other users' usage counts.
+create or replace view public.current_month_usage
+  with (security_invoker = on)
+as
   select
     user_id,
     kind,
