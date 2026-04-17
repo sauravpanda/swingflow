@@ -16,6 +16,10 @@ import {
 } from "lucide-react";
 import { fetchSharedAnalysis, type SharedAnalysis } from "@/lib/wcs-api";
 import { TimelineView } from "@/components/analyze/timeline-view";
+import {
+  PatternSummaryCard,
+  derivePatternSummary,
+} from "@/components/analyze/pattern-summary";
 import { Analytics } from "@/lib/analytics";
 
 function scoreBarColor(score: number): string {
@@ -221,6 +225,18 @@ function SharedAnalysisContent() {
             <TimelineView result={result} duration={duration ?? 0} />
           </CardContent>
         </Card>
+
+        {/* Patterns summary — client-side derivation handles older
+            analyses that lack `pattern_summary` on the stored JSON. */}
+        {(() => {
+          const summary =
+            result.pattern_summary && result.pattern_summary.length > 0
+              ? result.pattern_summary
+              : derivePatternSummary(result.patterns_identified);
+          return summary.length > 0 ? (
+            <PatternSummaryCard summary={summary} />
+          ) : null;
+        })()}
 
         {/* Strengths */}
         {result.strengths?.length > 0 && (
