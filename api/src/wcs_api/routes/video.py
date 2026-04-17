@@ -2,7 +2,7 @@ import os
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from ..auth import verify_jwt
 from ..services import quota, r2, supabase_admin
@@ -17,20 +17,25 @@ router = APIRouter(prefix="/analyze/video", tags=["analyze"])
 
 
 class VideoAnalyzeBody(BaseModel):
-    object_key: str
-    filename: str | None = None
-    role: str | None = None
-    competition_level: str | None = None
-    event_name: str | None = None
-    event_date: str | None = None  # ISO date string (YYYY-MM-DD)
-    stage: str | None = None
-    tags: list[str] | None = None
+    # Length caps on every free-text field are pure prompt-injection
+    # defense: these values get interpolated into the Gemini prompt,
+    # so we want to bound how much text an attacker could stuff in.
+    # Picked generously — real WCS metadata comfortably fits within.
+    object_key: str = Field(max_length=256)
+    filename: str | None = Field(default=None, max_length=256)
+    role: str | None = Field(default=None, max_length=40)
+    competition_level: str | None = Field(default=None, max_length=40)
+    event_name: str | None = Field(default=None, max_length=120)
+    # ISO date string (YYYY-MM-DD) — validated loosely by max_length;
+    # insert_video_analysis lets Postgres coerce the final value.
+    event_date: str | None = Field(default=None, max_length=20)
+    stage: str | None = Field(default=None, max_length=60)
+    # Up to 10 tags, each ≤30 chars — well beyond any realistic use.
+    tags: list[str] | None = Field(default=None, max_length=10)
     # Free-text description of which dancer / couple to focus on
     # when multiple people are in frame (e.g. "couple in the red
     # dress and blue shirt", "the lead on the far right"). Fed into
-    # Gemini's DANCER IDENTIFICATION block. Capped at 200 chars to
-    # keep the prompt overhead bounded and prevent prompt injection
-    # via a multi-paragraph dump.
+    # Gemini's DANCER IDENTIFICATION block.
     dancer_description: str | None = Field(default=None, max_length=200)
     # Opt-in video retention. Default False = we delete the R2
     # object after scoring (privacy-preserving default). True =
@@ -38,6 +43,16 @@ class VideoAnalyzeBody(BaseModel):
     # pattern timeline / off-beat markers. User can still click
     # "Delete video" on the history row to remove it any time.
     store_video: bool = False
+
+    @field_validator("tags")
+    @classmethod
+    def _cap_tag_length(cls, v: list[str] | None) -> list[str] | None:
+        # Per-element length cap for tags. list-level cap is done
+        # via Field(max_length=...), but pydantic doesn't enforce
+        # element-length there.
+        if v is None:
+            return v
+        return [t[:30] for t in v if t]
 
 
 def _admin_error_to_http(exc: httpx.HTTPStatusError) -> HTTPException:
