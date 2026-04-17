@@ -31,7 +31,7 @@ import {
   ACCENT_PATTERNS,
   getSubdivisionLabelsForBeatCount,
 } from "@/lib/rhythm-constants";
-import { Music } from "lucide-react";
+import { Music, Laptop } from "lucide-react";
 
 function getRandomSubdivision(max = 8): SubdivisionIndex {
   return Math.floor(Math.random() * max) as SubdivisionIndex;
@@ -321,6 +321,19 @@ export default function RhythmPage() {
         <p className="text-muted-foreground mt-1">
           Practice 16th note subdivisions for West Coast Swing
         </p>
+      </div>
+
+      {/* Mobile advisory — the tap-timing challenge mode uses the
+          spacebar, which doesn't exist on phones. Keyboard-less
+          browsers work for watching/listening but not for the
+          accuracy-measuring challenge mode. */}
+      <div className="sm:hidden rounded-md border border-primary/30 bg-primary/5 p-3 text-xs text-muted-foreground flex items-start gap-2">
+        <Laptop className="h-4 w-4 text-primary shrink-0 mt-0.5" />
+        <span>
+          Best on laptop. Challenge mode uses the spacebar to measure
+          tap timing — touch input isn&apos;t as accurate. You can
+          still explore the beat grid and counts on mobile.
+        </span>
       </div>
 
       {/* Beat Grid */}
