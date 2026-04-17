@@ -396,14 +396,8 @@ export default function HomePage() {
               </Card>
 
               {/* Basic */}
-              <Card className="border-primary/50 bg-card/40 backdrop-blur ring-1 ring-primary/30 relative">
-                <div className="absolute -top-3 left-1/2 -translate-x-1/2 flex gap-2">
-                  <Badge className="px-3">
-                    <Sparkles className="h-3 w-3 mr-1" />
-                    Most popular
-                  </Badge>
-                </div>
-                <CardContent className="p-6 space-y-4 pt-8">
+              <Card className="border-border bg-card/40 backdrop-blur">
+                <CardContent className="p-6 space-y-4">
                   <div className="flex items-baseline justify-between">
                     <h3 className="text-xl font-bold">Basic</h3>
                     <div className="flex items-baseline gap-1">
