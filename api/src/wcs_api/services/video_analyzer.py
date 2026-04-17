@@ -69,18 +69,63 @@ def _extract_beat_context(video_path: str) -> str | None:
                 if not hasattr(tempo_raw, "__iter__")
                 else float(list(tempo_raw)[0])
             )
-            # Show first ~12 seconds of beats as a prior (~24 beats at 120 BPM).
-            preview = [t for t in beat_times[:24].tolist()]
-            beats_str = ", ".join(f"{t:.2f}" for t in preview)
+            # FULL beat timeline with phrase-1/5 markers. WCS clips
+            # (especially blues and contemporary) often have tempo
+            # shifts or breaks mid-song, so passing only the first
+            # portion + relying on BPM extrapolation would miss real
+            # timing drift. Cost is small — ~1000 tokens for a full
+            # 2-min clip — vs. the accuracy gain from a grid that's
+            # valid end-to-end.
+            all_beats = beat_times.tolist()
+            lines: list[str] = []
+            for i, t in enumerate(all_beats):
+                phrase_beat = (i % 8) + 1
+                marker = ""
+                if phrase_beat == 1:
+                    marker = "  ← phrase start (beat 1)"
+                elif phrase_beat == 5:
+                    marker = "  ← anchor region (beats 5-6)"
+                lines.append(f"  {t:6.2f}s  beat {phrase_beat}{marker}")
+            grid = "\n".join(lines)
+            total_beats = len(all_beats)
+            # Flag tempo shifts: compute rolling inter-beat-interval
+            # and note any windows where it deviates >15% from the
+            # average. Gives the model an explicit heads-up instead
+            # of forcing it to re-detect BPM shifts itself.
+            shift_notes = ""
+            if total_beats >= 16:
+                ibis = [
+                    all_beats[i + 1] - all_beats[i]
+                    for i in range(total_beats - 1)
+                ]
+                avg_ibi = sum(ibis) / len(ibis)
+                shifts: list[str] = []
+                for i, ibi in enumerate(ibis):
+                    if avg_ibi > 0 and abs(ibi - avg_ibi) / avg_ibi > 0.15:
+                        shifts.append(
+                            f"  near {all_beats[i]:.1f}s (ibi {ibi:.2f}s vs avg {avg_ibi:.2f}s)"
+                        )
+                if shifts:
+                    shift_notes = (
+                        "\n- Tempo shifts detected (interval deviates >15% from average):\n"
+                        + "\n".join(shifts[:8])
+                        + ("\n  …" if len(shifts) > 8 else "")
+                    )
             return (
                 "DETECTED MUSIC CONTEXT (from librosa beat tracking):\n"
-                f"- Estimated BPM: {bpm:.1f}\n"
-                f"- First beat times in seconds: {beats_str}\n"
-                "Use this as a strong prior for timing judgments — when a "
-                "dancer's weight change or anchor settle lands within "
-                "~100ms of a detected beat, count it as on-beat. Anchor "
-                "steps should land near beats 5 and 6 of each 8-count "
-                "phrase.\n"
+                f"- Estimated average BPM: {bpm:.1f}\n"
+                f"- Total beats detected: {total_beats}"
+                f"{shift_notes}\n"
+                "- Full beat grid (use this as the authoritative timeline):\n"
+                f"{grid}\n\n"
+                "Use this grid as a STRONG PRIOR. Every pattern boundary "
+                "should snap to the nearest beat 1 (start) or beat 6 / "
+                "beat 8 (end). A dancer's weight change within ~100ms "
+                "of a detected beat counts as on-beat. Anchor steps "
+                "should land near beats 5 and 6 of each 8-count phrase. "
+                "Do NOT invent times between beats — align to the grid. "
+                "When tempo shifts (see flagged regions), re-anchor to "
+                "the actual beat timestamps rather than extrapolating.\n"
             )
         finally:
             try:
@@ -272,31 +317,93 @@ ONLY on the specified dancers. Ignore all other people in the frame.\
 
 
 PATTERN_SEGMENTATION_PROMPT = """\
-You are segmenting a West Coast Swing dance video into its constituent \
-patterns. Watch the video carefully and identify the sequence of patterns \
-the couple performs.
+You are the pattern-identification pass for a West Coast Swing analysis \
+pipeline. Your only job is to produce a beat-anchored timeline of patterns \
+in this video — no scoring, no technique notes. Focus exclusively on \
+WHICH pattern happens WHEN.
 
-Common WCS patterns:
-- sugar push (6-count, in-place)
-- left side pass, right side pass (6-count)
-- tuck turn (6-count)
-- whip (8-count, rotational)
-- basket whip, reverse whip
-- starter step, anchor-only / in-place variations
+=== WCS PATTERNS — DETAILED REFERENCE ===
 
-Return a JSON timeline. Each entry covers a contiguous time range; the \
-ranges must not overlap and should cover the entire video from start to end.
+DO NOT default every ambiguous move to "sugar push" or "basic". Many WCS \
+patterns share silhouettes but differ in rotation, entry, exit, and travel. \
+Look for these specific cues:
 
-Respond in this exact JSON format. No prose, no markdown:
+**6-count patterns** (2 walks + 2 triples + anchor; ~3-5 seconds at typical tempo):
+- **Sugar push** — follower walks TOWARD lead (beats 1-2), compression on
+  3&4 triple in place, follower walks back to anchor (5-6). NO travel,
+  NO rotation, stays in the slot. Hands stay connected in a V.
+- **Left side pass** — lead catches follower across to lead's LEFT side on
+  beats 3-4. Follower passes through the slot, anchors on the opposite end.
+  Lead rotates roughly 180° total. Clear travel.
+- **Right side pass** — mirror of left side pass; follower crosses to
+  lead's RIGHT side. Often includes a lead-side step-through.
+- **Tuck turn** — lead leads a compact 1-turn on follower during beats 3-4,
+  then catches. Turn is tight and in-place; follower's shoulder often
+  drops briefly into the lead.
+- **Underarm pass / inside turn** — follower spins under a raised hand
+  DURING the pass (not at the catch). Bigger arc than tuck, follower
+  travels while turning.
+- **Starter step / basic** — no travel, no rotation. Weight changes in
+  place to find the music. Usually at the start of a dance.
+
+**8-count patterns** (3 walks + 3 triples + anchor; ~5-7 seconds):
+- **Whip** — extended rotational flow. Lead traverses the slot twice,
+  follower rotates around. Compression 1-2, stretch 3-4, rotation 5-6,
+  anchor 7-8. Travels. Follower rotates at least 360° cumulative.
+- **Basket whip** — whip with follower's hand held behind their back
+  creating a "basket" shape. Tighter arm frame than a regular whip.
+- **Reverse whip** — whip where rotation goes the opposite direction;
+  follower is led backwards through the pattern.
+- **Apache whip** — whip with lead's arm cradling follower's head or
+  shoulder during the rotation.
+- **Whip with inside turn** — whip with an additional follower inside-
+  turn during the rotation. Visible extra turn at beats 5-6.
+
+=== DISTINGUISHING RULES (when in doubt) ===
+
+Prefer the MORE specific identification:
+- Rotational movement ≥ 180° by follower → whip family, not sugar push
+- Follower goes UNDER lead's arm → underarm / inside turn variant, not
+  plain side pass
+- Follower crosses lead's body laterally WITHOUT going under an arm →
+  side pass (specify L or R based on which side of lead she ends up on)
+- Two clear body-crossings with rotation → whip
+- In-place with no travel → sugar push / starter / anchor-only
+- 3 clear walks before the first triple → 8-count (whip family)
+- 2 clear walks before the first triple → 6-count (sugar / pass / tuck)
+
+If TRULY unclear, name it "unknown" with confidence <0.3 — do NOT
+default-guess "sugar push" to avoid admitting uncertainty.
+
+=== BEAT ALIGNMENT ===
+
+The beat grid above is the ground truth for timing. Every pattern:
+- MUST start within 100ms of a beat 1 (or beat 3 at the earliest)
+- MUST end on beat 6 (6-count patterns) or beat 8 (8-count patterns)
+- Do NOT invent timestamps between beats — snap to the grid
+
+If two patterns look like they overlap, the boundary goes at the next
+downbeat after the first pattern's anchor.
+
+=== OUTPUT ===
+
+Contiguous, non-overlapping timeline covering the whole video. JSON only,
+no markdown, no prose:
+
 {
   "patterns": [
-    {"start_time": 0.0, "end_time": 3.2, "name": "sugar push", "confidence": 0.8},
-    {"start_time": 3.2, "end_time": 7.0, "name": "left side pass", "confidence": 0.7}
+    {"start_time": 0.00, "end_time": 2.67, "name": "starter step", "count": 6, "confidence": 0.9},
+    {"start_time": 2.67, "end_time": 5.33, "name": "sugar push", "count": 6, "confidence": 0.8},
+    {"start_time": 5.33, "end_time": 8.89, "name": "whip", "count": 8, "confidence": 0.7}
   ]
 }
 
-Confidence is 0-1; use 1.0 when you're certain, ~0.5 when you can only \
-narrow it down to a family, and < 0.3 when the pattern is unclear.\
+Fields:
+- start_time / end_time: decimal seconds, snapped to beat grid
+- name: specific pattern from the list above, or "unknown" when unclear
+- count: 6 or 8 (the WCS count structure)
+- confidence: 0.0-1.0 (1.0 = certain, 0.5 = narrowed to family,
+  <0.3 = unclear — use with "unknown")\
 """
 
 
@@ -568,9 +675,14 @@ def _max_interval(categories: dict[str, dict[str, Any]]) -> float:
 # Gemini call
 # ─────────────────────────────────────────────────────────────────────
 
-def _build_gen_config(model: str) -> genai_types.GenerateContentConfig:
+def _build_gen_config(
+    model: str,
+    *,
+    system_prompt: str | None = None,
+    thinking_level_override: str | None = None,
+) -> genai_types.GenerateContentConfig:
     config_kwargs: dict[str, Any] = {
-        "system_instruction": SYSTEM_PROMPT,
+        "system_instruction": system_prompt or SYSTEM_PROMPT,
         # Rich schema (reasoning + sub-scores + off-beat moments +
         # patterns + lead/follow) produces long outputs. 8192 was
         # truncating mid-JSON on real dance videos with many events.
@@ -602,7 +714,7 @@ def _build_gen_config(model: str) -> genai_types.GenerateContentConfig:
     if "gemini-3" in model:
         try:
             config_kwargs["thinking_config"] = genai_types.ThinkingConfig(
-                thinking_level="medium",  # type: ignore[arg-type]
+                thinking_level=(thinking_level_override or "medium"),  # type: ignore[arg-type]
             )
         except (TypeError, AttributeError):
             pass
@@ -663,11 +775,18 @@ def _call_gemini(
     client: genai.Client,
     model: str,
     contents: list,
+    *,
+    system_prompt: str | None = None,
+    thinking_level_override: str | None = None,
 ) -> tuple[str, dict[str, Any]]:
     response = client.models.generate_content(
         model=model,
         contents=contents,
-        config=_build_gen_config(model),
+        config=_build_gen_config(
+            model,
+            system_prompt=system_prompt,
+            thinking_level_override=thinking_level_override,
+        ),
     )
     text = getattr(response, "text", None)
     if not text:
@@ -716,10 +835,24 @@ def _run_pattern_pre_pass(
     Returns (prompt_context, usage). Either may be None on failure.
     """
     try:
+        # Pattern ID benefits disproportionately from extra reasoning
+        # — this is where "sugar push vs whip vs tuck turn" gets
+        # disambiguated. Using HIGH thinking here and keeping MEDIUM
+        # on the main scoring call trades some pre-pass cost for
+        # noticeably better pattern accuracy downstream. Also pass a
+        # null system_prompt so SYSTEM_PROMPT's full judging rubric
+        # doesn't bias this pure-ID pass.
         raw, usage = _call_gemini(
             client,
             model,
             contents=[video_file, PATTERN_SEGMENTATION_PROMPT],
+            system_prompt=(
+                "You are a WCS pattern identification specialist. "
+                "Your only task is to produce a beat-anchored pattern "
+                "timeline. Do not score, do not judge, do not comment "
+                "on quality — just identify WHAT happens WHEN."
+            ),
+            thinking_level_override="high",
         )
     except VideoAnalysisError:
         return None, None
