@@ -1,7 +1,14 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Play, Pause } from "lucide-react";
+import {
+  Play,
+  Pause,
+  Volume2,
+  VolumeX,
+  Maximize,
+  SkipBack,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import type {
   VideoPatternIdentified,
@@ -68,6 +75,7 @@ export function TimelineView({
   // pattern blocks visually drift as the video plays. Zero means
   // "not loaded yet; use the prop".
   const [videoDuration, setVideoDuration] = useState(0);
+  const [muted, setMuted] = useState(false);
   // Detail shown below the bar. Manual intent (hover / tap-select)
   // wins. Otherwise track whatever pattern the video is currently
   // playing through so a user just pressing play watches the detail
@@ -197,19 +205,96 @@ export function TimelineView({
     seek(pct * effectiveDuration);
   };
 
+  const toggleMute = () => {
+    const v = videoRef.current;
+    if (!v) return;
+    v.muted = !v.muted;
+    setMuted(v.muted);
+  };
+
+  const restart = () => seek(0);
+
+  const toggleFullscreen = () => {
+    const v = videoRef.current;
+    if (!v) return;
+    if (document.fullscreenElement === v) {
+      document.exitFullscreen().catch(() => {});
+    } else {
+      v.requestFullscreen?.().catch(() => {});
+    }
+  };
+
   return (
     <div className="space-y-3">
       {videoSrc && (
-        <video
-          ref={videoRef}
-          src={videoSrc}
-          controls
-          preload="metadata"
-          className="w-full rounded-md bg-black"
-        />
+        // Unified player: video (no native progress bar so we don't
+        // have two scrubbers that don't align), custom control row,
+        // then the pattern timeline as the only scrubber. max-h caps
+        // the video so portrait clips don't dominate the viewport.
+        <div className="rounded-md bg-black overflow-hidden">
+          <video
+            ref={videoRef}
+            src={videoSrc}
+            preload="metadata"
+            playsInline
+            onClick={togglePlay}
+            className="w-full max-h-[60vh] sm:max-h-[520px] object-contain cursor-pointer"
+          />
+          {/* Custom control row — play, restart, time, mute, fullscreen */}
+          <div className="flex items-center gap-2 px-2 py-1.5 text-xs bg-black/80">
+            <button
+              type="button"
+              onClick={togglePlay}
+              className="text-white/90 hover:text-white p-1 rounded transition-colors"
+              aria-label={playing ? "Pause" : "Play"}
+            >
+              {playing ? (
+                <Pause className="h-4 w-4" />
+              ) : (
+                <Play className="h-4 w-4" />
+              )}
+            </button>
+            <button
+              type="button"
+              onClick={restart}
+              className="text-white/70 hover:text-white p-1 rounded transition-colors"
+              aria-label="Restart"
+              title="Restart"
+            >
+              <SkipBack className="h-4 w-4" />
+            </button>
+            <span className="font-mono tabular-nums text-white/80 text-[11px]">
+              {formatTime(currentTime)} / {formatTime(effectiveDuration)}
+            </span>
+            <div className="ml-auto flex items-center gap-1">
+              <button
+                type="button"
+                onClick={toggleMute}
+                className="text-white/70 hover:text-white p-1 rounded transition-colors"
+                aria-label={muted ? "Unmute" : "Mute"}
+                title={muted ? "Unmute" : "Mute"}
+              >
+                {muted ? (
+                  <VolumeX className="h-4 w-4" />
+                ) : (
+                  <Volume2 className="h-4 w-4" />
+                )}
+              </button>
+              <button
+                type="button"
+                onClick={toggleFullscreen}
+                className="text-white/70 hover:text-white p-1 rounded transition-colors"
+                aria-label="Fullscreen"
+                title="Fullscreen"
+              >
+                <Maximize className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
-      {/* Pattern timeline */}
+      {/* Pattern timeline = the scrubber (single source of truth) */}
       <div className="space-y-1.5">
         <div className="flex items-center justify-between text-xs text-muted-foreground">
           <span className="font-medium uppercase tracking-wide">
@@ -421,20 +506,8 @@ export function TimelineView({
           </div>
         )}
 
-        {videoSrc && (
-          <button
-            type="button"
-            onClick={togglePlay}
-            className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
-          >
-            {playing ? (
-              <Pause className="h-3 w-3" />
-            ) : (
-              <Play className="h-3 w-3" />
-            )}
-            {playing ? "Pause" : "Play"}
-          </button>
-        )}
+        {/* Play button moved into the custom video control strip
+            above — the pattern timeline is the sole scrubber now. */}
       </div>
     </div>
   );
