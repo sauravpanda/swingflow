@@ -156,8 +156,10 @@ export default function AnalyzePage() {
   const inputRef = useRef<HTMLInputElement>(null);
 
   // Deep-link: dashboard / chart pass `?id=<analysis-uuid>` to jump
-  // straight to a specific analysis. Read once on mount and clear it
-  // after first use so refreshing doesn't keep re-expanding the row.
+  // straight to a specific analysis. Also handles the "accidentally
+  // refreshed mid-analysis" case: if the most recent history row was
+  // created in the last ~60s, treat it as a deep-link target so the
+  // user sees the result instead of an empty upload card.
   const [targetAnalysisId, setTargetAnalysisId] = useState<string | null>(
     null
   );
@@ -167,6 +169,41 @@ export default function AnalyzePage() {
     const id = params.get("id");
     if (id) setTargetAnalysisId(id);
   }, []);
+
+  // Auto-surface a just-completed analysis after an accidental
+  // refresh. Only fires when (a) there's no explicit ?id= in the URL,
+  // (b) the most recent history row is <60s old, and (c) we haven't
+  // already set a target. History is the source of truth — the
+  // backend finishes and persists even if the browser disconnects.
+  useEffect(() => {
+    if (targetAnalysisId) return;
+    if (history.loading) return;
+    if (history.records.length === 0) return;
+    const mostRecent = history.records[0];
+    const ageMs = Date.now() - new Date(mostRecent.created_at).getTime();
+    if (ageMs < 60_000) {
+      setTargetAnalysisId(mostRecent.id);
+    }
+  }, [history.loading, history.records, targetAnalysisId]);
+
+  // Warn the user before they navigate away / refresh while an
+  // analysis is in flight. Upload is cheap to repeat; an analysis
+  // in progress is not (a used quota + lost-looking result from the
+  // user's perspective), so the browser prompt is worth the
+  // friction here.
+  useEffect(() => {
+    if (state.status !== "uploading" && state.status !== "analyzing") return;
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      // Most modern browsers ignore the message and show a generic
+      // prompt, but returnValue needs to be set for the prompt to
+      // appear in Chrome/Firefox.
+      e.returnValue = "";
+      return "";
+    };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [state.status]);
 
   // Optional metadata — captured pre-upload so it gets saved with the analysis.
   // Each of role / level / stage can be a preset OR free text via "Other".
