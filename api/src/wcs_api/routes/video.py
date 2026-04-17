@@ -32,6 +32,12 @@ class VideoAnalyzeBody(BaseModel):
     # keep the prompt overhead bounded and prevent prompt injection
     # via a multi-paragraph dump.
     dancer_description: str | None = Field(default=None, max_length=200)
+    # Opt-in video retention. Default False = we delete the R2
+    # object after scoring (privacy-preserving default). True =
+    # keep it so the user can replay the clip later against the
+    # pattern timeline / off-beat markers. User can still click
+    # "Delete video" on the history row to remove it any time.
+    store_video: bool = False
 
 
 def _admin_error_to_http(exc: httpx.HTTPStatusError) -> HTTPException:
@@ -172,12 +178,15 @@ async def analyze_video_endpoint(
             # deleted below, so keeping the key would just lead to 404s
             # on Watch/Re-analyze. Privacy also: we don't retain dance
             # videos of real people after the scoring run.
+            # Preserve the R2 object_key on the row only when the
+            # user opted in to video retention. Otherwise the row
+            # stores a null key and the clip is purged below.
             await supabase_admin.insert_video_analysis(
                 user_id=user_id,
                 filename=body.filename,
                 duration=duration,
                 result=result,
-                object_key=None,
+                object_key=body.object_key if body.store_video else None,
                 role=body.role,
                 competition_level=body.competition_level,
                 event_name=body.event_name,
@@ -205,7 +214,11 @@ async def analyze_video_endpoint(
             os.unlink(tmp_path)
         except OSError:
             pass
-        # Delete from R2 right after analysis — privacy first. Users
-        # who want to re-score must re-upload. The 24h lifecycle rule
-        # on the bucket is the backstop for orphaned uploads.
-        r2.delete_object(body.object_key)
+        # Delete from R2 by default — privacy-preserving. Users who
+        # opted in to `store_video` keep their clip so they can
+        # replay it against the pattern timeline later; they can
+        # still remove it anytime via the Delete-video button on
+        # the history row. The 24h bucket lifecycle rule is the
+        # backstop for orphaned uploads on either path.
+        if not body.store_video:
+            r2.delete_object(body.object_key)

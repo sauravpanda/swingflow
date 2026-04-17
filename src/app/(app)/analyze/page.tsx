@@ -217,6 +217,10 @@ export default function AnalyzePage() {
   const [eventDate, setEventDate] = useState("");
   const [tagsInput, setTagsInput] = useState("");
   const [dancerDescription, setDancerDescription] = useState("");
+  // Default off — videos get deleted from R2 right after scoring
+  // for privacy. Turning it on keeps the clip so the user can
+  // replay it against the pattern timeline later.
+  const [storeVideo, setStoreVideo] = useState(false);
 
   const role =
     roleSelect === OTHER ? roleCustom.trim() : roleSelect.trim();
@@ -290,6 +294,7 @@ export default function AnalyzePage() {
       stage: stage || undefined,
       tags: tags.length ? tags : undefined,
       dancerDescription: focus || undefined,
+      storeVideo,
     }).then(() => history.refresh());
   }, [
     file,
@@ -302,6 +307,7 @@ export default function AnalyzePage() {
     stage,
     tagsInput,
     dancerDescription,
+    storeVideo,
   ]);
 
   const handleClear = useCallback(() => {
@@ -545,6 +551,30 @@ export default function AnalyzePage() {
                     {dancerDescription.length}/200
                   </p>
                 </div>
+
+                <label
+                  htmlFor="store-video"
+                  className="flex items-start gap-2 cursor-pointer rounded-md border border-border p-2.5 hover:border-primary/40 transition-colors"
+                >
+                  <input
+                    id="store-video"
+                    type="checkbox"
+                    checked={storeVideo}
+                    onChange={(e) => setStoreVideo(e.target.checked)}
+                    className="mt-0.5 h-4 w-4 accent-primary cursor-pointer"
+                  />
+                  <span className="text-xs space-y-0.5">
+                    <span className="block font-medium">
+                      Keep video stored
+                    </span>
+                    <span className="block text-muted-foreground">
+                      Replay the clip later mapped against the pattern
+                      timeline + off-beat markers. Off by default — clips
+                      are deleted right after scoring. You can delete a
+                      stored video any time.
+                    </span>
+                  </span>
+                </label>
               </div>
             )}
 
@@ -1091,11 +1121,22 @@ function HistoryRow({
             <p className="text-xs text-primary">{shareMessage}</p>
           )}
 
+          {canViewOrReanalyze && (
+            <p className="text-xs text-muted-foreground">
+              <span className="font-medium text-foreground">
+                Stored video —
+              </span>{" "}
+              click <span className="font-medium">Watch</span> to map the
+              pattern timeline and off-beat markers against the actual
+              clip.
+            </p>
+          )}
+
           {!canViewOrReanalyze && (
             <p className="text-xs text-muted-foreground">
               {videoDeleted
                 ? "Video deleted from storage. The scoring result above is preserved."
-                : "Source video isn\u2019t available (removed after scoring — scoring result is preserved)."}
+                : "Source video wasn\u2019t kept (delete-after-scoring is the default). Upload again with \u201cKeep video stored\u201d enabled if you want to map the timeline to a clip you can replay."}
             </p>
           )}
 

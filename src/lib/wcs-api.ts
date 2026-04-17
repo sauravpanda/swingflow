@@ -425,6 +425,10 @@ export type VideoAnalyzeOptions = {
   // when multiple people are in frame (e.g. "couple in the red
   // dress and blue shirt", "the lead on the far right").
   dancerDescription?: string;
+  // Opt-in: keep the video in R2 after analysis so the user can
+  // replay it against the pattern timeline. Default off — we
+  // delete the clip right after scoring otherwise.
+  storeVideo?: boolean;
 };
 
 export async function analyzeVideoFromKey(
@@ -442,6 +446,7 @@ export async function analyzeVideoFromKey(
     stage: options.stage || null,
     tags: options.tags && options.tags.length ? options.tags : null,
     dancer_description: options.dancerDescription || null,
+    store_video: Boolean(options.storeVideo),
   });
 }
 
