@@ -38,9 +38,8 @@ Guided warm-up routines in 5, 15, or 30-minute sessions. Covers joint mobility, 
 - Per-user quota overrides on the `profiles` table for beta testers and refunds
 - Google-auth-free: email + password via Supabase Auth
 
-### Feedback & Admin
+### Feedback
 - In-app feedback form writes to a `feature_requests` table (RLS-protected)
-- Admin dashboard (email-gated) surfaces user counts, active-user stats, recent signups, recent analyses, and recent feature requests via a single `admin_stats()` Postgres RPC
 
 ## Multi-Dance Support — Roadmap
 
@@ -115,14 +114,14 @@ This is where "SwingFlow but for Bachata" would actually compete with a dedicate
 - Gemini 3 Pro (video scoring) via `google-genai`
 - `librosa` (beat + downbeat + phrase detection)
 - `ffmpeg` (duration probe + audio extraction for beat context)
-- `boto3` (R2 presigned URLs + admin cleanup)
+- `boto3` (R2 presigned URLs + post-analysis cleanup)
 - PyJWT against Supabase's JWKS (ES256) for request auth
-- `httpx` for Supabase admin REST calls
+- `httpx` for Supabase service-role REST calls
 - Stripe SDK for billing (Checkout Sessions, Customer Portal, webhook)
 - Deployed to Railway from `api/Dockerfile`
 
 **Storage**
-- **Supabase Postgres** — user profiles, subscriptions, usage events, video analysis results, feature requests (all RLS-protected except admin ops via service role)
+- **Supabase Postgres** — user profiles, subscriptions, usage events, video analysis results, feature requests (all RLS-protected; backend uses the service-role key for quota/analysis writes that need to bypass RLS)
 - **Cloudflare R2** — video uploads (presigned PUT, auto-deleted post-analysis, 24h lifecycle rule as backstop)
 
 ## Getting Started
@@ -181,8 +180,7 @@ swingflow/
 │   │   │   ├── music.py         # POST /analyze/music (librosa)
 │   │   │   ├── video.py         # POST /analyze/video (Gemini)
 │   │   │   ├── uploads.py       # presign / view / delete R2
-│   │   │   ├── billing.py       # Stripe checkout / portal / webhook
-│   │   │   └── admin.py         # admin stats (email-gated)
+│   │   │   └── billing.py       # Stripe checkout / portal / webhook
 │   │   └── services/
 │   │       ├── video_analyzer.py   # Gemini prompt + parser + beat context
 │   │       ├── music_analyzer.py   # librosa pipeline
@@ -193,7 +191,7 @@ swingflow/
 │   ├── Dockerfile
 │   └── railway.json
 ├── supabase/
-│   └── schema.sql               # Tables + RLS policies + admin_stats() RPC
+│   └── schema.sql               # Tables + RLS policies
 └── src/
     ├── app/                     # Next.js App Router
     │   ├── (app)/               # auth-gated routes (dashboard, analyze, etc.)

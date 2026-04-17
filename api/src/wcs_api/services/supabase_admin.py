@@ -121,17 +121,6 @@ async def insert_video_analysis(
         r.raise_for_status()
 
 
-async def get_admin_stats() -> dict[str, Any]:
-    async with httpx.AsyncClient(timeout=15) as client:
-        r = await client.post(
-            f"{settings.supabase_url}/rest/v1/rpc/admin_stats",
-            headers={**_headers(), "Prefer": "return=representation"},
-            json={},
-        )
-        r.raise_for_status()
-        return r.json()
-
-
 async def insert_usage_event(
     user_id: str,
     kind: str,
