@@ -241,63 +241,6 @@ export async function getVideoQuota(): Promise<VideoQuota> {
   return (await res.json()) as VideoQuota;
 }
 
-export type AdminStats = {
-  total_users: number;
-  signups_this_month: number;
-  signups_this_week: number;
-  total_video_analyses: number;
-  total_music_analyses: number;
-  active_users_7d: number;
-  active_users_30d: number;
-  total_feature_requests: number;
-  // Gemini spend — admin-only, never shown to end users.
-  cost_total_usd?: number;
-  cost_last_7d_usd?: number;
-  cost_last_30d_usd?: number;
-  total_tokens?: number;
-  recent_signups: Array<{
-    id: string;
-    email: string;
-    plan: string;
-    created_at: string;
-  }>;
-  recent_analyses: Array<{
-    id: string;
-    filename: string;
-    duration: number;
-    created_at: string;
-    email: string;
-    model?: string | null;
-    cost_usd?: number;
-  }>;
-  recent_feature_requests: Array<{
-    id: string;
-    email: string | null;
-    title: string;
-    description: string | null;
-    created_at: string;
-  }>;
-};
-
-export async function getAdminStats(): Promise<AdminStats> {
-  if (!API_URL) throw new Error("NEXT_PUBLIC_WCS_API_URL is not set");
-  const token = await getAccessToken();
-  const res = await fetch(`${API_URL}/admin/stats`, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  if (!res.ok) {
-    let detail = res.statusText;
-    try {
-      const body = await res.json();
-      if (body?.detail) detail = String(body.detail);
-    } catch {
-      // ignore
-    }
-    throw new Error(`Admin stats failed (${res.status}): ${detail}`);
-  }
-  return (await res.json()) as AdminStats;
-}
-
 export type PresignResponse = {
   uploadUrl: string;
   objectKey: string;
