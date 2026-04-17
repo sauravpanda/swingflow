@@ -375,12 +375,28 @@ Look for these specific cues:
   both hands open).
 - **Underarm turn / Inside turn** — follower turns UNDER a raised hand
   during the pass (not at the catch).
+- **Outside turn** — follower rotates COUNTER-clockwise (outward) on
+  3-4 during a side pass, instead of the more common inside turn.
+  Cue: her free shoulder opens away from the lead, not toward him.
 - **Free spin** — follower spins on her OWN axis without partnered
   rotation; lead briefly releases or holds a very light finger
-  connection. Distinct from a whip (whip keeps full partnership
-  through the rotation). One clear cue: if you can see the lead
-  letting go / barely touching during the spin → free spin, not
-  whip.
+  connection. Distinct from a whip (whip keeps full partnership).
+  Cue: you can see the lead letting go / barely touching during
+  the spin.
+- **Throwaway** — lead releases hand/connection on 3-4 and follower
+  continues travel on momentum, typically out to the end of the
+  slot. Can be 6-count or 8-count. Cue: visible release AFTER the
+  compression, follower drifts under her own momentum, lead may
+  gesture/wave before re-catching.
+- **Sombrero** — follower ducks UNDER lead's raised arm (hat-like
+  shape above her head) during a pass. Distinct from underarm turn
+  because she doesn't rotate — she just passes beneath the arm.
+- **Stop-and-go** — syncopation where the anchor (beats 5-6) is
+  replaced by a hold-and-resume. Apply this as a `variant` on
+  whatever base pattern it modifies rather than a standalone family.
+- **Pivot** — single weight-change rotation, often as a redirect
+  within another pattern. Rarely a full pattern on its own unless
+  the couple is playing with the music mid-phrase.
 - **Starter step / basic** — no travel, no rotation. Weight changes in
   place.
 
@@ -403,6 +419,13 @@ Look for these specific cues:
   - *shadow* — follower dances behind lead, same direction facing
   - *pretzel* — follower's arms wrap into a pretzel shape during
     rotation
+  - *with double turn* — whip where the follower executes two full
+    rotations during 5-6 instead of one
+- **Catapult** — lead's body redirects follower into a whip-like
+  rotational pattern, often launching her across the slot with
+  visible body-driven momentum (not arm-led). Kin to whip family
+  but distinct enough to name. Cue: lead's torso rotation drives
+  the pattern, follower "catapults" out rather than being pulled.
 - **Basic in closed / promenade** — closed-position walk variation.
 
 === VARIANT IDENTIFICATION ===
@@ -437,15 +460,25 @@ A whip where you see rotation but can't tell which specific kind →
 === DISTINGUISHING RULES (when in doubt) ===
 
 Prefer the MORE specific identification:
-- Rotational movement ≥ 180° by follower → whip family, not sugar push
-- Follower goes UNDER lead's arm → underarm / inside turn variant, not
-  plain side pass
+- Rotational movement ≥ 180° by follower, full partnership kept →
+  whip family (identify specific variant), NOT sugar push or free spin
+- Connection released mid-rotation → free spin (partner spin) or
+  throwaway (continues travel), NOT whip
+- Follower goes UNDER lead's arm WITHOUT rotating → sombrero, not
+  underarm turn
+- Follower goes UNDER lead's arm AND rotates → underarm turn /
+  inside turn
+- Follower rotates COUNTER-clockwise (outward) instead of clockwise →
+  outside turn, not inside turn
 - Follower crosses lead's body laterally WITHOUT going under an arm →
   side pass (specify L or R based on which side of lead she ends up on)
 - Two clear body-crossings with rotation → whip
+- Lead's TORSO drives a rotational launch → catapult, not plain whip
 - In-place with no travel → sugar push / starter / anchor-only
-- 3 clear walks before the first triple → 8-count (whip family)
-- 2 clear walks before the first triple → 6-count (sugar / pass / tuck)
+- Anchor (5-6) replaced by a hold-and-resume → variant: stop-and-go
+- 3 clear walks before the first triple → 8-count (whip / catapult)
+- 2 clear walks before the first triple → 6-count (sugar / pass /
+  tuck / underarm / sombrero / outside turn / throwaway)
 
 If TRULY unclear, name it "unknown" with confidence <0.3 — do NOT
 default-guess "sugar push" to avoid admitting uncertainty.
@@ -501,10 +534,12 @@ couple performs three sugar pushes in a row, emit three separate entries. A \
 typical WCS pattern is 6 or 8 beats, which at 90–130 BPM is roughly 3–6 \
 seconds; windows longer than ~10 seconds almost always mean you collapsed \
 repeats. A 90-second routine usually contains 15-25 pattern windows. \
-Common WCS patterns: sugar push, left side pass, right side pass, tuck turn, \
-whip (and variants: basket whip, reverse whip, apache whip), underarm turn, \
-inside turn, free spin, starter step, basic in closed position, anchor step \
-variations.
+Common WCS patterns: sugar push, left side pass, right side pass, tuck \
+turn, underarm turn, inside turn, outside turn, free spin, throwaway, \
+sombrero, stop-and-go, pivot, whip (and variants: basket whip, reverse \
+whip, apache whip, whip with inside turn, whip with outside turn, whip \
+with double turn, tandem whip, cuddle whip, shadow whip, pretzel whip), \
+catapult, starter step, basic in closed position, anchor step variations.
 
 Respond in this exact JSON format. Fill `reasoning` BEFORE `score` in each category:
 {
