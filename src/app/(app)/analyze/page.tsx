@@ -43,10 +43,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { TimelineView } from "@/components/analyze/timeline-view";
-import {
-  PatternSummaryCard,
-  derivePatternSummary,
-} from "@/components/analyze/pattern-summary";
+import { ScoreResultCard } from "@/components/analyze/score-result-card";
 import { Analytics } from "@/lib/analytics";
 
 const ROLE_OPTIONS = ["Lead", "Follow", "Solo"] as const;
@@ -70,61 +67,10 @@ const STAGE_OPTIONS = [
 ] as const;
 const OTHER = "__other__";
 
-const CATEGORY_LABELS: Record<keyof VideoScoreResult["categories"], string> = {
-  timing: "Timing & Rhythm",
-  technique: "Technique",
-  teamwork: "Teamwork",
-  presentation: "Presentation",
-};
-
-function scoreBarColor(score: number): string {
-  if (score >= 8) return "bg-emerald-500";
-  if (score >= 6) return "bg-primary";
-  if (score >= 4) return "bg-amber-500";
-  return "bg-rose-500";
-}
 
 // derivePatternSummary moved to
 // src/components/analyze/pattern-summary.tsx
 
-function ScoreBar({
-  score,
-  scoreLow,
-  scoreHigh,
-}: {
-  score: number;
-  scoreLow?: number;
-  scoreHigh?: number;
-}) {
-  // If Gemini returned an uncertainty range, render it as a faint band
-  // behind the actual-score fill. Range [low, high] maps to [low*10%,
-  // high*10%] horizontally. Only render when the interval has width.
-  const hasRange =
-    typeof scoreLow === "number" &&
-    typeof scoreHigh === "number" &&
-    scoreHigh > scoreLow;
-  return (
-    <div className="relative h-1.5 w-full rounded-full bg-muted overflow-hidden">
-      {hasRange && (
-        <div
-          className="absolute inset-y-0 bg-foreground/15"
-          style={{
-            left: `${Math.max(0, scoreLow! * 10)}%`,
-            width: `${Math.min(
-              100 - scoreLow! * 10,
-              (scoreHigh! - scoreLow!) * 10
-            )}%`,
-          }}
-          title={`Uncertainty range: ${scoreLow!.toFixed(1)}–${scoreHigh!.toFixed(1)}`}
-        />
-      )}
-      <div
-        className={`relative h-full ${scoreBarColor(score)} transition-all`}
-        style={{ width: `${Math.min(100, score * 10)}%` }}
-      />
-    </div>
-  );
-}
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -132,11 +78,6 @@ function formatBytes(bytes: number): string {
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
 
-function formatDuration(sec: number): string {
-  const m = Math.floor(sec / 60);
-  const s = Math.floor(sec % 60);
-  return `${m}:${s.toString().padStart(2, "0")}`;
-}
 
 export default function AnalyzePage() {
   const {
@@ -694,230 +635,47 @@ export default function AnalyzePage() {
 function HistoryRow({
   record,
   autoExpand,
-  onReanalyzed,
-  onDeleted,
-  onShare,
-  onStopShare,
 }: {
   record: AnalysisRecord;
   autoExpand?: boolean;
-  onReanalyzed: () => void;
-  onDeleted: (id: string) => Promise<void> | void;
-  onShare: (id: string) => Promise<string>;
-  onStopShare: (id: string) => Promise<void>;
+  /** Kept for API compatibility with the old signature; unused now
+      because actions moved to the dedicated /analysis page. */
+  onReanalyzed?: () => void;
+  onDeleted?: (id: string) => Promise<void> | void;
+  onShare?: (id: string) => Promise<string>;
+  onStopShare?: (id: string) => Promise<void>;
 }) {
-  const [expanded, setExpanded] = useState(Boolean(autoExpand));
-  const rowRef = useRef<HTMLDivElement>(null);
-
-  // When a deep-link targets this row (e.g. arriving from /dashboard
-  // with ?id=<uuid>), expand AND scroll the row into view so the
-  // user actually lands on the analysis they clicked. autoExpand is
-  // computed from the URL param in the parent, so it only fires
-  // once for the targeted row.
-  useEffect(() => {
-    if (!autoExpand) return;
-    setExpanded(true);
-    // Defer one tick so the expanded body mounts before scrolling.
-    const t = setTimeout(() => {
-      rowRef.current?.scrollIntoView({
-        behavior: "smooth",
-        block: "start",
-      });
-    }, 50);
-    return () => clearTimeout(t);
-  }, [autoExpand]);
-  const [videoUrl, setVideoUrl] = useState<string | null>(null);
-  const [loadingVideo, setLoadingVideo] = useState(false);
-  const [reanalyzing, setReanalyzing] = useState(false);
-  const [deletingVideo, setDeletingVideo] = useState(false);
-  const [deletingAnalysis, setDeletingAnalysis] = useState(false);
-  const [videoDeleted, setVideoDeleted] = useState(false);
-  const [sharing, setSharing] = useState(false);
-  const [shareMessage, setShareMessage] = useState<string | null>(null);
-  const [currentResult, setCurrentResult] = useState<
-    VideoScoreResult | null
-  >(record.result ?? null);
-  const [rowError, setRowError] = useState<string | null>(null);
-  const overall = currentResult?.overall;
-
-  const canViewOrReanalyze = Boolean(record.object_key) && !videoDeleted;
-  const shareUrl =
-    record.share_token && typeof window !== "undefined"
-      ? `${window.location.origin}/shared?t=${record.share_token}`
-      : null;
-
-  const handleWatch = async (e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (!record.object_key || videoUrl) {
-      setExpanded(true);
-      return;
-    }
-    setLoadingVideo(true);
-    setRowError(null);
-    try {
-      const url = await getViewUrl(record.object_key);
-      setVideoUrl(url);
-      setExpanded(true);
-    } catch (err) {
-      setRowError(
-        err instanceof Error ? err.message : "Could not load video"
-      );
-    } finally {
-      setLoadingVideo(false);
-    }
-  };
-
-  const handleReanalyze = async (e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (!record.object_key) return;
-    setReanalyzing(true);
-    setRowError(null);
-    try {
-      const resp = await analyzeVideoFromKey(
-        record.object_key,
-        record.filename ?? "video.mp4"
-      );
-      Analytics.analysisReanalyzed();
-      setCurrentResult(resp.result);
-      setExpanded(true);
-      onReanalyzed();
-    } catch (err) {
-      setRowError(
-        err instanceof Error ? err.message : "Re-analysis failed"
-      );
-    } finally {
-      setReanalyzing(false);
-    }
-  };
-
-  const handleDeleteVideo = async (e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (!record.object_key) return;
-    const ok = window.confirm(
-      "Delete the source video from storage? Your scoring result stays — only the video file is removed. This cannot be undone."
-    );
-    if (!ok) return;
-    setDeletingVideo(true);
-    setRowError(null);
-    try {
-      await deleteUploadedVideo(record.object_key);
-      setVideoDeleted(true);
-      setVideoUrl(null);
-      onReanalyzed();
-    } catch (err) {
-      setRowError(err instanceof Error ? err.message : "Delete failed");
-    } finally {
-      setDeletingVideo(false);
-    }
-  };
-
-  const handleShare = async (e: React.MouseEvent) => {
-    e.stopPropagation();
-    setSharing(true);
-    setShareMessage(null);
-    setRowError(null);
-    try {
-      const token = await onShare(record.id);
-      Analytics.shareLinkCreated();
-      const url = `${window.location.origin}/shared?t=${token}`;
-      try {
-        await navigator.clipboard.writeText(url);
-        setShareMessage("Link copied to clipboard");
-      } catch {
-        setShareMessage(url);
-      }
-      setTimeout(() => setShareMessage(null), 5000);
-    } catch (err) {
-      setRowError(err instanceof Error ? err.message : "Share failed");
-    } finally {
-      setSharing(false);
-    }
-  };
-
-  const handleCopyShareLink = async (e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (!shareUrl) return;
-    try {
-      await navigator.clipboard.writeText(shareUrl);
-      setShareMessage("Link copied to clipboard");
-      setTimeout(() => setShareMessage(null), 3000);
-    } catch {
-      setShareMessage(shareUrl);
-    }
-  };
-
-  const handleStopShare = async (e: React.MouseEvent) => {
-    e.stopPropagation();
-    const ok = window.confirm(
-      "Stop sharing this analysis? The existing link will stop working immediately."
-    );
-    if (!ok) return;
-    setSharing(true);
-    try {
-      await onStopShare(record.id);
-      Analytics.shareLinkRevoked();
-      setShareMessage("Sharing disabled");
-      setTimeout(() => setShareMessage(null), 3000);
-    } catch (err) {
-      setRowError(err instanceof Error ? err.message : "Failed to stop sharing");
-    } finally {
-      setSharing(false);
-    }
-  };
-
-  const handleDeleteAnalysis = async (e: React.MouseEvent) => {
-    e.stopPropagation();
-    const ok = window.confirm(
-      "Delete this analysis from your history? This removes the scoring result and any stored video. Your monthly usage count is NOT refunded."
-    );
-    if (!ok) return;
-    setDeletingAnalysis(true);
-    setRowError(null);
-    try {
-      if (record.object_key && !videoDeleted) {
-        try {
-          await deleteUploadedVideo(record.object_key);
-        } catch {
-          // Non-fatal.
-        }
-      }
-      await onDeleted(record.id);
-      Analytics.analysisDeleted();
-    } catch (err) {
-      setRowError(err instanceof Error ? err.message : "Delete failed");
-      setDeletingAnalysis(false);
-    }
-  };
-
+  const overall = record.result?.overall;
+  const tier = overall
+    ? overall.score >= 8
+      ? "text-emerald-400"
+      : overall.score >= 6
+      ? "text-primary"
+      : overall.score >= 4
+      ? "text-amber-400"
+      : "text-rose-400"
+    : "";
   return (
-    <div
-      ref={rowRef}
-      className={`border rounded-lg transition-colors ${
+    <Link
+      href={`/analysis?id=${record.id}`}
+      className={`block rounded-md border p-3 hover:bg-muted/30 transition-colors ${
         autoExpand
           ? "border-primary/50 shadow-[0_0_0_1px_hsl(var(--primary)/0.25)]"
           : "border-border"
       }`}
     >
-      <div
-        className="w-full flex items-center justify-between p-3 text-sm cursor-pointer hover:bg-muted/30 transition-colors"
-        onClick={() => setExpanded((p) => !p)}
-      >
+      <div className="flex items-center justify-between gap-3 text-sm">
         <div className="min-w-0 flex-1">
-          <span className="font-medium truncate block">
+          <p className="font-medium truncate">
             {record.filename || "Untitled"}
-          </span>
-          <div className="text-xs text-muted-foreground flex flex-wrap items-center gap-1.5 mt-0.5">
+          </p>
+          <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground mt-0.5">
             <span>
               {new Date(record.created_at).toLocaleDateString("en-US", {
                 month: "short",
                 day: "numeric",
-                hour: "2-digit",
-                minute: "2-digit",
               })}
             </span>
-            {record.duration ? (
-              <span>· {formatDuration(record.duration)}</span>
-            ) : null}
             {record.role && (
               <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4">
                 {record.role}
@@ -929,11 +687,8 @@ function HistoryRow({
               </Badge>
             )}
             {record.event_name && (
-              <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4">
+              <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 max-w-[160px] truncate">
                 {record.event_name}
-                {record.event_date
-                  ? ` · ${new Date(record.event_date).toLocaleDateString("en-US", { month: "short", year: "numeric" })}`
-                  : ""}
               </Badge>
             )}
             {record.stage && (
@@ -941,7 +696,7 @@ function HistoryRow({
                 {record.stage}
               </Badge>
             )}
-            {(record.tags ?? []).slice(0, 4).map((t) => (
+            {(record.tags ?? []).slice(0, 3).map((t) => (
               <Badge
                 key={t}
                 variant="secondary"
@@ -950,11 +705,34 @@ function HistoryRow({
                 #{t}
               </Badge>
             ))}
+            {record.object_key && (
+              <span
+                className="inline-flex items-center gap-0.5 text-[9px] text-muted-foreground"
+                title="Video stored — timeline maps to replayable clip"
+              >
+                <Play className="h-2.5 w-2.5" />
+                stored
+              </span>
+            )}
+            {record.share_token && (
+              <span
+                className="inline-flex items-center gap-0.5 text-[9px] text-primary"
+                title={
+                  (record.share_view_count ?? 0) > 0
+                    ? `Shared · ${record.share_view_count} view${record.share_view_count === 1 ? "" : "s"}`
+                    : "Shared"
+                }
+              >
+                <Share2 className="h-2.5 w-2.5" />
+                {(record.share_view_count ?? 0) > 0 &&
+                  `${record.share_view_count}`}
+              </span>
+            )}
           </div>
         </div>
         {overall && (
-          <div className="flex items-center gap-2 shrink-0 ml-3">
-            <span className="font-mono font-bold tabular-nums">
+          <div className="flex items-center gap-2 shrink-0">
+            <span className={`font-mono font-bold tabular-nums ${tier}`}>
               {overall.score?.toFixed?.(1) ?? "—"}
             </span>
             <Badge variant="secondary" className="text-xs">
@@ -963,422 +741,11 @@ function HistoryRow({
           </div>
         )}
       </div>
-      {expanded && (
-        <div className="border-t border-border p-3 space-y-3">
-          <div className="flex items-center gap-1.5 flex-wrap">
-            {canViewOrReanalyze && (
-              <>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={handleWatch}
-                  disabled={
-                    loadingVideo ||
-                    reanalyzing ||
-                    deletingVideo ||
-                    deletingAnalysis
-                  }
-                  title={videoUrl ? "Reload video" : "Watch"}
-                >
-                  {loadingVideo ? (
-                    <Loader2 className="h-3.5 w-3.5 animate-spin sm:mr-2" />
-                  ) : (
-                    <Play className="h-3.5 w-3.5 sm:mr-2" />
-                  )}
-                  <span className="hidden sm:inline">
-                    {videoUrl ? "Reload video" : "Watch"}
-                  </span>
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={handleReanalyze}
-                  disabled={
-                    reanalyzing ||
-                    loadingVideo ||
-                    deletingVideo ||
-                    deletingAnalysis
-                  }
-                  title="Re-analyze — uses 1 quota"
-                >
-                  {reanalyzing ? (
-                    <Loader2 className="h-3.5 w-3.5 animate-spin sm:mr-2" />
-                  ) : (
-                    <RotateCcw className="h-3.5 w-3.5 sm:mr-2" />
-                  )}
-                  <span className="hidden sm:inline">Re-analyze</span>
-                </Button>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="text-muted-foreground hover:text-destructive"
-                  onClick={handleDeleteVideo}
-                  disabled={
-                    deletingVideo ||
-                    deletingAnalysis ||
-                    reanalyzing ||
-                    loadingVideo
-                  }
-                  title="Delete video file from storage"
-                >
-                  {deletingVideo ? (
-                    <Loader2 className="h-3.5 w-3.5 animate-spin sm:mr-2" />
-                  ) : (
-                    <Trash2 className="h-3.5 w-3.5 sm:mr-2" />
-                  )}
-                  <span className="hidden sm:inline">Delete video</span>
-                </Button>
-              </>
-            )}
-
-            {shareUrl && (record.share_view_count ?? 0) > 0 && (
-              <span
-                className="inline-flex items-center gap-1 text-xs text-muted-foreground tabular-nums"
-                title={
-                  record.share_last_viewed_at
-                    ? `Last viewed ${new Date(record.share_last_viewed_at).toLocaleString()}`
-                    : undefined
-                }
-              >
-                <Eye className="h-3 w-3" />
-                {record.share_view_count}
-                <span className="hidden sm:inline">
-                  {" "}
-                  view{record.share_view_count === 1 ? "" : "s"}
-                </span>
-              </span>
-            )}
-
-            {shareUrl ? (
-              <>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={handleCopyShareLink}
-                  disabled={sharing}
-                  title="Copy share link"
-                >
-                  <Copy className="h-3.5 w-3.5 sm:mr-2" />
-                  <span className="hidden sm:inline">Copy link</span>
-                </Button>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="text-muted-foreground hover:text-destructive"
-                  onClick={handleStopShare}
-                  disabled={sharing}
-                  title="Stop sharing"
-                >
-                  {sharing ? (
-                    <Loader2 className="h-3.5 w-3.5 animate-spin sm:mr-2" />
-                  ) : (
-                    <Link2Off className="h-3.5 w-3.5 sm:mr-2" />
-                  )}
-                  <span className="hidden sm:inline">Stop sharing</span>
-                </Button>
-              </>
-            ) : (
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={handleShare}
-                disabled={sharing}
-                title="Share this analysis via link"
-              >
-                {sharing ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin sm:mr-2" />
-                ) : (
-                  <Share2 className="h-3.5 w-3.5 sm:mr-2" />
-                )}
-                <span className="hidden sm:inline">Share link</span>
-              </Button>
-            )}
-
-            <Button
-              size="sm"
-              variant="ghost"
-              className="text-muted-foreground hover:text-destructive ml-auto"
-              onClick={handleDeleteAnalysis}
-              disabled={deletingAnalysis || deletingVideo || reanalyzing}
-              title="Delete this analysis from history"
-            >
-              {deletingAnalysis ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin sm:mr-2" />
-              ) : (
-                <Trash2 className="h-3.5 w-3.5 sm:mr-2" />
-              )}
-              <span className="hidden sm:inline">Delete analysis</span>
-            </Button>
-          </div>
-
-          {record.dancer_description && (
-            <p className="text-xs text-muted-foreground italic">
-              Focused on: {record.dancer_description}
-            </p>
-          )}
-
-          {shareMessage && (
-            <p className="text-xs text-primary">{shareMessage}</p>
-          )}
-
-          {canViewOrReanalyze && (
-            <p className="text-xs text-muted-foreground">
-              <span className="font-medium text-foreground">
-                Stored video —
-              </span>{" "}
-              click <span className="font-medium">Watch</span> to map the
-              pattern timeline and off-beat markers against the actual
-              clip.
-            </p>
-          )}
-
-          {!canViewOrReanalyze && (
-            <p className="text-xs text-muted-foreground">
-              {videoDeleted
-                ? "Video deleted from storage. The scoring result above is preserved."
-                : "Source video wasn\u2019t kept (delete-after-scoring is the default). Upload again with \u201cKeep video stored\u201d enabled if you want to map the timeline to a clip you can replay."}
-            </p>
-          )}
-
-          {rowError && (
-            <p className="text-xs text-destructive">{rowError}</p>
-          )}
-
-          {currentResult && (
-            <>
-              <TimelineView
-                result={currentResult}
-                duration={record.duration ?? 0}
-                videoSrc={videoUrl}
-              />
-              <ScoreResultCard
-                result={currentResult}
-                duration={record.duration ?? 0}
-                competitionLevel={record.competition_level}
-                onClear={() => setExpanded(false)}
-              />
-            </>
-          )}
-        </div>
-      )}
-    </div>
+    </Link>
   );
 }
 
-function ScoreResultCard({
-  result,
-  duration,
-  competitionLevel,
-  onClear,
-}: {
-  result: VideoScoreResult;
-  duration: number;
-  competitionLevel?: string | null;
-  onClear: () => void;
-}) {
-  const levelContext = getLevelContext(
-    result.overall.score,
-    competitionLevel
-  );
-  return (
-    <div className="space-y-4">
-      <Card className="bg-gradient-to-b from-card to-muted/20">
-        <CardHeader className="pb-3">
-          <CardTitle className="flex items-center justify-between">
-            <span className="flex items-center gap-2">
-              <CheckCircle2 className="h-5 w-5 text-primary" />
-              Score
-            </span>
-            <span className="text-sm text-muted-foreground font-normal">
-              {formatDuration(duration)}
-            </span>
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-5">
-          <div className="flex flex-col items-center gap-3 py-4">
-            <div className="flex items-baseline gap-2">
-              <span className="text-5xl sm:text-7xl font-bold tabular-nums leading-none">
-                {result.overall.score.toFixed(1)}
-              </span>
-              <span className="text-xl sm:text-2xl text-muted-foreground">/10</span>
-            </div>
-            {levelContext && (
-              <span
-                className={`text-xs font-medium ${
-                  levelContext.tone === "above"
-                    ? "text-emerald-300"
-                    : levelContext.tone === "below"
-                    ? "text-amber-300"
-                    : "text-muted-foreground"
-                }`}
-                title={`Heuristic tier range for ${levelContext.matchedLevel}. Compares against typical WCS scoring bands, not peer data.`}
-              >
-                {levelContext.label}
-              </span>
-            )}
-            {(() => {
-              // When Gemini's observed tier differs from the user's
-              // declared level, make the mismatch explicit instead of
-              // letting the impression text contradict the label.
-              const declared = (competitionLevel || "").trim().toLowerCase();
-              const observed = (result.observed_level || "").trim();
-              if (!observed) return null;
-              if (
-                declared &&
-                observed.toLowerCase() === declared
-              )
-                return null;
-              if (!declared) {
-                return (
-                  <span className="text-xs text-muted-foreground">
-                    Scored as{" "}
-                    <span className="font-medium text-foreground">
-                      {observed}
-                    </span>
-                  </span>
-                );
-              }
-              return (
-                <span className="text-xs text-muted-foreground">
-                  Scored as{" "}
-                  <span className="font-medium text-emerald-300">
-                    {observed}
-                  </span>
-                  {" · Declared "}
-                  <span className="font-medium">{competitionLevel}</span>
-                </span>
-              );
-            })()}
-            <div className="flex items-center gap-2">
-              <Badge className="text-sm px-3 py-0.5">
-                {result.overall.grade}
-              </Badge>
-              {result.overall.confidence === "low" && (
-                <Badge variant="outline" className="text-xs">
-                  low confidence
-                </Badge>
-              )}
-              {result.sanity_warnings && result.sanity_warnings.length > 0 && (
-                <Badge
-                  variant="outline"
-                  className="text-xs border-amber-500/40 text-amber-300"
-                  title={result.sanity_warnings.join("\n")}
-                >
-                  plausibility warnings ({result.sanity_warnings.length})
-                </Badge>
-              )}
-            </div>
-            {result.overall.impression && (
-              <p className="text-sm text-muted-foreground italic text-center max-w-lg pt-2">
-                <Quote className="inline h-3 w-3 mr-1 -mt-0.5 opacity-50" />
-                {result.overall.impression}
-              </p>
-            )}
-          </div>
-
-          <div className="space-y-4 pt-2 border-t border-border">
-            {(Object.keys(CATEGORY_LABELS) as Array<keyof typeof CATEGORY_LABELS>).map(
-              (key) => {
-                const cat = result.categories[key];
-                return (
-                  <div key={key} className="space-y-1">
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="font-medium">{CATEGORY_LABELS[key]}</span>
-                      <span className="font-mono tabular-nums text-right">
-                        {cat.score.toFixed(1)} / 10
-                        {typeof cat.score_low === "number" &&
-                          typeof cat.score_high === "number" &&
-                          cat.score_high > cat.score_low && (
-                            <span className="block text-[10px] text-muted-foreground font-normal">
-                              [{cat.score_low.toFixed(1)}–
-                              {cat.score_high.toFixed(1)}]
-                            </span>
-                          )}
-                      </span>
-                    </div>
-                    <ScoreBar
-                      score={cat.score}
-                      scoreLow={cat.score_low}
-                      scoreHigh={cat.score_high}
-                    />
-                    {cat.notes && (
-                      <p className="text-xs text-muted-foreground pt-0.5">
-                        {cat.notes}
-                      </p>
-                    )}
-                    {key === "technique" && (
-                      <TechniqueBreakdown technique={cat} />
-                    )}
-                  </div>
-                );
-              }
-            )}
-          </div>
-        </CardContent>
-      </Card>
-
-      {(result.lead || result.follow) && (
-        <PartnerCards lead={result.lead} follow={result.follow} />
-      )}
-
-      {(() => {
-        // Prefer the server-computed summary. For analyses stored
-        // before the backend started returning pattern_summary, fall
-        // back to deriving it from the flat patterns_identified list
-        // so every historical analysis still gets the card.
-        const summary =
-          result.pattern_summary && result.pattern_summary.length > 0
-            ? result.pattern_summary
-            : derivePatternSummary(result.patterns_identified);
-        return summary.length > 0 ? (
-          <PatternSummaryCard summary={summary} />
-        ) : null;
-      })()}
-
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base flex items-center gap-2">
-            <CheckCircle2 className="h-4 w-4 text-emerald-400" />
-            Strengths
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <ul className="space-y-2.5 text-sm">
-            {result.strengths.map((s, i) => (
-              <li key={i} className="flex items-start gap-2.5">
-                <CheckCircle2 className="h-4 w-4 text-emerald-400 mt-0.5 shrink-0" />
-                <span className="text-muted-foreground">{s}</span>
-              </li>
-            ))}
-          </ul>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base flex items-center gap-2">
-            <Target className="h-4 w-4 text-amber-400" />
-            Areas to improve
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <ul className="space-y-2.5 text-sm">
-            {result.improvements.map((s, i) => (
-              <li key={i} className="flex items-start gap-2.5">
-                <Target className="h-4 w-4 text-amber-400 mt-0.5 shrink-0" />
-                <span className="text-muted-foreground">{s}</span>
-              </li>
-            ))}
-          </ul>
-        </CardContent>
-      </Card>
-
-      <Button onClick={onClear} variant="outline" className="w-full">
-        Analyze another video
-      </Button>
-    </div>
-  );
-}
+// ScoreResultCard moved to src/components/analyze/score-result-card.tsx
 
 function HowScoringWorksInfo() {
   return (
@@ -1553,110 +920,11 @@ function SelectWithOther({
   );
 }
 
-function TechniqueBreakdown({
-  technique,
-}: {
-  technique: VideoScoreResult["categories"]["technique"];
-}) {
-  const subs = [
-    { key: "posture", label: "Posture", sub: technique.posture },
-    { key: "extension", label: "Extension", sub: technique.extension },
-    { key: "footwork", label: "Footwork", sub: technique.footwork },
-    { key: "slot", label: "Slot", sub: technique.slot },
-  ].filter(
-    (s): s is { key: string; label: string; sub: { score: number; notes?: string } } =>
-      Boolean(s.sub && typeof s.sub.score === "number")
-  );
-  if (subs.length === 0) return null;
-  return (
-    <details className="group pt-1">
-      <summary className="cursor-pointer text-xs text-muted-foreground hover:text-foreground list-none inline-flex items-center gap-1">
-        <span className="group-open:hidden">Show sub-scores ▾</span>
-        <span className="hidden group-open:inline">Hide sub-scores ▴</span>
-      </summary>
-      <div className="grid grid-cols-2 gap-3 pt-2.5">
-        {subs.map(({ key, label, sub }) => (
-          <div key={key} className="space-y-1">
-            <div className="flex items-center justify-between text-xs">
-              <span className="text-muted-foreground">{label}</span>
-              <span className="font-mono tabular-nums">
-                {sub.score.toFixed(1)}
-              </span>
-            </div>
-            <ScoreBar score={sub.score} />
-          </div>
-        ))}
-      </div>
-    </details>
-  );
-}
-
 // PatternSummaryCard + derivePatternSummary moved to
 // src/components/analyze/pattern-summary.tsx so the shared page
 // can reuse them.
 
-function PartnerCards({
-  lead,
-  follow,
-}: {
-  lead?: VideoScoreResult["lead"];
-  follow?: VideoScoreResult["follow"];
-}) {
-  return (
-    <Card>
-      <CardHeader className="pb-3">
-        <CardTitle className="text-base">Lead & Follow</CardTitle>
-      </CardHeader>
-      <CardContent className="grid sm:grid-cols-2 gap-4">
-        <PartnerPanel label="Lead" data={lead} />
-        <PartnerPanel label="Follow" data={follow} />
-      </CardContent>
-    </Card>
-  );
-}
 
-function PartnerPanel({
-  label,
-  data,
-}: {
-  label: string;
-  data?: { technique_score?: number; presentation_score?: number; notes?: string };
-}) {
-  if (!data) {
-    return (
-      <div className="rounded-md border border-dashed border-border p-3 text-xs text-muted-foreground">
-        {label}: no per-partner detail
-      </div>
-    );
-  }
-  const rows: Array<{ k: string; v?: number }> = [
-    { k: "Technique", v: data.technique_score },
-    { k: "Presentation", v: data.presentation_score },
-  ].filter((r) => typeof r.v === "number");
-  return (
-    <div className="rounded-md border border-border p-3 space-y-2.5">
-      <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-        {label}
-      </div>
-      <div className="space-y-2">
-        {rows.map((r) => (
-          <div key={r.k} className="space-y-1">
-            <div className="flex items-center justify-between text-xs">
-              <span className="text-muted-foreground">{r.k}</span>
-              <span className="font-mono tabular-nums">
-                {(r.v ?? 0).toFixed(1)}
-              </span>
-            </div>
-            <ScoreBar score={r.v ?? 0} />
-          </div>
-        ))}
-      </div>
-      {data.notes && (
-        <p className="text-xs text-muted-foreground pt-1">{data.notes}</p>
-      )}
-    </div>
-  );
-}
 
 /**
  * Probe video duration locally via a hidden <video> element. Avoids a

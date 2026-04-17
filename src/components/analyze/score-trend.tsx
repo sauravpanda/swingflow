@@ -203,10 +203,10 @@ export function ScoreTrendChart({
   );
   const [hovered, setHovered] = useState<Point | null>(null);
 
-  // Clicking a dot or the detail card deep-links into the analyze
-  // page with the analysis auto-expanded + scrolled into view.
+  // Clicking a dot or the detail card deep-links to the dedicated
+  // analysis page.
   const openAnalysis = (id: string) => {
-    router.push(`/analyze?id=${id}`);
+    router.push(`/analysis?id=${id}`);
   };
 
   const allPoints = useMemo(
