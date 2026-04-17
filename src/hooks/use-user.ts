@@ -49,7 +49,22 @@ export function useUser() {
   const signUpWithPassword = useCallback(
     async (email: string, password: string) => {
       const sb = getSupabase();
-      const { error } = await sb.auth.signUp({ email, password });
+      // Explicit emailRedirectTo so the verification link resolves
+      // back to production, not whatever Site URL is currently
+      // configured in the Supabase dashboard (which defaults to
+      // localhost:3000 on a fresh project). Falls back to the
+      // current origin on staging/dev so local signups still work.
+      const origin =
+        typeof window !== "undefined" && window.location?.origin
+          ? window.location.origin
+          : "https://swingflow.dance";
+      const { error } = await sb.auth.signUp({
+        email,
+        password,
+        options: {
+          emailRedirectTo: `${origin}/`,
+        },
+      });
       if (error) throw error;
     },
     []
