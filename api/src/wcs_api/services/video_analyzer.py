@@ -28,16 +28,18 @@ from ..settings import settings
 
 
 def _extract_beat_context(video_path: str) -> str | None:
-    """Pull audio out of the video, run librosa beat tracking, and return a
-    prompt-ready string. Gemini's native audio understanding is good, but
-    giving it actual beat timestamps as context consistently tightens up
-    timing judgments (the canonical wcs-analyzer behavior).
+    """Pull audio out of the video, run beat tracking (Beat This!
+    preferred, librosa fallback), and return a prompt-ready string.
+    Gemini's native audio understanding is good, but a STRUCTURED
+    beat grid — especially one with real downbeats, not a heuristic
+    pick — gives the model an authoritative timing reference it can
+    snap pattern boundaries to.
 
-    Silent-fail on any error — this is a best-effort enrichment, not a
-    blocker.
+    Silent-fail on any error — this is a best-effort enrichment,
+    not a blocker on the analysis itself.
     """
     try:
-        import librosa  # lazy import — heavy module
+        from .beat_tracker import track_beats
 
         wav_path = tempfile.NamedTemporaryFile(delete=False, suffix=".wav").name
         try:
@@ -58,17 +60,18 @@ def _extract_beat_context(video_path: str) -> str | None:
                 check=True,
                 timeout=60,
             )
-            y, sr = librosa.load(wav_path, sr=22050, mono=True)
-            tempo_raw, beat_times = librosa.beat.beat_track(
-                y=y, sr=sr, units="time"
-            )
-            if beat_times is None or len(beat_times) < 4:
+            result = track_beats(wav_path)
+            if result is None or len(result.beats) < 4:
                 return None
-            bpm = (
-                float(tempo_raw)
-                if not hasattr(tempo_raw, "__iter__")
-                else float(list(tempo_raw)[0])
-            )
+            bpm = result.bpm
+            # Prefer real downbeats when Beat This! is in use. Fall
+            # back to "every 4 beats from onset-offset pick" when on
+            # librosa path. The prompt below flags which source we
+            # used so downstream sanity checks can trust Beat This!
+            # output more.
+            beat_times = result.beats
+            downbeat_set = set(result.downbeats)
+            source = result.source
             # FULL beat timeline with phrase-1/5 markers. WCS clips
             # (especially blues and contemporary) often have tempo
             # shifts or breaks mid-song, so passing only the first
@@ -76,18 +79,33 @@ def _extract_beat_context(video_path: str) -> str | None:
             # timing drift. Cost is small — ~1000 tokens for a full
             # 2-min clip — vs. the accuracy gain from a grid that's
             # valid end-to-end.
-            all_beats = beat_times.tolist()
+            all_beats = beat_times
             lines: list[str] = []
+            # With Beat This! we know which beats are actual downbeats
+            # (real bar-1 of the 4/4). We label those as the phrase
+            # starts and count onward from there. With librosa fallback,
+            # downbeat_set has the heuristic-picked offset beats and
+            # we do the same, but it's less reliable.
+            last_downbeat_idx = 0
             for i, t in enumerate(all_beats):
-                phrase_beat = (i % 8) + 1
+                is_downbeat = t in downbeat_set
+                if is_downbeat:
+                    last_downbeat_idx = i
+                    # First downbeat of a pair = phrase start in WCS
+                    # (2 musical bars = 1 8-count phrase). Model will
+                    # also understand "downbeat" generically.
+                phrase_beat = ((i - last_downbeat_idx) % 8) + 1
                 marker = ""
-                if phrase_beat == 1:
-                    marker = "  ← phrase start (beat 1)"
+                if is_downbeat:
+                    marker = "  ← DOWNBEAT (bar 1)"
+                    if phrase_beat == 1:
+                        marker += " · phrase start"
                 elif phrase_beat == 5:
                     marker = "  ← anchor region (beats 5-6)"
                 lines.append(f"  {t:6.2f}s  beat {phrase_beat}{marker}")
             grid = "\n".join(lines)
             total_beats = len(all_beats)
+            total_downbeats = len(downbeat_set)
             # Flag tempo shifts: compute rolling inter-beat-interval
             # and note any windows where it deviates >15% from the
             # average. Gives the model an explicit heads-up instead
@@ -111,21 +129,29 @@ def _extract_beat_context(video_path: str) -> str | None:
                         + "\n".join(shifts[:8])
                         + ("\n  …" if len(shifts) > 8 else "")
                     )
+            source_note = (
+                "Beat This! (ISMIR 2024) with real downbeat detection"
+                if source == "beat_this"
+                else "librosa (heuristic downbeats — treat with skepticism)"
+            )
             return (
-                "DETECTED MUSIC CONTEXT (from librosa beat tracking):\n"
+                f"DETECTED MUSIC CONTEXT (from {source_note}):\n"
                 f"- Estimated average BPM: {bpm:.1f}\n"
-                f"- Total beats detected: {total_beats}"
+                f"- Total beats detected: {total_beats} "
+                f"({total_downbeats} real downbeats)"
                 f"{shift_notes}\n"
-                "- Full beat grid (use this as the authoritative timeline):\n"
+                "- Full beat grid (use this as the AUTHORITATIVE timeline):\n"
                 f"{grid}\n\n"
                 "Use this grid as a STRONG PRIOR. Every pattern boundary "
-                "should snap to the nearest beat 1 (start) or beat 6 / "
-                "beat 8 (end). A dancer's weight change within ~100ms "
-                "of a detected beat counts as on-beat. Anchor steps "
-                "should land near beats 5 and 6 of each 8-count phrase. "
-                "Do NOT invent times between beats — align to the grid. "
-                "When tempo shifts (see flagged regions), re-anchor to "
-                "the actual beat timestamps rather than extrapolating.\n"
+                "should snap to the nearest DOWNBEAT (start) and end on "
+                "beat 6 (6-count patterns) or beat 8 (8-count patterns) "
+                "of the phrase that started at a downbeat. A dancer's "
+                "weight change within ~100ms of a detected beat counts "
+                "as on-beat. Anchor steps should land near beats 5 and 6 "
+                "of each 8-count phrase. Do NOT invent times between "
+                "beats — align to the grid. When tempo shifts (see "
+                "flagged regions), re-anchor to the actual beat "
+                "timestamps rather than extrapolating.\n"
             )
         finally:
             try:
@@ -349,6 +375,12 @@ Look for these specific cues:
   both hands open).
 - **Underarm turn / Inside turn** — follower turns UNDER a raised hand
   during the pass (not at the catch).
+- **Free spin** — follower spins on her OWN axis without partnered
+  rotation; lead briefly releases or holds a very light finger
+  connection. Distinct from a whip (whip keeps full partnership
+  through the rotation). One clear cue: if you can see the lead
+  letting go / barely touching during the spin → free spin, not
+  whip.
 - **Starter step / basic** — no travel, no rotation. Weight changes in
   place.
 
@@ -378,17 +410,29 @@ Look for these specific cues:
 For each pattern, return BOTH:
 1. `name` — the pattern family (e.g. "whip", "sugar push", "side pass")
 2. `variant` — the specific sub-type (e.g. "basket", "reverse",
-   "with inside turn"). Use "basic" when it's a plain execution of
-   the family, or null if you can't commit to a specific variant.
+   "with inside turn")
+3. `visual_cue` — a SHORT phrase describing the defining visual
+   feature you observed that locks in the variant (e.g. "follower's
+   hand behind back", "follower rotates under raised arm on 3-4",
+   "lead releases during spin"). REQUIRED when variant is anything
+   other than "basic" or null — this forces you to have a specific
+   reason before committing.
 
-Example: a clear basket whip → `{name: "whip", variant: "basket"}`.
-A plain whip → `{name: "whip", variant: "basic"}`. A whip where you
-see rotation but can't tell which kind → `{name: "whip", variant: null}`.
+ANTI-DEFAULT RULES (user feedback shows this tool over-uses "basic"):
+- "basic" is ONLY valid when you've watched the full pattern AND
+  confirmed NO variant features are present.
+- If you see ANY distinguishing feature (turn under arm, hand-behind-
+  back, reversed rotation, cradling arm, sugar tuck compression,
+  release-spin) → commit to that variant, do not fall back to "basic".
+- `null` variant is a last resort — use only when the pattern family
+  itself is clear but the variant is genuinely unreadable (bad camera
+  angle, dancers obscured). If you use null, confidence must be <0.7.
 
-Prefer committing to a specific variant when distinguishing features
-are visible. "basic" is valid when the family is clear but nothing
-sets it apart. `null` is for genuine uncertainty — don't use it to
-avoid thinking.
+Example: a clear basket whip → `{name: "whip", variant: "basket",
+visual_cue: "follower's hand held behind back from 3-5"}`. A plain
+whip with no added features → `{name: "whip", variant: "basic"}`.
+A whip where you see rotation but can't tell which specific kind →
+`{name: "whip", variant: null}` with confidence <0.7.
 
 === DISTINGUISHING RULES (when in doubt) ===
 
@@ -424,8 +468,8 @@ no markdown, no prose:
 {
   "patterns": [
     {"start_time": 0.00, "end_time": 2.67, "name": "starter step", "variant": "basic", "count": 6, "confidence": 0.9},
-    {"start_time": 2.67, "end_time": 5.33, "name": "sugar push", "variant": "with inside turn", "count": 6, "confidence": 0.8},
-    {"start_time": 5.33, "end_time": 8.89, "name": "whip", "variant": "basket", "count": 8, "confidence": 0.7}
+    {"start_time": 2.67, "end_time": 5.33, "name": "sugar push", "variant": "with inside turn", "visual_cue": "follower rotates under raised arm on 3-4", "count": 6, "confidence": 0.8},
+    {"start_time": 5.33, "end_time": 8.89, "name": "whip", "variant": "basket", "visual_cue": "follower's hand held behind back from 3-5", "count": 8, "confidence": 0.7}
   ]
 }
 
@@ -507,7 +551,7 @@ Respond in this exact JSON format. Fill `reasoning` BEFORE `score` in each categ
   "patterns_identified": [
     {
       "name": "<pattern family — e.g. sugar push, left side pass, whip, tuck turn>",
-      "variant": "<specific sub-type — e.g. 'basket', 'reverse', 'apache', 'with inside turn', 'with outside turn', 'sugar tuck'. Use 'basic' for plain execution. Use null only when you genuinely can't commit to a variant.>",
+      "variant": "<specific sub-type — e.g. 'basket', 'reverse', 'apache', 'with inside turn', 'with outside turn', 'sugar tuck'. Use 'basic' ONLY when you've verified NO variant features are present. If you see any distinguishing feature (turn under arm, hand-behind-back, reversed rotation, cradling arm, sugar tuck compression, release-spin), commit to that variant — do NOT fall back to 'basic'. `null` is last resort for genuinely unreadable variants (bad angle, obscured dancers).>",
       "start_time": <seconds from video start, float>,
       "end_time": <seconds from video start, float>,
       "quality": "<strong|solid|needs_work|weak>",

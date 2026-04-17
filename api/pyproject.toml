@@ -17,6 +17,8 @@ dependencies = [
   "httpx>=0.27.0",
   "google-genai>=0.3.0",
   "boto3>=1.34.0",
+  "beat-this",
+  "torch>=2.0",
 ]
 
 [build-system]
@@ -25,3 +27,6 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/wcs_api"]
+
+[tool.uv.sources]
+beat-this = { git = "https://github.com/CPJKU/beat_this.git" }
