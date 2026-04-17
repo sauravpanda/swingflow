@@ -381,6 +381,15 @@ export function TimelineView({
             <div className="flex items-baseline justify-between gap-2 flex-wrap">
               <span className="font-semibold text-foreground">
                 {autoDetail.name}
+                {autoDetail.variant &&
+                  autoDetail.variant.toLowerCase() !== "basic" && (
+                    <span className="text-muted-foreground font-normal">
+                      {" · "}
+                      <span className="text-foreground">
+                        {autoDetail.variant}
+                      </span>
+                    </span>
+                  )}
               </span>
               <span className="text-muted-foreground font-mono tabular-nums">
                 {formatTime(autoDetail.start_time ?? 0)} →{" "}

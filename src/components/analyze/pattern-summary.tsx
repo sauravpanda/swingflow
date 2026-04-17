@@ -48,6 +48,7 @@ export function derivePatternSummary(
   if (!patterns || patterns.length === 0) return [];
   const counts = new Map<string, number>();
   const displayNames = new Map<string, string>();
+  const variants = new Map<string, string | null>();
   const qualities = new Map<string, string[]>();
   const timings = new Map<string, string[]>();
   const notes = new Map<string, string[]>();
@@ -57,9 +58,19 @@ export function derivePatternSummary(
   for (const p of patterns) {
     const raw = (p.name || "").trim();
     if (!raw) continue;
-    const key = raw.toLowerCase().replace(/\s+/g, " ");
+    const rawVariant = (p.variant || "").trim().toLowerCase();
+    // Group "basic" and null together — both mean "plain execution
+    // of the family". Distinct non-basic variants get their own
+    // bucket ("whip basket" ≠ "whip reverse").
+    const variantKeyPart =
+      rawVariant === "" || rawVariant === "basic" ? "" : rawVariant;
+    const base = raw.toLowerCase().replace(/\s+/g, " ");
+    const key = variantKeyPart ? `${base}|${variantKeyPart}` : base;
     counts.set(key, (counts.get(key) ?? 0) + 1);
     if (!displayNames.has(key)) displayNames.set(key, raw);
+    if (variantKeyPart && !variants.has(key)) {
+      variants.set(key, p.variant ?? variantKeyPart);
+    }
     if (p.quality) {
       const list = qualities.get(key) ?? [];
       list.push(p.quality);
@@ -101,6 +112,7 @@ export function derivePatternSummary(
     .sort((a, b) => b[1] - a[1])
     .map(([key, count]) => ({
       name: displayNames.get(key)!,
+      variant: variants.get(key) ?? null,
       count,
       quality: mostCommon(qualities.get(key)),
       timing: mostCommon(timings.get(key)),
@@ -150,7 +162,15 @@ export function PatternSummaryCard({
                 />
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-                    <span className="font-medium text-sm">{p.name}</span>
+                    <span className="font-medium text-sm">
+                      {p.name}
+                      {p.variant && p.variant.toLowerCase() !== "basic" && (
+                        <span className="text-muted-foreground font-normal">
+                          {" · "}
+                          <span className="text-foreground">{p.variant}</span>
+                        </span>
+                      )}
+                    </span>
                     <Badge
                       variant="outline"
                       className="text-[10px] tabular-nums px-1.5 py-0 h-4"

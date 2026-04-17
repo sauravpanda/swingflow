@@ -128,6 +128,11 @@ export type VideoCategoryScore = {
 
 export type VideoPatternIdentified = {
   name: string;
+  // Specific sub-type within the pattern family (e.g. "basket",
+  // "reverse", "apache", "with inside turn"). "basic" means plain
+  // execution of the family; null means the model couldn't commit
+  // to a specific variant.
+  variant?: string | null;
   start_time?: number;
   end_time?: number;
   quality?: "strong" | "solid" | "needs_work" | "weak" | string;
@@ -151,6 +156,10 @@ export type VideoPartnerScore = {
 
 export type PatternSummary = {
   name: string;
+  // When the aggregate has a specific non-basic variant (e.g.
+  // "basket", "reverse"), it's surfaced here so the UI can
+  // display "Whip · basket" alongside the count.
+  variant?: string | null;
   count: number;
   quality?: string | null;
   timing?: string | null;

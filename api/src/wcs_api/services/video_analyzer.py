@@ -328,36 +328,67 @@ DO NOT default every ambiguous move to "sugar push" or "basic". Many WCS \
 patterns share silhouettes but differ in rotation, entry, exit, and travel. \
 Look for these specific cues:
 
-**6-count patterns** (2 walks + 2 triples + anchor; ~3-5 seconds at typical tempo):
-- **Sugar push** — follower walks TOWARD lead (beats 1-2), compression on
-  3&4 triple in place, follower walks back to anchor (5-6). NO travel,
-  NO rotation, stays in the slot. Hands stay connected in a V.
-- **Left side pass** — lead catches follower across to lead's LEFT side on
-  beats 3-4. Follower passes through the slot, anchors on the opposite end.
-  Lead rotates roughly 180° total. Clear travel.
-- **Right side pass** — mirror of left side pass; follower crosses to
-  lead's RIGHT side. Often includes a lead-side step-through.
-- **Tuck turn** — lead leads a compact 1-turn on follower during beats 3-4,
-  then catches. Turn is tight and in-place; follower's shoulder often
-  drops briefly into the lead.
-- **Underarm pass / inside turn** — follower spins under a raised hand
-  DURING the pass (not at the catch). Bigger arc than tuck, follower
-  travels while turning.
-- **Starter step / basic** — no travel, no rotation. Weight changes in
-  place to find the music. Usually at the start of a dance.
+**6-count pattern FAMILIES** (2 walks + 2 triples + anchor; ~3-5s):
 
-**8-count patterns** (3 walks + 3 triples + anchor; ~5-7 seconds):
-- **Whip** — extended rotational flow. Lead traverses the slot twice,
-  follower rotates around. Compression 1-2, stretch 3-4, rotation 5-6,
-  anchor 7-8. Travels. Follower rotates at least 360° cumulative.
-- **Basket whip** — whip with follower's hand held behind their back
-  creating a "basket" shape. Tighter arm frame than a regular whip.
-- **Reverse whip** — whip where rotation goes the opposite direction;
-  follower is led backwards through the pattern.
-- **Apache whip** — whip with lead's arm cradling follower's head or
-  shoulder during the rotation.
-- **Whip with inside turn** — whip with an additional follower inside-
-  turn during the rotation. Visible extra turn at beats 5-6.
+- **Sugar push** (family) — follower walks TOWARD lead (beats 1-2),
+  compression on 3&4 in place, follower walks back to anchor (5-6).
+  NO travel, NO rotation, stays in the slot. Hands stay connected in a V.
+  Variants to identify explicitly when present:
+  - *basic* — plain execution, no styling or added turns
+  - *with inside turn* — follower adds an inside turn on 3-4
+  - *with tuck* / *sugar tuck* — compression into a tuck before push-off
+  - *with hand change* — lead transfers from one hand to the other
+- **Left side pass** / **Right side pass** — follower crosses to lead's
+  respective side on 3-4, anchors at the opposite end of the slot.
+  Variants:
+  - *basic* — straight pass, no turn added
+  - *with inside turn* — follower adds an inside turn during the pass
+  - *with outside turn* — follower adds an outside (CCW) turn
+- **Tuck turn** (family) — compact 1-turn on follower during 3-4.
+  Variants: *basic*, *double tuck* (two spins), *open tuck* (catch with
+  both hands open).
+- **Underarm turn / Inside turn** — follower turns UNDER a raised hand
+  during the pass (not at the catch).
+- **Starter step / basic** — no travel, no rotation. Weight changes in
+  place.
+
+**8-count pattern FAMILIES** (3 walks + 3 triples + anchor; ~5-7s):
+
+- **Whip** (family — has MANY variants, identify the specific one):
+  - *basic* — standard 8-count whip, no modifications
+  - *basket* — follower's hand held behind their back creating a
+    "basket" shape; tighter frame
+  - *reverse* — rotation goes the OPPOSITE direction; follower led
+    backwards through the pattern
+  - *apache* — lead's arm cradles follower's head/shoulder during
+    rotation
+  - *with inside turn* — whip + additional follower inside-turn during
+    rotation (beats 5-6)
+  - *with outside turn* — whip + follower outside-turn during rotation
+  - *tandem* — lead and follower travel side-by-side through rotation
+  - *cuddle* / *continuous* — follower stays close in a cuddle position
+    through the whip
+  - *shadow* — follower dances behind lead, same direction facing
+  - *pretzel* — follower's arms wrap into a pretzel shape during
+    rotation
+- **Basic in closed / promenade** — closed-position walk variation.
+
+=== VARIANT IDENTIFICATION ===
+
+For each pattern, return BOTH:
+1. `name` — the pattern family (e.g. "whip", "sugar push", "side pass")
+2. `variant` — the specific sub-type (e.g. "basket", "reverse",
+   "with inside turn"). Use "basic" when it's a plain execution of
+   the family, or null if you can't commit to a specific variant.
+
+Example: a clear basket whip → `{name: "whip", variant: "basket"}`.
+A plain whip → `{name: "whip", variant: "basic"}`. A whip where you
+see rotation but can't tell which kind → `{name: "whip", variant: null}`.
+
+Prefer committing to a specific variant when distinguishing features
+are visible. "basic" is valid when the family is clear but nothing
+sets it apart. `null` is for genuine uncertainty — don't use it to
+avoid thinking.
 
 === DISTINGUISHING RULES (when in doubt) ===
 
@@ -392,15 +423,17 @@ no markdown, no prose:
 
 {
   "patterns": [
-    {"start_time": 0.00, "end_time": 2.67, "name": "starter step", "count": 6, "confidence": 0.9},
-    {"start_time": 2.67, "end_time": 5.33, "name": "sugar push", "count": 6, "confidence": 0.8},
-    {"start_time": 5.33, "end_time": 8.89, "name": "whip", "count": 8, "confidence": 0.7}
+    {"start_time": 0.00, "end_time": 2.67, "name": "starter step", "variant": "basic", "count": 6, "confidence": 0.9},
+    {"start_time": 2.67, "end_time": 5.33, "name": "sugar push", "variant": "with inside turn", "count": 6, "confidence": 0.8},
+    {"start_time": 5.33, "end_time": 8.89, "name": "whip", "variant": "basket", "count": 8, "confidence": 0.7}
   ]
 }
 
 Fields:
 - start_time / end_time: decimal seconds, snapped to beat grid
-- name: specific pattern from the list above, or "unknown" when unclear
+- name: pattern family (e.g. "whip", "sugar push"), or "unknown"
+- variant: specific sub-type (e.g. "basket", "reverse", "with inside
+  turn"), "basic" for plain execution, or null for genuine uncertainty
 - count: 6 or 8 (the WCS count structure)
 - confidence: 0.0-1.0 (1.0 = certain, 0.5 = narrowed to family,
   <0.3 = unclear — use with "unknown")\
@@ -473,7 +506,8 @@ Respond in this exact JSON format. Fill `reasoning` BEFORE `score` in each categ
   },
   "patterns_identified": [
     {
-      "name": "<e.g., sugar push, left side pass, whip>",
+      "name": "<pattern family — e.g. sugar push, left side pass, whip, tuck turn>",
+      "variant": "<specific sub-type — e.g. 'basket', 'reverse', 'apache', 'with inside turn', 'with outside turn', 'sugar tuck'. Use 'basic' for plain execution. Use null only when you genuinely can't commit to a variant.>",
       "start_time": <seconds from video start, float>,
       "end_time": <seconds from video start, float>,
       "quality": "<strong|solid|needs_work|weak>",
@@ -1196,6 +1230,7 @@ def _summarize_patterns(
 
     counts: Counter[str] = Counter()
     display_names: dict[str, str] = {}
+    variants_per_key: dict[str, str | None] = {}
     qualities: dict[str, list[str]] = defaultdict(list)
     timings: dict[str, list[str]] = defaultdict(list)
     notes: dict[str, list[str]] = defaultdict(list)
@@ -1209,9 +1244,21 @@ def _summarize_patterns(
         raw_name = (p.get("name") or "").strip()
         if not raw_name:
             continue
-        key = _normalize_pattern_name(raw_name)
+        # Key on (family + variant) so "basket whip" and "reverse whip"
+        # count as distinct patterns even though they share the "whip"
+        # family. "basic" variant groups with null — both mean
+        # "plain execution of the family".
+        raw_variant = (p.get("variant") or "").strip().lower()
+        variant_key_part = "" if raw_variant in ("", "basic") else raw_variant
+        key = _normalize_pattern_name(raw_name) + (
+            f"|{variant_key_part}" if variant_key_part else ""
+        )
         counts[key] += 1
         display_names.setdefault(key, raw_name)
+        # Store the first non-"basic" variant we see for this key
+        # so the UI can show it as a distinct label.
+        if variant_key_part and key not in variants_per_key:
+            variants_per_key[key] = raw_variant
         q = p.get("quality")
         if isinstance(q, str) and q:
             qualities[key].append(q)
@@ -1236,6 +1283,7 @@ def _summarize_patterns(
         summary.append(
             {
                 "name": display_names[key],
+                "variant": variants_per_key.get(key),
                 "count": cnt,
                 "quality": _most_common(qualities[key]),
                 "timing": _most_common(timings[key]),
