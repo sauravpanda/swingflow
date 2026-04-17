@@ -533,7 +533,7 @@ export default function AnalyzePage() {
                   </Label>
                   <Input
                     id="dancer-focus"
-                    placeholder="e.g. couple in the red dress, lead on the right"
+                    placeholder="e.g. lead with floral jacket and bib number 433"
                     value={dancerDescription}
                     onChange={(e) =>
                       setDancerDescription(e.target.value.slice(0, 200))

@@ -7,6 +7,7 @@ import {
   getVideoQuota,
   isWcsApiConfigured,
   uploadToPresignedUrl,
+  UploadError,
   type VideoAnalysisResponse,
   type VideoAnalyzeOptions,
   type VideoQuota,
@@ -79,13 +80,47 @@ export function useVideoAnalysis() {
         content_type: file.type || "application/octet-stream",
       });
       try {
-        const { uploadUrl, objectKey } = await getPresignedUploadUrl(
-          file.name,
-          file.type || "application/octet-stream"
-        );
-        await uploadToPresignedUrl(uploadUrl, file, (percent) => {
-          setState((s) => ({ ...s, uploadProgress: percent }));
-        });
+        // Retry the upload up to 3 times. Re-request a fresh
+        // presigned URL on each attempt so we don't retry against a
+        // stale/expired link. Only retry on transient failures —
+        // genuine config issues (storage 4xx other than 403) fail
+        // fast with a useful message instead of hammering R2.
+        const MAX_ATTEMPTS = 3;
+        const BACKOFF_MS = [0, 1500, 4000];
+        let objectKey = "";
+        let lastError: unknown = null;
+        for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+          if (BACKOFF_MS[attempt] > 0) {
+            await new Promise((r) => setTimeout(r, BACKOFF_MS[attempt]));
+          }
+          try {
+            const presign = await getPresignedUploadUrl(
+              file.name,
+              file.type || "application/octet-stream"
+            );
+            objectKey = presign.objectKey;
+            await uploadToPresignedUrl(
+              presign.uploadUrl,
+              file,
+              (percent) => {
+                setState((s) => ({ ...s, uploadProgress: percent }));
+              }
+            );
+            lastError = null;
+            break;
+          } catch (e) {
+            lastError = e;
+            const shouldRetry =
+              e instanceof UploadError &&
+              e.retryable &&
+              attempt < MAX_ATTEMPTS - 1;
+            if (!shouldRetry) break;
+            // Reset progress for the retry so the UI doesn't look
+            // stuck at the failed attempt's last frame.
+            setState((s) => ({ ...s, uploadProgress: 0 }));
+          }
+        }
+        if (lastError) throw lastError;
         Analytics.videoUploadSucceeded({ size_mb: +sizeMb.toFixed(1) });
         setState((s) => ({ ...s, status: "analyzing", uploadProgress: 100 }));
         Analytics.videoAnalysisStarted();
@@ -110,7 +145,37 @@ export function useVideoAnalysis() {
         });
         refreshQuota();
       } catch (e) {
-        const message = e instanceof Error ? e.message : "Analysis failed";
+        // Surface user-actionable copy per error kind. Keeps the
+        // "check the R2 CORS policy" troubleshooting note OFF the
+        // screen — that's an ops concern, not something users can do.
+        let message: string;
+        if (e instanceof UploadError) {
+          switch (e.kind) {
+            case "offline":
+              message =
+                "You appear to be offline. Reconnect and try again.";
+              break;
+            case "timeout":
+              message =
+                "Upload timed out. Try again on a stronger connection, or use a shorter clip.";
+              break;
+            case "network":
+              message =
+                "Connection dropped during upload. We retried but it kept failing — check your internet and try again.";
+              break;
+            case "expired":
+              message =
+                "Upload link expired. Refresh the page and try again.";
+              break;
+            case "storage":
+              message = `Storage returned an error (${e.status}). If this keeps happening, let us know.`;
+              break;
+            default:
+              message = e.message || "Upload failed.";
+          }
+        } else {
+          message = e instanceof Error ? e.message : "Analysis failed";
+        }
         Analytics.videoAnalysisFailed({ message });
         setState({ ...INITIAL, status: "error", error: message });
       }
