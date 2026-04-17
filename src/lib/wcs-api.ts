@@ -133,6 +133,14 @@ export type VideoPatternIdentified = {
   quality?: "strong" | "solid" | "needs_work" | "weak" | string;
   timing?: "on_beat" | "slightly_off" | "off_beat" | string;
   notes?: string;
+  // Brief free-text description of styling during this pattern
+  // (body rolls, arm styling, musical hits). Null when nothing
+  // notable — the model is instructed to prefer silence over
+  // invention here.
+  styling?: string | null;
+  // One actionable, pattern-specific suggestion. Null when the
+  // execution was clean enough not to warrant targeted work.
+  coaching_tip?: string | null;
 };
 
 export type VideoPartnerScore = {
@@ -147,6 +155,8 @@ export type PatternSummary = {
   quality?: string | null;
   timing?: string | null;
   notes?: string | null;
+  styling?: string | null;
+  coaching_tip?: string | null;
 };
 
 export type VideoScoreResult = {

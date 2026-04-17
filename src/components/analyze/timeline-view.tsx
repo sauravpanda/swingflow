@@ -324,6 +324,20 @@ export function TimelineView({
                   {detail.notes}
                 </span>
               )}
+              {detail.styling && (
+                <span className="block mt-1.5 whitespace-pre-wrap break-words">
+                  <span className="font-medium text-foreground">
+                    Styling:
+                  </span>{" "}
+                  {detail.styling}
+                </span>
+              )}
+              {detail.coaching_tip && (
+                <span className="block mt-1 whitespace-pre-wrap break-words text-amber-300">
+                  <span className="font-medium">Tip:</span>{" "}
+                  {detail.coaching_tip}
+                </span>
+              )}
             </div>
           </div>
         )}

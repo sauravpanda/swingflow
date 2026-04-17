@@ -51,6 +51,8 @@ export function derivePatternSummary(
   const qualities = new Map<string, string[]>();
   const timings = new Map<string, string[]>();
   const notes = new Map<string, string[]>();
+  const stylings = new Map<string, string[]>();
+  const tips = new Map<string, string[]>();
 
   for (const p of patterns) {
     const raw = (p.name || "").trim();
@@ -74,6 +76,18 @@ export function derivePatternSummary(
       if (!list.includes(note)) list.push(note);
       notes.set(key, list);
     }
+    const styling = (p.styling || "").trim();
+    if (styling) {
+      const list = stylings.get(key) ?? [];
+      if (!list.includes(styling)) list.push(styling);
+      stylings.set(key, list);
+    }
+    const tip = (p.coaching_tip || "").trim();
+    if (tip) {
+      const list = tips.get(key) ?? [];
+      if (!list.includes(tip)) list.push(tip);
+      tips.set(key, list);
+    }
   }
 
   const mostCommon = (items?: string[]): string | null => {
@@ -91,6 +105,9 @@ export function derivePatternSummary(
       quality: mostCommon(qualities.get(key)),
       timing: mostCommon(timings.get(key)),
       notes: (notes.get(key) ?? []).slice(0, 3).join(" · ") || null,
+      styling: (stylings.get(key) ?? []).slice(0, 2).join(" · ") || null,
+      coaching_tip:
+        (tips.get(key) ?? []).slice(0, 2).join(" · ") || null,
     }));
 }
 
@@ -157,6 +174,20 @@ export function PatternSummaryCard({
                   {p.notes && (
                     <p className="text-xs text-muted-foreground mt-1">
                       {p.notes}
+                    </p>
+                  )}
+                  {p.styling && (
+                    <p className="text-xs text-muted-foreground mt-1.5">
+                      <span className="font-medium text-foreground">
+                        Styling:
+                      </span>{" "}
+                      {p.styling}
+                    </p>
+                  )}
+                  {p.coaching_tip && (
+                    <p className="text-xs mt-1 text-amber-300">
+                      <span className="font-medium">Tip:</span>{" "}
+                      {p.coaching_tip}
                     </p>
                   )}
                 </div>
