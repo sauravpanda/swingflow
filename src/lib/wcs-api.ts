@@ -295,9 +295,40 @@ export async function getPresignedUploadUrl(
   });
 }
 
+export type UploadErrorKind =
+  | "network"
+  | "timeout"
+  | "offline"
+  | "expired"
+  | "storage"
+  | "aborted"
+  | "unknown";
+
+export class UploadError extends Error {
+  kind: UploadErrorKind;
+  status: number;
+  constructor(kind: UploadErrorKind, message: string, status = 0) {
+    super(message);
+    this.name = "UploadError";
+    this.kind = kind;
+    this.status = status;
+  }
+  /** True when retrying is likely to help (as opposed to a config bug). */
+  get retryable(): boolean {
+    return (
+      this.kind === "network" ||
+      this.kind === "timeout" ||
+      this.kind === "expired" ||
+      (this.kind === "storage" && this.status >= 500)
+    );
+  }
+}
+
 /**
  * PUT a file directly to the presigned URL. Uses XHR (not fetch) because
- * only XHR exposes upload progress events.
+ * only XHR exposes upload progress events. Throws a classified
+ * `UploadError` so callers can retry the transient failures and
+ * surface useful messages for the rest.
  */
 export function uploadToPresignedUrl(
   url: string,
@@ -305,12 +336,27 @@ export function uploadToPresignedUrl(
   onProgress?: (percent: number) => void
 ): Promise<void> {
   return new Promise((resolve, reject) => {
+    if (typeof navigator !== "undefined" && navigator.onLine === false) {
+      reject(
+        new UploadError(
+          "offline",
+          "You appear to be offline. Check your internet connection."
+        )
+      );
+      return;
+    }
+
     const xhr = new XMLHttpRequest();
     xhr.open("PUT", url);
     xhr.setRequestHeader(
       "Content-Type",
       file.type || "application/octet-stream"
     );
+    // 10-minute hard ceiling — stops a dead connection from hanging
+    // the UI indefinitely on large clips. Most uploads complete in
+    // under 2 minutes even on modest wifi.
+    xhr.timeout = 10 * 60 * 1000;
+
     xhr.upload.onprogress = (e) => {
       if (e.lengthComputable && onProgress) {
         onProgress(Math.round((e.loaded / e.total) * 100));
@@ -319,21 +365,51 @@ export function uploadToPresignedUrl(
     xhr.onload = () => {
       if (xhr.status >= 200 && xhr.status < 300) {
         resolve();
-      } else {
+        return;
+      }
+      // R2 returns 403 when the presigned URL has expired or been
+      // tampered with. We classify that separately so callers can
+      // request a fresh URL on retry.
+      if (xhr.status === 403) {
         reject(
-          new Error(
-            `Upload failed (${xhr.status}). Your R2 bucket may be missing CORS — verify the policy allows PUT from this origin.`
+          new UploadError(
+            "expired",
+            "Upload link expired — retrying with a fresh link.",
+            403
           )
         );
+        return;
       }
-    };
-    xhr.onerror = () =>
       reject(
-        new Error(
-          "Upload failed (network error). If this persists, check the R2 bucket's CORS policy."
+        new UploadError(
+          "storage",
+          `Storage rejected the upload (${xhr.status}).`,
+          xhr.status
         )
       );
-    xhr.onabort = () => reject(new Error("Upload aborted"));
+    };
+    xhr.onerror = () => {
+      // Status 0 means the browser blocked the response reading —
+      // either a real network drop or a CORS preflight denied.
+      // We can't distinguish reliably, so report as network and let
+      // the caller retry; a persistent failure will surface with
+      // our follow-up diagnostic copy below.
+      reject(
+        new UploadError(
+          "network",
+          "Connection dropped during upload. Retrying…"
+        )
+      );
+    };
+    xhr.ontimeout = () =>
+      reject(
+        new UploadError(
+          "timeout",
+          "Upload timed out. Try again on a stronger connection."
+        )
+      );
+    xhr.onabort = () =>
+      reject(new UploadError("aborted", "Upload was cancelled."));
     xhr.send(file);
   });
 }
