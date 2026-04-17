@@ -299,15 +299,17 @@ function AnalysisPageInner() {
         )}
       </div>
 
-      {/* Action bar */}
+      {/* Action bar — icon-only labels on mobile (text appears sm+)
+          so a narrow screen shows a clean row of tappable icons
+          instead of a wrapped mess of button text. */}
       <Card>
-        <CardContent className="p-3 flex flex-wrap items-center gap-2">
+        <CardContent className="p-2 sm:p-3 flex flex-wrap items-center gap-1.5 sm:gap-2">
           {canViewOrReanalyze && (
             <>
               {loadingVideo && !videoUrl ? (
                 <Button size="sm" variant="outline" disabled>
-                  <Loader2 className="h-3.5 w-3.5 animate-spin mr-2" />
-                  Loading video…
+                  <Loader2 className="h-3.5 w-3.5 animate-spin sm:mr-2" />
+                  <span className="hidden sm:inline">Loading video…</span>
                 </Button>
               ) : null}
               <Button
@@ -317,13 +319,14 @@ function AnalysisPageInner() {
                 disabled={
                   reanalyzing || loadingVideo || deletingVideo || deletingAnalysis
                 }
+                title="Re-analyze this clip (uses 1 quota)"
               >
                 {reanalyzing ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin mr-2" />
+                  <Loader2 className="h-3.5 w-3.5 animate-spin sm:mr-2" />
                 ) : (
-                  <RotateCcw className="h-3.5 w-3.5 mr-2" />
+                  <RotateCcw className="h-3.5 w-3.5 sm:mr-2" />
                 )}
-                Re-analyze
+                <span className="hidden sm:inline">Re-analyze</span>
               </Button>
               <Button
                 size="sm"
@@ -336,18 +339,18 @@ function AnalysisPageInner() {
                 title="Delete video file from storage"
               >
                 {deletingVideo ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin mr-2" />
+                  <Loader2 className="h-3.5 w-3.5 animate-spin sm:mr-2" />
                 ) : (
-                  <Trash2 className="h-3.5 w-3.5 mr-2" />
+                  <Trash2 className="h-3.5 w-3.5 sm:mr-2" />
                 )}
-                Delete video
+                <span className="hidden sm:inline">Delete video</span>
               </Button>
             </>
           )}
 
           {shareUrl && (record.share_view_count ?? 0) > 0 && (
             <span
-              className="inline-flex items-center gap-1 text-xs text-muted-foreground tabular-nums ml-auto"
+              className="inline-flex items-center gap-1 text-xs text-muted-foreground tabular-nums"
               title={
                 record.share_last_viewed_at
                   ? `Last viewed ${new Date(record.share_last_viewed_at).toLocaleString()}`
@@ -355,8 +358,11 @@ function AnalysisPageInner() {
               }
             >
               <Eye className="h-3 w-3" />
-              {record.share_view_count} view
-              {record.share_view_count === 1 ? "" : "s"}
+              {record.share_view_count}
+              <span className="hidden sm:inline">
+                {" view"}
+                {record.share_view_count === 1 ? "" : "s"}
+              </span>
             </span>
           )}
 
@@ -367,9 +373,10 @@ function AnalysisPageInner() {
                 variant="outline"
                 onClick={handleCopyShareLink}
                 disabled={sharing}
+                title="Copy share link"
               >
-                <Copy className="h-3.5 w-3.5 mr-2" />
-                Copy link
+                <Copy className="h-3.5 w-3.5 sm:mr-2" />
+                <span className="hidden sm:inline">Copy link</span>
               </Button>
               <Button
                 size="sm"
@@ -377,13 +384,14 @@ function AnalysisPageInner() {
                 className="text-muted-foreground hover:text-destructive"
                 onClick={handleStopShare}
                 disabled={sharing}
+                title="Stop sharing"
               >
                 {sharing ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin mr-2" />
+                  <Loader2 className="h-3.5 w-3.5 animate-spin sm:mr-2" />
                 ) : (
-                  <Link2Off className="h-3.5 w-3.5 mr-2" />
+                  <Link2Off className="h-3.5 w-3.5 sm:mr-2" />
                 )}
-                Stop sharing
+                <span className="hidden sm:inline">Stop sharing</span>
               </Button>
             </>
           ) : (
@@ -392,29 +400,31 @@ function AnalysisPageInner() {
               variant="outline"
               onClick={handleShare}
               disabled={sharing}
+              title="Share this analysis via link"
             >
               {sharing ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin mr-2" />
+                <Loader2 className="h-3.5 w-3.5 animate-spin sm:mr-2" />
               ) : (
-                <Share2 className="h-3.5 w-3.5 mr-2" />
+                <Share2 className="h-3.5 w-3.5 sm:mr-2" />
               )}
-              Share link
+              <span className="hidden sm:inline">Share link</span>
             </Button>
           )}
 
           <Button
             size="sm"
             variant="ghost"
-            className="text-muted-foreground hover:text-destructive ml-auto"
+            className="text-muted-foreground hover:text-destructive sm:ml-auto"
             onClick={handleDeleteAnalysis}
             disabled={deletingAnalysis || deletingVideo || reanalyzing}
+            title="Remove from your analyses list"
           >
             {deletingAnalysis ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin mr-2" />
+              <Loader2 className="h-3.5 w-3.5 animate-spin sm:mr-2" />
             ) : (
-              <Trash2 className="h-3.5 w-3.5 mr-2" />
+              <Trash2 className="h-3.5 w-3.5 sm:mr-2" />
             )}
-            Delete analysis
+            <span className="hidden sm:inline">Delete analysis</span>
           </Button>
         </CardContent>
       </Card>
