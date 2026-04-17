@@ -68,9 +68,10 @@ export function TimelineView({
   // pattern blocks visually drift as the video plays. Zero means
   // "not loaded yet; use the prop".
   const [videoDuration, setVideoDuration] = useState(0);
-  // On touch devices there's no hover — tap sticks a selection that
-  // shows the same detail card below the timeline.
-  const detail = hovered ?? selected;
+  // Detail shown below the bar. Manual intent (hover / tap-select)
+  // wins. Otherwise track whatever pattern the video is currently
+  // playing through so a user just pressing play watches the detail
+  // card follow the dance. Defined after currentPattern below.
 
   const effectiveDuration = useMemo(() => {
     // Video element wins once metadata loads — that's the exact
@@ -162,6 +163,40 @@ export function TimelineView({
     .map((m) => ({ ...m, t: parseTimestamp(m.timestamp_approx) }))
     .filter((m): m is typeof m & { t: number } => m.t !== null);
 
+  // Pattern containing the video's current playback position. Used
+  // to (a) auto-highlight the block as the video plays and (b)
+  // auto-surface its detail card when nothing is manually hovered
+  // or tap-selected. Computed each render — patterns list is small.
+  const currentPattern = useMemo(() => {
+    for (const p of patterns) {
+      const start = p.start_time ?? 0;
+      const end = p.end_time ?? start;
+      if (currentTime >= start && currentTime <= end) return p;
+    }
+    return null;
+  }, [patterns, currentTime]);
+
+  // Prefer manual intent (hover / tap-select) over auto-tracked.
+  // The auto-tracked current pattern kicks in during playback when
+  // the user is just watching.
+  const autoDetail = hovered ?? selected ?? currentPattern;
+
+  // Scrub the timeline by clicking anywhere on the bar. We resolve
+  // the click's x-position against the bar's bounding box so the
+  // seek is accurate regardless of the bar's width.
+  const barRef = useRef<HTMLDivElement>(null);
+  const scrubToClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    const bar = barRef.current;
+    if (!bar) return;
+    const rect = bar.getBoundingClientRect();
+    if (rect.width <= 0) return;
+    const pct = Math.max(
+      0,
+      Math.min(1, (e.clientX - rect.left) / rect.width)
+    );
+    seek(pct * effectiveDuration);
+  };
+
   return (
     <div className="space-y-3">
       {videoSrc && (
@@ -186,9 +221,14 @@ export function TimelineView({
         </div>
 
         <div
-          className="relative h-12 sm:h-14 rounded-md bg-muted/30 overflow-hidden border border-border"
-          role="region"
-          aria-label="Pattern timeline"
+          ref={barRef}
+          className="relative h-12 sm:h-14 rounded-md bg-muted/30 overflow-hidden border border-border cursor-pointer group/bar"
+          role="slider"
+          aria-label="Pattern timeline — click to scrub"
+          aria-valuemin={0}
+          aria-valuemax={Math.round(effectiveDuration)}
+          aria-valuenow={Math.round(currentTime)}
+          onClick={scrubToClick}
         >
           {patterns.map((p, i) => {
             // Clamp start/end to the effective timeline so patterns
@@ -204,17 +244,31 @@ export function TimelineView({
               0.8,
               ((end - start) / effectiveDuration) * 100
             );
+            const isCurrent = currentPattern === p;
+            const isHoveredOrSelected = hovered === p || selected === p;
             return (
               <button
                 key={`${i}-${p.name}`}
                 type="button"
                 className={cn(
-                  "absolute h-full border-r border-background/40 flex items-center justify-start px-1 text-[9px] sm:text-[10px] font-medium overflow-hidden whitespace-nowrap transition-opacity",
+                  "absolute h-full border-r border-background/40 flex items-center justify-start px-1 text-[9px] sm:text-[10px] font-medium overflow-hidden whitespace-nowrap transition-[opacity,box-shadow,transform,filter] duration-200",
                   colorForQuality(p.quality),
-                  hovered === p ? "opacity-100" : "opacity-90 hover:opacity-100"
+                  // Current pattern: brighter + inset ring so it
+                  // reads as the "you are here" block without
+                  // changing layout.
+                  isCurrent
+                    ? "opacity-100 ring-2 ring-inset ring-white/70 brightness-110 saturate-125"
+                    : isHoveredOrSelected
+                    ? "opacity-100"
+                    : "opacity-80 hover:opacity-100"
                 )}
                 style={{ left: `${left}%`, width: `${width}%` }}
-                onClick={() => {
+                onClick={(e) => {
+                  // Stop the click from bubbling to the bar's
+                  // scrub handler — clicking a pattern block
+                  // should seek to that pattern's start, not the
+                  // block's click x-position.
+                  e.stopPropagation();
                   seek(start);
                   setSelected(p);
                 }}
@@ -237,13 +291,28 @@ export function TimelineView({
             />
           ))}
 
-          {/* Playhead */}
+          {/* Playhead with floating time tag */}
           <div
-            className="absolute top-0 h-full w-0.5 bg-foreground pointer-events-none"
+            className="absolute top-0 h-full w-[2px] bg-foreground pointer-events-none shadow-[0_0_0_1px_rgba(0,0,0,0.3)]"
             style={{
               left: `${Math.min(100, (currentTime / effectiveDuration) * 100)}%`,
             }}
-          />
+          >
+            <span
+              className="absolute -top-[18px] left-1/2 -translate-x-1/2 px-1 py-[1px] text-[9px] font-mono tabular-nums rounded-sm bg-foreground text-background whitespace-nowrap pointer-events-none"
+              style={{
+                // Keep the tag on-screen near both edges.
+                transform:
+                  (currentTime / effectiveDuration) * 100 < 4
+                    ? "translate(0%, 0)"
+                    : (currentTime / effectiveDuration) * 100 > 96
+                    ? "translate(-100%, 0)"
+                    : "translate(-50%, 0)",
+              }}
+            >
+              {formatTime(currentTime)}
+            </span>
+          </div>
         </div>
 
         {/* Time ticks */}
@@ -305,37 +374,38 @@ export function TimelineView({
           </span>
         </div>
 
-        {/* Hovered / tap-selected pattern detail */}
-        {detail && (
+        {/* Detail card — tracks hover / tap-select, falls back to
+            the pattern currently under the playhead during playback. */}
+        {autoDetail && (
           <div className="rounded-md border border-border bg-muted/20 p-2 text-xs">
             <div className="flex items-baseline justify-between gap-2 flex-wrap">
               <span className="font-semibold text-foreground">
-                {detail.name}
+                {autoDetail.name}
               </span>
               <span className="text-muted-foreground font-mono tabular-nums">
-                {formatTime(detail.start_time ?? 0)} →{" "}
-                {formatTime(detail.end_time ?? 0)}
+                {formatTime(autoDetail.start_time ?? 0)} →{" "}
+                {formatTime(autoDetail.end_time ?? 0)}
               </span>
             </div>
             <div className="text-muted-foreground mt-1">
-              {detail.quality ?? "—"} · {detail.timing ?? "—"}
-              {detail.notes && (
+              {autoDetail.quality ?? "—"} · {autoDetail.timing ?? "—"}
+              {autoDetail.notes && (
                 <span className="block mt-1 whitespace-pre-wrap break-words">
-                  {detail.notes}
+                  {autoDetail.notes}
                 </span>
               )}
-              {detail.styling && (
+              {autoDetail.styling && (
                 <span className="block mt-1.5 whitespace-pre-wrap break-words">
                   <span className="font-medium text-foreground">
                     Styling:
                   </span>{" "}
-                  {detail.styling}
+                  {autoDetail.styling}
                 </span>
               )}
-              {detail.coaching_tip && (
+              {autoDetail.coaching_tip && (
                 <span className="block mt-1 whitespace-pre-wrap break-words text-amber-300">
                   <span className="font-medium">Tip:</span>{" "}
-                  {detail.coaching_tip}
+                  {autoDetail.coaching_tip}
                 </span>
               )}
             </div>
