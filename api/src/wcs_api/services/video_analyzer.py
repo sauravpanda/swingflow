@@ -582,21 +582,27 @@ def _build_gen_config(model: str) -> genai_types.GenerateContentConfig:
         # between "I can see there are dancers" and "I can see heel-
         # toe rolling and a collapsed anchor." wcs-analyzer uses
         # HIGH by default and it's critical for technique scoring.
-        # Cost: ~3x the per-frame token billing, but Gemini samples
-        # only ~1 frame per second of video anyway, so total spend
-        # per clip stays bounded.
         "media_resolution": genai_types.MediaResolution.MEDIA_RESOLUTION_HIGH,
+        # Pin the seed. Even at temperature=0.0, Gemini has GPU
+        # non-determinism + thinking-token variance that produces
+        # ±0.3 score drift between identical runs. A fixed seed
+        # doesn't fully eliminate that (thinking and video sampling
+        # are still non-deterministic) but meaningfully reduces it.
+        "seed": 42,
     }
     # Extended thinking. The SDK accepts a ThinkingConfig on both
     # Gemini 3.x and 2.5 models, but the fields differ:
     #   - Gemini 3.x: thinking_level ("low"|"medium"|"high")
     #   - Gemini 2.5: thinking_budget (int token budget; -1 = auto)
-    # We pass the right shape per model family on a best-effort basis
-    # and fall back silently if the SDK rejects the field.
+    # We use MEDIUM on 3.x — HIGH is the biggest source of
+    # analysis-to-analysis variance (thinking explores different
+    # paths each run). Medium trades some peak scoring quality for
+    # a lot of consistency, which matters more for a user-facing
+    # score than the upper ~5% of reasoning depth.
     if "gemini-3" in model:
         try:
             config_kwargs["thinking_config"] = genai_types.ThinkingConfig(
-                thinking_level="high",  # type: ignore[arg-type]
+                thinking_level="medium",  # type: ignore[arg-type]
             )
         except (TypeError, AttributeError):
             pass
@@ -608,6 +614,21 @@ def _build_gen_config(model: str) -> genai_types.GenerateContentConfig:
         except (TypeError, AttributeError):
             pass
     return genai_types.GenerateContentConfig(**config_kwargs)
+
+
+def _video_part_with_fps(uploaded: Any, fps: float = 2.0) -> genai_types.Part:
+    """Wrap an uploaded Gemini File as a Part with explicit video
+    sampling FPS. Default is 2 FPS — twice the temporal resolution
+    of Gemini's ~1 FPS default, which matters for dance moves that
+    happen on the & counts (roughly 2-3 FPS at typical WCS tempos).
+    """
+    return genai_types.Part(
+        file_data=genai_types.FileData(
+            file_uri=uploaded.uri,
+            mime_type=getattr(uploaded, "mime_type", None) or "video/mp4",
+        ),
+        video_metadata=genai_types.VideoMetadata(fps=fps),
+    )
 
 
 def _extract_usage(response: Any, model: str) -> dict[str, Any]:
@@ -862,6 +883,13 @@ def analyze_video_path(
 
     sanity_warnings: list[str] = []
 
+    # Wrap the uploaded video with an explicit fps=2 sampling hint.
+    # Default Gemini sampling is ~1 FPS; doubling it catches the
+    # "&" counts between beats (kick-ball-changes, quick anchor
+    # settles) that 1 FPS routinely misses. Video token cost ~2x,
+    # still bounded because we only upload short clips.
+    video_part = _video_part_with_fps(uploaded, fps=2.0)
+
     try:
         prompt = GEMINI_VIDEO_PROMPT
 
@@ -879,7 +907,7 @@ def analyze_video_path(
 
         if settings.enable_pattern_prepass:
             pre_pass_context, pre_pass_usage = _run_pattern_pre_pass(
-                client, settings.gemini_model, uploaded
+                client, settings.gemini_model, video_part
             )
             if pre_pass_context:
                 prompt = f"{pre_pass_context}\n\n{prompt}"
@@ -888,7 +916,7 @@ def analyze_video_path(
                 total_response_tokens += int(pre_pass_usage.get("response_tokens", 0))
 
         raw, main_usage = _call_gemini(
-            client, settings.gemini_model, contents=[uploaded, prompt]
+            client, settings.gemini_model, contents=[video_part, prompt]
         )
         total_prompt_tokens += int(main_usage.get("prompt_tokens", 0))
         total_response_tokens += int(main_usage.get("response_tokens", 0))
