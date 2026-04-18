@@ -1563,17 +1563,39 @@ def _build_user_context(context: dict[str, Any] | None) -> str:
 
 
 def _build_sanity_retry_prompt(
-    issues: list[str], previous_raw: str
+    issues: list[str],
+    previous_raw: str,
+    *,
+    dance_start_sec: float | None = None,
+    dance_end_sec: float | None = None,
 ) -> str:
     """Construct a correction prompt for a second Gemini pass when
     the first response tripped sanity checks. We include the prior
     response so the model can patch it rather than start over.
+
+    `dance_start_sec` / `dance_end_sec` are the EFFECTIVE bounds
+    `analyze_video_path` computed after applying downbeat, motion
+    floor, and duration clamps. Gemini's raw previous response may
+    have un-clamped bounds, so we explicitly hand over the effective
+    values here — otherwise the retry would preserve stale numbers
+    while `_sanity_check` validates against the effective ones.
     """
     issue_lines = "\n".join(f"- {i}" for i in issues)
+    window_block = ""
+    if dance_start_sec is not None and dance_end_sec is not None:
+        window_block = (
+            f"\nEFFECTIVE DANCE WINDOW (use these exact values in the "
+            f"revised JSON): dance_start_sec = {dance_start_sec:.2f}, "
+            f"dance_end_sec = {dance_end_sec:.2f}. These already "
+            "incorporate downbeat + motion-floor + duration clamps "
+            "— do not recompute them, and do not emit any patterns "
+            "outside this window.\n"
+        )
     return (
         "SANITY CHECK FAILED on your previous response. "
         "The following issues were detected:\n"
-        f"{issue_lines}\n\n"
+        f"{issue_lines}\n"
+        f"{window_block}\n"
         "Revise your response to fix these specific issues. "
         "Non-dance labels like 'intro', 'waiting', 'starter step', "
         "or 'unknown' should be 1-8 seconds — if one of yours is "
@@ -1581,9 +1603,12 @@ def _build_sanity_retry_prompt(
         "on, counting beats, and the first real pattern are "
         "different entries. Every pattern window should be 3-8 "
         "seconds — if yours is longer, it's a merge of repeats. "
-        "Cover the full video with no gaps larger than ~8 seconds. "
-        "Return the complete revised JSON in the same format as "
-        "before.\n\n"
+        "Cover the full DANCE WINDOW (dance_start_sec → "
+        "dance_end_sec) with no gaps larger than ~8 seconds. "
+        "DO NOT add patterns before dance_start_sec or after "
+        "dance_end_sec — walk-on, setup, bow, and walk-off are "
+        "explicitly excluded, not patterns. Return the complete "
+        "revised JSON in the same format as before.\n\n"
         f"YOUR PREVIOUS RESPONSE (for reference, do not copy blindly):\n"
         f"{previous_raw[:6000]}\n"
     )
@@ -1784,12 +1809,17 @@ def analyze_video_path(
             dance_end_sec=dance_end_sec,
         )
         if issues:
-            retry_prompt = _build_sanity_retry_prompt(issues, raw)
+            retry_prompt = _build_sanity_retry_prompt(
+                issues,
+                raw,
+                dance_start_sec=dance_start_sec,
+                dance_end_sec=dance_end_sec,
+            )
             try:
                 retry_raw, retry_usage = _call_gemini(
                     client,
                     settings.gemini_model,
-                    contents=[uploaded, retry_prompt],
+                    contents=[video_part, retry_prompt],
                     seed=seed,
                 )
                 total_prompt_tokens += int(retry_usage.get("prompt_tokens", 0))
