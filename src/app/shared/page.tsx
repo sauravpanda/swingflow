@@ -21,6 +21,7 @@ import {
   derivePatternSummary,
 } from "@/components/analyze/pattern-summary";
 import { Analytics } from "@/lib/analytics";
+import { fmtScore } from "@/lib/utils";
 
 function scoreBarColor(score: number): string {
   if (score >= 8) return "bg-emerald-500";
@@ -170,7 +171,7 @@ function SharedAnalysisContent() {
             <div className="flex flex-col items-center gap-3 py-2">
               <div className="flex items-baseline gap-2">
                 <span className="text-7xl font-bold tabular-nums leading-none">
-                  {overall.score.toFixed(1)}
+                  {fmtScore(overall?.score)}
                 </span>
                 <span className="text-2xl text-muted-foreground">/10</span>
               </div>
@@ -199,10 +200,10 @@ function SharedAnalysisContent() {
                       <div className="flex items-center justify-between text-sm">
                         <span className="font-medium">{label}</span>
                         <span className="font-mono tabular-nums">
-                          {cat.score.toFixed(1)} / 10
+                          {fmtScore(cat?.score)} / 10
                         </span>
                       </div>
-                      <ScoreBar score={cat.score} />
+                      <ScoreBar score={cat?.score ?? 0} />
                       {cat.notes && (
                         <p className="text-xs text-muted-foreground pt-0.5">
                           {cat.notes}
@@ -239,7 +240,7 @@ function SharedAnalysisContent() {
         })()}
 
         {/* Strengths */}
-        {result.strengths?.length > 0 && (
+        {Array.isArray(result.strengths) && result.strengths.length > 0 && (
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-base flex items-center gap-2">
@@ -261,7 +262,7 @@ function SharedAnalysisContent() {
         )}
 
         {/* Improvements */}
-        {result.improvements?.length > 0 && (
+        {Array.isArray(result.improvements) && result.improvements.length > 0 && (
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-base flex items-center gap-2">
