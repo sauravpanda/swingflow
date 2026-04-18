@@ -270,30 +270,69 @@ export function ScoreResultCard({
               <Badge className="text-sm px-3 py-0.5">
                 {result.overall.grade}
               </Badge>
-              {(result.estimated_bpm || result.song_style) && (
-                <Badge
-                  variant="outline"
-                  className="text-xs gap-1"
-                  title={
-                    result.beat_grid?.source === "beat_this"
-                      ? "Detected by Beat This! (ISMIR 2024)"
-                      : result.beat_grid?.source === "librosa"
-                      ? "Detected by librosa (fallback heuristic)"
-                      : undefined
-                  }
-                >
-                  <Music2 className="h-3 w-3" />
-                  {result.estimated_bpm ? (
-                    <span className="tabular-nums">
-                      {Math.round(result.estimated_bpm)} BPM
-                    </span>
-                  ) : null}
-                  {result.estimated_bpm && result.song_style ? " · " : null}
-                  {result.song_style ? (
-                    <span className="capitalize">{result.song_style}</span>
-                  ) : null}
-                </Badge>
-              )}
+              {(() => {
+                const trackBpm = result.beat_grid?.bpm;
+                const geminiBpm = result.estimated_bpm;
+                const style = result.song_style;
+                // Show the chip when we have ANY of: our-system BPM,
+                // Gemini BPM, or song style. Both BPMs are surfaced
+                // side-by-side when they disagree by >5% so users can
+                // spot tracker / model mismatches. The tracker source
+                // (Beat This! vs librosa) lives in the tooltip.
+                if (!trackBpm && !geminiBpm && !style) return null;
+                const trackRounded = trackBpm ? Math.round(trackBpm) : null;
+                const geminiRounded = geminiBpm ? Math.round(geminiBpm) : null;
+                const bothPresent =
+                  trackRounded !== null && geminiRounded !== null;
+                const disagreeMeaningfully =
+                  bothPresent &&
+                  Math.abs(trackRounded - geminiRounded) /
+                    Math.max(trackRounded, geminiRounded) >
+                    0.05;
+                const sourceLabel =
+                  result.beat_grid?.source === "beat_this"
+                    ? "Beat This! (ISMIR 2024)"
+                    : result.beat_grid?.source === "librosa"
+                    ? "librosa (fallback heuristic)"
+                    : null;
+                const tooltipParts: string[] = [];
+                if (trackRounded !== null && sourceLabel) {
+                  tooltipParts.push(
+                    `${trackRounded} BPM from ${sourceLabel} (audio signal)`
+                  );
+                } else if (trackRounded !== null) {
+                  tooltipParts.push(`${trackRounded} BPM from audio tracker`);
+                }
+                if (geminiRounded !== null) {
+                  tooltipParts.push(
+                    `${geminiRounded} BPM from Gemini (model's listen)`
+                  );
+                }
+                return (
+                  <Badge
+                    variant="outline"
+                    className="text-xs gap-1 flex-wrap"
+                    title={tooltipParts.join("\n") || undefined}
+                  >
+                    <Music2 className="h-3 w-3" />
+                    {disagreeMeaningfully ? (
+                      <span className="tabular-nums">
+                        {trackRounded}
+                        <span className="text-muted-foreground/80">
+                          {" / "}
+                        </span>
+                        {geminiRounded} BPM
+                      </span>
+                    ) : trackRounded !== null ? (
+                      <span className="tabular-nums">{trackRounded} BPM</span>
+                    ) : geminiRounded !== null ? (
+                      <span className="tabular-nums">{geminiRounded} BPM</span>
+                    ) : null}
+                    {((trackRounded || geminiRounded) && style) && " · "}
+                    {style && <span className="capitalize">{style}</span>}
+                  </Badge>
+                );
+              })()}
               {result.overall.confidence === "low" && (
                 <Badge variant="outline" className="text-xs">
                   low confidence
