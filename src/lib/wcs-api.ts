@@ -276,6 +276,10 @@ export type VideoQuota = {
 export type VideoAnalysisResponse = {
   duration: number;
   result: VideoScoreResult;
+  // DB row id for the persisted analysis. Present on successful
+  // inserts; null when the insert failed (caller falls back to
+  // inline render).
+  analysis_id?: string | null;
   quota: {
     plan: "free" | "basic";
     used: number;

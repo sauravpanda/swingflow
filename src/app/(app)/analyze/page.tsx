@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -91,10 +92,27 @@ export default function AnalyzePage() {
     isConfigured,
   } = useVideoAnalysis();
   const history = useAnalysisHistory();
+  const router = useRouter();
 
   const [file, setFile] = useState<File | null>(null);
   const [localError, setLocalError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // When an analysis finishes and was successfully persisted, jump
+  // to /analysis?id=<id>. That page has the dedicated full-screen
+  // layout (video + synced timeline + all cards) and lets the user
+  // share the direct link. Falls back to the inline render when
+  // the insert didn't return an id (e.g. DB write failed silently).
+  const redirectedAnalysisIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (state.status !== "success") return;
+    const id = state.result?.analysis_id;
+    if (!id) return;
+    // Guard against double-navigation on StrictMode / re-renders.
+    if (redirectedAnalysisIdRef.current === id) return;
+    redirectedAnalysisIdRef.current = id;
+    router.push(`/analysis?id=${encodeURIComponent(id)}`);
+  }, [state.status, state.result?.analysis_id, router]);
 
   // Deep-link: dashboard / chart pass `?id=<analysis-uuid>` to jump
   // straight to a specific analysis. Also handles the "accidentally

@@ -84,7 +84,13 @@ async def insert_video_analysis(
     tags: list[str] | None = None,
     dancer_description: str | None = None,
     usage: dict[str, Any] | None = None,
-) -> None:
+) -> str | None:
+    """Insert the analysis row and return its UUID on success.
+
+    Returns None when the DB responded with an unexpected shape (e.g.
+    RLS blocked the select). Caller should treat None as "row may
+    or may not exist" and skip any navigation that requires the id.
+    """
     record: dict[str, Any] = {
         "user_id": user_id,
         "filename": filename,
@@ -114,11 +120,23 @@ async def insert_video_analysis(
 
     async with httpx.AsyncClient(timeout=10) as client:
         r = await client.post(
-            _rest("video_analyses"),
-            headers={**_headers(), "Prefer": "return=minimal"},
+            # Select only `id` back — keeps the response small and
+            # avoids shipping the full analysis payload twice over
+            # the wire (we already have it locally).
+            _rest("video_analyses") + "?select=id",
+            headers={**_headers(), "Prefer": "return=representation"},
             json=record,
         )
         r.raise_for_status()
+        try:
+            rows = r.json()
+            if isinstance(rows, list) and rows:
+                row_id = rows[0].get("id")
+                if isinstance(row_id, str):
+                    return row_id
+        except Exception:  # noqa: BLE001
+            pass
+    return None
 
 
 async def insert_usage_event(

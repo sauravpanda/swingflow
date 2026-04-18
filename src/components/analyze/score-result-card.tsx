@@ -266,10 +266,34 @@ export function ScoreResultCard({
                 </span>
               );
             })()}
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap justify-center">
               <Badge className="text-sm px-3 py-0.5">
                 {result.overall.grade}
               </Badge>
+              {(result.estimated_bpm || result.song_style) && (
+                <Badge
+                  variant="outline"
+                  className="text-xs gap-1"
+                  title={
+                    result.beat_grid?.source === "beat_this"
+                      ? "Detected by Beat This! (ISMIR 2024)"
+                      : result.beat_grid?.source === "librosa"
+                      ? "Detected by librosa (fallback heuristic)"
+                      : undefined
+                  }
+                >
+                  <Music2 className="h-3 w-3" />
+                  {result.estimated_bpm ? (
+                    <span className="tabular-nums">
+                      {Math.round(result.estimated_bpm)} BPM
+                    </span>
+                  ) : null}
+                  {result.estimated_bpm && result.song_style ? " · " : null}
+                  {result.song_style ? (
+                    <span className="capitalize">{result.song_style}</span>
+                  ) : null}
+                </Badge>
+              )}
               {result.overall.confidence === "low" && (
                 <Badge variant="outline" className="text-xs">
                   low confidence

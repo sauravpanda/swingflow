@@ -195,6 +195,7 @@ async def analyze_video_endpoint(
             duration_sec=int(duration),
             usage=usage,
         )
+        analysis_id: str | None = None
         try:
             # object_key is intentionally NOT saved — the R2 object is
             # deleted below, so keeping the key would just lead to 404s
@@ -203,7 +204,7 @@ async def analyze_video_endpoint(
             # Preserve the R2 object_key on the row only when the
             # user opted in to video retention. Otherwise the row
             # stores a null key and the clip is purged below.
-            await supabase_admin.insert_video_analysis(
+            analysis_id = await supabase_admin.insert_video_analysis(
                 user_id=user_id,
                 filename=body.filename,
                 duration=duration,
@@ -224,6 +225,7 @@ async def analyze_video_endpoint(
         return {
             "duration": round(duration, 2),
             "result": result,
+            "analysis_id": analysis_id,
             "quota": {
                 "plan": quota_status["plan"],
                 "used": quota_status["used"] + 1,
