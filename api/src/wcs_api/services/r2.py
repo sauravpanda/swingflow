@@ -7,6 +7,7 @@ GETs, and DELETEs objects server-to-server.
 
 from __future__ import annotations
 
+import logging
 import os
 import tempfile
 import uuid
@@ -16,6 +17,8 @@ import boto3
 from botocore.config import Config
 
 from ..settings import settings
+
+logger = logging.getLogger(__name__)
 
 
 def _client():
@@ -68,11 +71,28 @@ def download_to_tempfile(object_key: str, suffix: str = "") -> str:
     return tmp.name
 
 
-def delete_object(object_key: str) -> None:
+def delete_object(object_key: str, *, raise_on_error: bool = False) -> None:
+    """Delete an R2 object.
+
+    By default this is best-effort: exceptions are logged (not
+    swallowed silently) and suppressed so automatic post-scoring
+    cleanup can't take down a successful analysis. The 24h bucket
+    lifecycle rule is the backstop for anything we leaked here.
+
+    Callers that are responding to a user's explicit delete request
+    (e.g. the /uploads/delete endpoint) should pass
+    `raise_on_error=True` so the error surfaces to the UI instead
+    of the user seeing a silent "deleted" that actually left the
+    object behind.
+    """
     try:
         _client().delete_object(Bucket=settings.r2_bucket, Key=object_key)
-    except Exception:
-        pass
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(
+            "r2.delete_object failed for key=%s: %s", object_key, exc
+        )
+        if raise_on_error:
+            raise
 
 
 def generate_presigned_get(object_key: str, expires_in: int = 3600) -> str:
