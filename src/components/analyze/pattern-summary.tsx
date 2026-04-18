@@ -154,7 +154,7 @@ export function PatternSummaryCard({
               QUALITY_STYLES.solid;
             return (
               <li
-                key={p.name}
+                key={`${p.name}|${p.variant ?? ""}`}
                 className="flex items-start gap-3 rounded-md border border-border p-2.5"
               >
                 <span
