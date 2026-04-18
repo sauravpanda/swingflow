@@ -23,12 +23,23 @@ async def delete_video(
 ) -> dict:
     """User-initiated delete: remove the R2 object and clear the
     reference on any of the user's video_analyses rows so the UI
-    reflects the deletion immediately."""
+    reflects the deletion immediately.
+
+    Uses raise_on_error=True so a failed R2 delete surfaces as a
+    500 to the client instead of the user seeing a silent success
+    on a privacy-critical operation.
+    """
     if not r2.object_key_belongs_to_user(body.object_key, user["sub"]):
         raise HTTPException(
             status_code=403, detail="object does not belong to user"
         )
-    r2.delete_object(body.object_key)
+    try:
+        r2.delete_object(body.object_key, raise_on_error=True)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"R2 delete failed: {exc}",
+        ) from exc
     try:
         await supabase_admin.clear_video_analysis_object_key(
             object_key=body.object_key, user_id=user["sub"]
