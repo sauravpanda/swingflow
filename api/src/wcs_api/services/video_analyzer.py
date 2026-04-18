@@ -1581,9 +1581,15 @@ def _build_sanity_retry_prompt(
         "on, counting beats, and the first real pattern are "
         "different entries. Every pattern window should be 3-8 "
         "seconds — if yours is longer, it's a merge of repeats. "
-        "Cover the full video with no gaps larger than ~8 seconds. "
-        "Return the complete revised JSON in the same format as "
-        "before.\n\n"
+        "Cover the full DANCE WINDOW (dance_start_sec → "
+        "dance_end_sec) with no gaps larger than ~8 seconds. "
+        "DO NOT add patterns before dance_start_sec or after "
+        "dance_end_sec — walk-on, setup, bow, and walk-off are "
+        "explicitly excluded, not patterns. Preserve the "
+        "dance_start_sec / dance_end_sec values from your previous "
+        "response unless one of the issues above is directly about "
+        "them. Return the complete revised JSON in the same format "
+        "as before.\n\n"
         f"YOUR PREVIOUS RESPONSE (for reference, do not copy blindly):\n"
         f"{previous_raw[:6000]}\n"
     )
@@ -1789,7 +1795,7 @@ def analyze_video_path(
                 retry_raw, retry_usage = _call_gemini(
                     client,
                     settings.gemini_model,
-                    contents=[uploaded, retry_prompt],
+                    contents=[video_part, retry_prompt],
                     seed=seed,
                 )
                 total_prompt_tokens += int(retry_usage.get("prompt_tokens", 0))
