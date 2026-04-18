@@ -267,6 +267,12 @@ export function TimelineView({
             <span className="font-mono tabular-nums text-white/80 text-[11px]">
               {formatTime(currentTime)} / {formatTime(effectiveDuration)}
             </span>
+            {result.beat_grid && (
+              <MetronomeDot
+                grid={result.beat_grid}
+                currentTime={currentTime}
+              />
+            )}
             <div className="ml-auto flex items-center gap-1">
               <button
                 type="button"
@@ -558,6 +564,83 @@ export function TimelineView({
         {/* Play button moved into the custom video control strip
             above — the pattern timeline is the sole scrubber now. */}
       </div>
+    </div>
+  );
+}
+
+function MetronomeDot({
+  grid,
+  currentTime,
+}: {
+  grid: NonNullable<VideoScoreResult["beat_grid"]>;
+  currentTime: number;
+}) {
+  // Find the nearest beat to currentTime. Binary search — the beats
+  // array is sorted and can have hundreds of entries on long clips.
+  const nearestBeat = useMemo(() => {
+    const beats = grid.beats;
+    if (!beats || beats.length === 0) return null;
+    let lo = 0;
+    let hi = beats.length - 1;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if (beats[mid] < currentTime) lo = mid + 1;
+      else hi = mid;
+    }
+    const candidates = [
+      beats[Math.max(0, lo - 1)],
+      beats[lo],
+      beats[Math.min(beats.length - 1, lo + 1)],
+    ];
+    let best = candidates[0];
+    let bestDist = Math.abs(currentTime - best);
+    for (const c of candidates) {
+      const d = Math.abs(currentTime - c);
+      if (d < bestDist) {
+        best = c;
+        bestDist = d;
+      }
+    }
+    return { time: best, distance: bestDist };
+  }, [grid.beats, currentTime]);
+
+  // Pulse strength: 1.0 on the beat, decays to 0 within 180ms. Gives
+  // a visible flash even at lower frame rates since we're reading
+  // video.currentTime on requestAnimationFrame cadence (~60 FPS)
+  // rather than per-beat.
+  const beatWindow = 0.18;
+  const pulse = nearestBeat
+    ? Math.max(0, 1 - nearestBeat.distance / beatWindow)
+    : 0;
+  const isDownbeat =
+    nearestBeat != null &&
+    grid.downbeats.some((d) => Math.abs(d - nearestBeat.time) < 0.01);
+
+  // Scale + opacity keyed to pulse intensity. Downbeats get a bigger
+  // ceiling so you can visually tell bar 1 from beats 2-4.
+  const maxScale = isDownbeat ? 1.8 : 1.35;
+  const scale = 1 + pulse * (maxScale - 1);
+  const opacity = 0.45 + pulse * 0.55;
+  const color = isDownbeat ? "bg-emerald-400" : "bg-primary";
+
+  return (
+    <div
+      className="flex items-center gap-1.5 ml-3"
+      title={`Detected ${grid.bpm.toFixed(0)} BPM${
+        grid.source ? ` · ${grid.source}` : ""
+      }. Does this match what you hear? If the dot is off the music, the pattern timing will be off too.`}
+    >
+      <div
+        className={`h-2.5 w-2.5 rounded-full ${color} transition-transform duration-75`}
+        style={{
+          transform: `scale(${scale})`,
+          opacity,
+        }}
+        aria-hidden="true"
+      />
+      <span className="font-mono tabular-nums text-white/70 text-[10px]">
+        {grid.bpm.toFixed(0)} BPM
+      </span>
     </div>
   );
 }

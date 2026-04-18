@@ -29,19 +29,26 @@ from ..settings import settings
 
 def _extract_beat_context(
     video_path: str,
-) -> tuple[str | None, float | None]:
+) -> tuple[str | None, float | None, dict[str, Any] | None]:
     """Pull audio out of the video, run beat tracking (Beat This!
     preferred, librosa fallback), and return a prompt-ready string
-    plus the first detected downbeat (seconds). Gemini's native
-    audio understanding is good, but a STRUCTURED beat grid —
-    especially one with real downbeats, not a heuristic pick —
-    gives the model an authoritative timing reference it can snap
-    pattern boundaries to.
+    plus the first detected downbeat (seconds) plus a compact
+    beat-grid dict for the frontend metronome.
+
+    Gemini's native audio understanding is good, but a STRUCTURED
+    beat grid — especially one with real downbeats, not a heuristic
+    pick — gives the model an authoritative timing reference it can
+    snap pattern boundaries to.
 
     The first downbeat doubles as a lower bound on when dancing
     can plausibly start — the couple can't be dancing to music
     that hasn't begun — which the pre-pass uses to reject
     hallucinated pre-dance pattern windows.
+
+    The beat-grid dict exposes `{bpm, beats, downbeats}` for the
+    frontend visual metronome so users can see whether the detected
+    pulse matches what they hear — a fast diagnostic when the
+    pattern timing feels off.
 
     Silent-fail on any error — this is a best-effort enrichment,
     not a blocker on the analysis itself.
@@ -70,7 +77,7 @@ def _extract_beat_context(
             )
             result = track_beats(wav_path)
             if result is None or len(result.beats) < 4:
-                return None, None
+                return None, None, None
             bpm = result.bpm
             # WCS-typical BPM is roughly 65-160. When Beat This! reports
             # something far outside that — usually because a busy
@@ -193,14 +200,23 @@ def _extract_beat_context(
                 "flagged regions), re-anchor to the actual beat "
                 "timestamps rather than extrapolating.\n"
             )
-            return prompt_text, first_downbeat_sec
+            # Compact grid for the frontend metronome. Round to
+            # milliseconds to keep the payload small — sub-ms
+            # precision doesn't matter for a visual pulse.
+            beat_grid = {
+                "bpm": round(float(bpm), 1),
+                "beats": [round(float(t), 3) for t in all_beats],
+                "downbeats": [round(float(t), 3) for t in downbeat_set],
+                "source": source,
+            }
+            return prompt_text, first_downbeat_sec, beat_grid
         finally:
             try:
                 os.unlink(wav_path)
             except OSError:
                 pass
     except Exception:
-        return None, None
+        return None, None, None
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -1501,7 +1517,11 @@ def analyze_video_path(
             prompt = f"{user_context}\n{prompt}"
 
         # Prepend librosa-derived beat context to ground timing judgments.
-        beat_context, first_downbeat_sec = _extract_beat_context(video_path)
+        (
+            beat_context,
+            first_downbeat_sec,
+            beat_grid,
+        ) = _extract_beat_context(video_path)
         if beat_context:
             prompt = f"{beat_context}\n\n{prompt}"
 
@@ -1629,6 +1649,7 @@ def analyze_video_path(
         sanity_warnings=sanity_warnings,
         dance_start_sec=dance_start_sec,
         dance_end_sec=dance_end_sec,
+        beat_grid=beat_grid,
     )
 
 
@@ -2089,6 +2110,7 @@ def _shape_response(
     sanity_warnings: list[str] | None = None,
     dance_start_sec: float | None = None,
     dance_end_sec: float | None = None,
+    beat_grid: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Map Gemini's rich response into the API's return shape.
 
@@ -2141,6 +2163,7 @@ def _shape_response(
         "follower_initiative": follower_initiative,
         "dance_start_sec": dance_start_sec,
         "dance_end_sec": dance_end_sec,
+        "beat_grid": beat_grid,
         "strengths": strengths,
         "improvements": improvements,
         "lead": parsed.get("lead"),

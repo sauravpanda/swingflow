@@ -238,6 +238,15 @@ export type VideoScoreResult = {
   // treats the whole video as the dance window.
   dance_start_sec?: number | null;
   dance_end_sec?: number | null;
+  // Detected beat timeline for the frontend metronome pulse.
+  // Beats are all detected pulses; downbeats are the bar-1 subset.
+  // Absent when beat tracking failed (silent-fallback path).
+  beat_grid?: {
+    bpm: number;
+    beats: number[];
+    downbeats: number[];
+    source?: string;
+  } | null;
   strengths: string[];
   improvements: string[];
   lead?: VideoPartnerScore;
