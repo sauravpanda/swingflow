@@ -1,3 +1,4 @@
+import logging
 import os
 
 import httpx
@@ -12,6 +13,8 @@ from ..services.video_analyzer import (
     get_video_duration,
 )
 from ..settings import settings
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/analyze/video", tags=["analyze"])
 
@@ -189,18 +192,27 @@ async def analyze_video_endpoint(
         # admin dashboards can aggregate it.
         usage = result.pop("usage", None)
 
-        await supabase_admin.insert_usage_event(
-            user_id=user_id,
-            kind="video",
-            duration_sec=int(duration),
-            usage=usage,
-        )
+        # Usage logging is analytics — if it fails, we still want to
+        # return the analysis the user paid for. A Supabase hiccup
+        # on the INSERT here should never throw away a completed
+        # Gemini call. Quota enforcement already ran above; the only
+        # downside to a missed usage_event is that the monthly count
+        # is off by one, which is self-healing the next month.
+        try:
+            await supabase_admin.insert_usage_event(
+                user_id=user_id,
+                kind="video",
+                duration_sec=int(duration),
+                usage=usage,
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "insert_usage_event failed for user=%s (analysis still returned): %s",
+                user_id,
+                exc,
+            )
         analysis_id: str | None = None
         try:
-            # object_key is intentionally NOT saved — the R2 object is
-            # deleted below, so keeping the key would just lead to 404s
-            # on Watch/Re-analyze. Privacy also: we don't retain dance
-            # videos of real people after the scoring run.
             # Preserve the R2 object_key on the row only when the
             # user opted in to video retention. Otherwise the row
             # stores a null key and the clip is purged below.
@@ -219,8 +231,16 @@ async def analyze_video_endpoint(
                 dancer_description=body.dancer_description,
                 usage=usage,
             )
-        except Exception:
-            pass
+        except Exception as exc:  # noqa: BLE001
+            # Surface the failure in logs so a persistence bug is
+            # observable. Analysis is still returned to the user —
+            # the DB row is a convenience (history list), not the
+            # primary artifact.
+            logger.warning(
+                "insert_video_analysis failed for user=%s (analysis still returned): %s",
+                user_id,
+                exc,
+            )
 
         return {
             "duration": round(duration, 2),
