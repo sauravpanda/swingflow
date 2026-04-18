@@ -109,14 +109,42 @@ function AnalysisPageInner() {
       const resp = await analyzeVideoFromKey(
         record.object_key,
         record.filename ?? "video.mp4",
-        // fresh: true flips the backend off its pinned seed so the
-        // re-run actually diverges from the previous result instead
-        // of returning near-identical output. Costs nothing extra.
-        { fresh: true }
+        {
+          // fresh: true flips the backend off its pinned seed so the
+          // re-run actually diverges from the previous result instead
+          // of returning near-identical output. Costs nothing extra.
+          fresh: true,
+          // Preserve video linkage. Without storeVideo=true, the
+          // backend defaults to store_video=false and (a) saves
+          // object_key=null on the new row and (b) deletes the R2
+          // object after scoring — orphaning both the original row
+          // AND the new one. This re-analyze flow is ALWAYS on a
+          // stored video (we guard record.object_key above), so the
+          // user already opted into retention; keep it retained.
+          storeVideo: true,
+          // Carry forward all metadata from the source analysis so
+          // the new row has the same role / level / event / tags /
+          // dancer description context — otherwise the re-analyze
+          // loses calibration context and reads the dance without
+          // knowing it's a Novice finals run, etc.
+          role: record.role ?? undefined,
+          competitionLevel: record.competition_level ?? undefined,
+          eventName: record.event_name ?? undefined,
+          eventDate: record.event_date ?? undefined,
+          stage: record.stage ?? undefined,
+          tags: record.tags ?? undefined,
+          dancerDescription: record.dancer_description ?? undefined,
+        }
       );
       Analytics.analysisReanalyzed();
       setOverrideResult(resp.result);
       history.refresh();
+      // If the backend returned a new analysis_id, navigate to it so
+      // the URL reflects the fresh run (user can share / bookmark it
+      // independently from the original row).
+      if (resp.analysis_id && resp.analysis_id !== record.id) {
+        router.push(`/analysis?id=${encodeURIComponent(resp.analysis_id)}`);
+      }
     } catch (err) {
       setRowError(err instanceof Error ? err.message : "Re-analysis failed");
     } finally {
