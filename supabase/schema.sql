@@ -291,6 +291,7 @@ begin
     set share_view_count     = coalesce(share_view_count, 0) + 1,
         share_last_viewed_at = now()
     where share_token = p_token
+      and deleted_at is null
     returning share_view_count into new_count;
   return coalesce(new_count, 0);
 end;

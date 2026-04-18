@@ -175,6 +175,7 @@ async def get_shared_analysis(token: str) -> dict[str, Any] | None:
         r = await client.get(
             _rest(
                 f"video_analyses?share_token=eq.{token}"
+                "&deleted_at=is.null"
                 "&select=id,filename,duration,result,role,"
                 "competition_level,event_name,stage,tags,created_at,"
                 "share_view_count,share_last_viewed_at"

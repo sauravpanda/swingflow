@@ -157,14 +157,21 @@ export function useAnalysisHistory() {
       // chart can still plot it as history, but it disappears from
       // the analyze-page list. User-intent here is "clean up my
       // list", not "erase all evidence this ever happened".
+      //
+      // We also null share_token so any public link the user
+      // previously generated stops working — deleting should revoke
+      // sharing. Backend /shared/{token} also filters deleted rows
+      // as defense in depth.
       const now = new Date().toISOString();
       await sb
         .from("video_analyses")
-        .update({ deleted_at: now })
+        .update({ deleted_at: now, share_token: null })
         .eq("id", id);
       setRecords((rs) => rs.filter((r) => r.id !== id));
       setChartRecords((rs) =>
-        rs.map((r) => (r.id === id ? { ...r, deleted_at: now } : r))
+        rs.map((r) =>
+          r.id === id ? { ...r, deleted_at: now, share_token: null } : r
+        )
       );
     },
     []
