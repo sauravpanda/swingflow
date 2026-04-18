@@ -2294,6 +2294,83 @@ def _sanitize_follower_initiative(
     return cleaned
 
 
+def _coerce_score(v: Any, default: float = 0.0) -> float:
+    """Coerce a numeric field to a float clamped to [0, 10].
+
+    Gemini sometimes returns scores as strings ("8.5"), lists ([8, 9]),
+    or the occasional free-text qualifier ("high 8"). The frontend
+    calls `.toFixed(1)` directly on these fields, so any non-number
+    white-screens the analysis page. Clamp to the valid WCS range so
+    an outlier like 42 or -3 can't skew downstream computations either.
+    """
+    try:
+        f = float(v)
+    except (TypeError, ValueError):
+        return default
+    if f != f:  # NaN check
+        return default
+    if f < 0:
+        return 0.0
+    if f > 10:
+        return 10.0
+    return round(f, 2)
+
+
+def _coerce_str_list(
+    raw: Any, *, max_items: int = 20, max_len: int = 500
+) -> list[str]:
+    """Coerce a field expected to be a list-of-strings into a safe
+    list. Gemini occasionally returns a single string, a dict, or null
+    where we asked for an array — the frontend `.map()`s over these
+    and crashes if the value isn't iterable. Anything non-stringy is
+    dropped rather than stringified blindly."""
+    if raw is None:
+        return []
+    items: list[Any]
+    if isinstance(raw, list):
+        items = raw
+    elif isinstance(raw, str):
+        # Single string where we asked for an array — wrap it so we
+        # at least don't lose the content.
+        items = [raw]
+    else:
+        return []
+    cleaned: list[str] = []
+    for item in items[:max_items]:
+        if not isinstance(item, str):
+            continue
+        trimmed = item.strip()
+        if not trimmed:
+            continue
+        cleaned.append(trimmed[:max_len])
+    return cleaned
+
+
+def _coerce_category(cat: Any) -> dict[str, Any]:
+    """Coerce a single category dict into a shape the frontend can
+    safely render. Missing or malformed `score` becomes 0.0 (never
+    a crash). Nested sub-scores (posture, extension, footwork, slot)
+    get the same treatment. All other fields pass through so reasoning
+    / notes / off_beat_moments survive the round trip unchanged."""
+    if not isinstance(cat, dict):
+        return {"score": 0.0}
+    out: dict[str, Any] = dict(cat)
+    out["score"] = _coerce_score(cat.get("score"))
+    if "score_low" in cat:
+        out["score_low"] = _coerce_score(cat.get("score_low"), default=out["score"])
+    if "score_high" in cat:
+        out["score_high"] = _coerce_score(cat.get("score_high"), default=out["score"])
+    # Nested sub-scores on technique; shape is {score, notes}.
+    for sub_key in ("posture", "extension", "footwork", "slot"):
+        sub = cat.get(sub_key)
+        if isinstance(sub, dict) and "score" in sub:
+            out[sub_key] = {
+                **sub,
+                "score": _coerce_score(sub.get("score")),
+            }
+    return out
+
+
 def _shape_response(
     parsed: dict[str, Any],
     *,
@@ -2308,9 +2385,13 @@ def _shape_response(
     Preserves rich audit fields (reasoning, score_low/high,
     off_beat_moments, sub-scores, patterns) while also providing the
     simplified fields the current frontend renders.
+
+    All score and list fields are coerced through the `_coerce_*`
+    helpers so one malformed Gemini response cannot poison a DB row
+    or crash the analysis page on `.toFixed()` / `.map()`.
     """
     categories = {
-        key: (parsed.get(key) or {}) if isinstance(parsed.get(key), dict) else {}
+        key: _coerce_category(parsed.get(key))
         for key in ("timing", "technique", "teamwork", "presentation")
     }
     overall_score = _compute_overall(categories)
@@ -2320,8 +2401,10 @@ def _shape_response(
     # than 2 points — matches wcs-analyzer's scoring.py heuristic.
     confidence = "low" if max_interval > 2.0 else "high"
 
-    strengths = parsed.get("highlights") or parsed.get("strengths") or []
-    improvements = parsed.get("improvements") or []
+    strengths = _coerce_str_list(
+        parsed.get("highlights") or parsed.get("strengths")
+    )
+    improvements = _coerce_str_list(parsed.get("improvements"))
 
     patterns_identified = _sanitize_patterns(
         parsed.get("patterns_identified"),
