@@ -72,6 +72,30 @@ def _extract_beat_context(
             if result is None or len(result.beats) < 4:
                 return None, None
             bpm = result.bpm
+            # WCS-typical BPM is roughly 65-160. When Beat This! reports
+            # something far outside that — usually because a busy
+            # subdivision (hi-hats on 8ths, breakbeats) got picked up
+            # as the pulse — halve or double the reported tempo so the
+            # prompt's beat-grid narrative matches what a human would
+            # count. We keep the raw beats array intact (the model can
+            # still use the fine-grained timestamps) but flag the tempo
+            # mismatch in the prompt so it treats every 2nd beat as a
+            # "real" beat if needed.
+            bpm_adjustment_note = ""
+            if bpm > 160:
+                bpm_adjustment_note = (
+                    f"\n- WARNING: raw BPM {bpm:.0f} is unusually fast "
+                    "for WCS (typical 65-160). The tracker may have "
+                    "picked up 8th-note subdivisions; treat every OTHER "
+                    f"detected beat as the actual pulse (~{bpm / 2:.0f} BPM)."
+                )
+            elif bpm < 55 and bpm > 0:
+                bpm_adjustment_note = (
+                    f"\n- WARNING: raw BPM {bpm:.0f} is unusually slow "
+                    "for WCS (typical 65-160). The tracker may have "
+                    "detected only downbeats; consider the actual pulse "
+                    f"to be ~{bpm * 2:.0f} BPM."
+                )
             first_downbeat_sec = (
                 float(result.downbeats[0])
                 if result.downbeats
@@ -149,7 +173,8 @@ def _extract_beat_context(
             )
             prompt_text = (
                 f"DETECTED MUSIC CONTEXT (from {source_note}):\n"
-                f"- Estimated average BPM: {bpm:.1f}\n"
+                f"- Estimated average BPM: {bpm:.1f}"
+                f"{bpm_adjustment_note}\n"
                 f"- Total beats detected: {total_beats} "
                 f"({total_downbeats} real downbeats)\n"
                 f"- FIRST DOWNBEAT at {first_downbeat_sec:.2f}s "
@@ -487,16 +512,38 @@ A whip where you see rotation but can't tell which specific kind →
 
 === DISTINGUISHING RULES (when in doubt) ===
 
-Prefer the MORE specific identification:
+**RULE #1 — TRAVEL vs ROTATE-IN-PLACE.** This is the most common
+confusion and must be checked FIRST before any other classification:
+- Did the follower TRAVEL across the slot (end up several feet
+  from where she started)? → **side pass** (L or R based on where
+  she ends up). The telltale is lateral displacement.
+- Did the follower stay in roughly the same slot position but
+  ROTATE on her own axis? → **tuck turn** (or free spin — see
+  Rule #2). Slot position nearly unchanged between 1 and 6.
+- A side pass ALWAYS involves visible travel. If she rotates but
+  doesn't travel, it is NOT a side pass — default to tuck turn.
+
+**RULE #2 — CONNECTION MAINTAINED vs RELEASED during rotation.**
+Check this BEFORE calling anything a side pass or whip:
+- Lead maintains full hand / arm connection through the rotation,
+  guiding her around → side pass (if she travels) or tuck turn
+  (if she stays in place) or whip (if ≥ 180° rotation + travel).
+- Lead RELEASES her hand mid-rotation, or reduces to a light
+  finger connection with no guiding force → **free spin**, even
+  when she ends up on his left side. DO NOT call it a left side
+  pass just because her final position is on his left. The
+  release is the defining cue, not the end position.
+- Cue for release: you can visually see the lead's hand open or
+  drop away during beats 3-4; follower's rotation momentum comes
+  from her own prep, not his guide.
+
+Then, for all other cases:
 - Rotational movement ≥ 180° by follower, partnership kept → whip
   family (identify the specific variant), NOT sugar push or free spin
-- Connection released mid-rotation, follower spins solo → free spin
-  (NOT whip)
 - Follower sent out to open end of slot from closed position →
   throwout (NOT "throwaway" — that's the ballroom term)
-- Follower crosses lead's body laterally → side pass (specify L or R
-  based on which side of lead she ends up on). Right side pass and
-  "underarm turn" are the same pattern — use "right side pass".
+- Right side pass and "underarm turn" are the same pattern — use
+  "right side pass".
 - Follower rotates counter-clockwise (outward) during a pass → apply
   "with outside turn" as the variant, not a separate pattern
 - Two clear body-crossings with rotation → whip
@@ -511,18 +558,42 @@ Prefer the MORE specific identification:
 - 2 clear walks before the first triple → 6-count (sugar push /
   sugar tuck / side pass / tuck turn / free spin / throwout)
 
+ANTI-FRAGMENTATION: If you see a rotation that is ONE pattern,
+emit ONE entry. Do not emit two consecutive entries covering the
+same 3-5 second window (e.g. "right side pass" immediately
+followed by "tuck turn") — the couple executed one thing, not
+two. When unsure, commit to the pattern that best matches Rules
+#1 and #2 and label that single window.
+
 If TRULY unclear, name it "unknown" with confidence <0.3 — do NOT
 default-guess "sugar push" to avoid admitting uncertainty.
 
 === BEAT ALIGNMENT ===
 
-The beat grid above is the ground truth for timing. Every pattern:
-- MUST start within 100ms of a beat 1 (or beat 3 at the earliest)
-- MUST end on beat 6 (6-count patterns) or beat 8 (8-count patterns)
-- Do NOT invent timestamps between beats — snap to the grid
+The beat grid above is a timing REFERENCE, not the timestamp you
+should emit. Pattern boundaries must come from VISIBLE weight
+changes you see on video, not from audio beat timestamps.
 
-If two patterns look like they overlap, the boundary goes at the next
-downbeat after the first pattern's anchor.
+- `start_time` = the timestamp where you SEE the first weight
+  change of beat 1 of the new pattern (follower's / lead's foot
+  planting, body starting to move). This visually lands roughly
+  60-120ms AFTER the audio downbeat you hear, because dancers
+  land ON the beat rather than anticipating it.
+- `end_time` = the timestamp where you SEE the anchor settle
+  complete (beat 6 of a 6-count or beat 8 of an 8-count). Again,
+  from the visible movement, not the audio beat timestamp.
+- If you're uncertain whether to round earlier or later, ALWAYS
+  err LATER (by up to 0.15s). Users perceive early pattern labels
+  as "the tool is ahead of the video" — a late label reads as
+  aligned.
+- Do NOT copy the exact beat timestamps from the grid above into
+  start_time / end_time. The grid tells you where the music is;
+  the video tells you where the dancing is. They're close but
+  not identical.
+
+If two patterns look like they overlap, the boundary goes at the
+VISIBLE start of the new pattern's walk (beat 1 weight change),
+not at the audio downbeat.
 
 === DANCE WINDOW (CRITICAL — READ BEFORE LISTING PATTERNS) ===
 
