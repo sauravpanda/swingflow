@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import type { FollowerInitiative, VideoScoreResult } from "@/lib/wcs-api";
 import { getLevelContext } from "@/lib/level-context";
+import { fmtScore } from "@/lib/utils";
 import {
   PatternSummaryCard,
   derivePatternSummary,
@@ -219,7 +220,7 @@ export function ScoreResultCard({
           <div className="flex flex-col items-center gap-3 py-4">
             <div className="flex items-baseline gap-2">
               <span className="text-5xl sm:text-7xl font-bold tabular-nums leading-none">
-                {result.overall.score.toFixed(1)}
+                {fmtScore(result.overall?.score)}
               </span>
               <span className="text-xl sm:text-2xl text-muted-foreground">
                 /10
@@ -372,7 +373,7 @@ export function ScoreResultCard({
                       {CATEGORY_LABELS[key]}
                     </span>
                     <span className="font-mono tabular-nums text-right">
-                      {cat.score.toFixed(1)} / 10
+                      {fmtScore(cat?.score)} / 10
                       {typeof cat.score_low === "number" &&
                         typeof cat.score_high === "number" &&
                         cat.score_high > cat.score_low && (
@@ -430,7 +431,7 @@ export function ScoreResultCard({
         </CardHeader>
         <CardContent>
           <ul className="space-y-2.5 text-sm">
-            {result.strengths.map((s, i) => (
+            {(Array.isArray(result.strengths) ? result.strengths : []).map((s, i) => (
               <li key={i} className="flex items-start gap-2.5">
                 <CheckCircle2 className="h-4 w-4 text-emerald-400 mt-0.5 shrink-0" />
                 <span className="text-muted-foreground">{s}</span>
@@ -449,7 +450,7 @@ export function ScoreResultCard({
         </CardHeader>
         <CardContent>
           <ul className="space-y-2.5 text-sm">
-            {result.improvements.map((s, i) => (
+            {(Array.isArray(result.improvements) ? result.improvements : []).map((s, i) => (
               <li key={i} className="flex items-start gap-2.5">
                 <Target className="h-4 w-4 text-amber-400 mt-0.5 shrink-0" />
                 <span className="text-muted-foreground">{s}</span>
