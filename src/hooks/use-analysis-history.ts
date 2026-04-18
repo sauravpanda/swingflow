@@ -162,11 +162,19 @@ export function useAnalysisHistory() {
       // previously generated stops working — deleting should revoke
       // sharing. Backend /shared/{token} also filters deleted rows
       // as defense in depth.
+      //
+      // Await the response and bail on error so we don't lie to the
+      // user: if the DB write fails, the row is still visible and
+      // the share link is still live — mutating local state would
+      // make it look like the delete succeeded.
       const now = new Date().toISOString();
-      await sb
+      const { error } = await sb
         .from("video_analyses")
         .update({ deleted_at: now, share_token: null })
         .eq("id", id);
+      if (error) {
+        throw new Error(`Failed to delete analysis: ${error.message}`);
+      }
       setRecords((rs) => rs.filter((r) => r.id !== id));
       setChartRecords((rs) =>
         rs.map((r) =>
