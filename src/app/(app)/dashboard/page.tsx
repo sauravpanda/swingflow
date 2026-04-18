@@ -164,8 +164,12 @@ export default function DashboardPage() {
       </div>
 
       {/* ─── Score trend ─── */}
+      {/* Include soft-deleted rows so the chart shows the user's full
+          historical progress, matching the delete copy ("stays on
+          the score trend"). `use-analysis-history` already fetches
+          them in chartRecords for this purpose. */}
       <ScoreTrendChart
-        records={history.chartRecords.filter((r) => !r.deleted_at)}
+        records={history.chartRecords}
         loading={history.loading}
       />
 
