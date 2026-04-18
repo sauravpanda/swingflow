@@ -1309,16 +1309,28 @@ def _format_pattern_timeline(
         start = float(seg.get("start_time") or 0.0)
         end = float(seg.get("end_time") or 0.0)
         name = seg.get("name", "unknown")
+        # Surface variant + visual_cue from the pre-pass so the main
+        # prompt doesn't have to re-derive "what KIND of whip" — the
+        # pre-pass already spent a high-thinking pass identifying it.
+        variant = (seg.get("variant") or "").strip()
+        variant_str = f" · {variant}" if variant and variant.lower() != "basic" else ""
+        cue = (seg.get("visual_cue") or "").strip()
+        cue_str = f" [cue: {cue}]" if cue else ""
         conf = seg.get("confidence")
         conf_str = (
             f" (confidence {conf:.1f})"
             if isinstance(conf, (int, float))
             else ""
         )
-        lines.append(f"  {i}. {start:.1f}s - {end:.1f}s: {name}{conf_str}")
+        lines.append(
+            f"  {i}. {start:.1f}s - {end:.1f}s: {name}{variant_str}"
+            f"{cue_str}{conf_str}"
+        )
     lines.append(
         "\nUse this timeline as a strong prior when filling "
-        "`patterns_identified` in your response. You can add patterns the "
+        "`patterns_identified` in your response. The variant and "
+        "visual cue above come from a dedicated pattern-ID pass — "
+        "prefer them over re-guessing. You can add patterns the "
         "pre-pass missed or correct obvious errors, but default to "
         "trusting it. Respect the dance window — no patterns before "
         "dance_start_sec or after dance_end_sec."
