@@ -3,8 +3,8 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { CheckCircle2, Target, Quote } from "lucide-react";
-import type { VideoScoreResult } from "@/lib/wcs-api";
+import { CheckCircle2, Target, Quote, Sparkles } from "lucide-react";
+import type { FollowerInitiative, VideoScoreResult } from "@/lib/wcs-api";
 import { getLevelContext } from "@/lib/level-context";
 import {
   PatternSummaryCard,
@@ -345,6 +345,10 @@ export function ScoreResultCard({
         ) : null;
       })()}
 
+      {result.follower_initiative && result.follower_initiative.length > 0 && (
+        <FollowerInitiativeCard initiative={result.follower_initiative} />
+      )}
+
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-base flex items-center gap-2">
@@ -389,5 +393,83 @@ export function ScoreResultCard({
         </Button>
       )}
     </div>
+  );
+}
+
+const INITIATIVE_KIND_LABEL: Record<string, string> = {
+  hijack: "Hijack",
+  syncopation: "Syncopation",
+  styling: "Styling",
+  interpretation: "Interpretation",
+  musical_hit: "Musical hit",
+};
+
+const INITIATIVE_QUALITY_COLOR: Record<string, string> = {
+  strong: "bg-emerald-500/20 text-emerald-300",
+  solid: "bg-primary/20 text-primary",
+  needs_work: "bg-amber-500/20 text-amber-300",
+};
+
+function formatInitiativeTime(sec: number): string {
+  if (!Number.isFinite(sec) || sec < 0) return "0:00";
+  const m = Math.floor(sec / 60);
+  const s = Math.floor(sec % 60);
+  return `${m}:${s.toString().padStart(2, "0")}`;
+}
+
+function FollowerInitiativeCard({
+  initiative,
+}: {
+  initiative: FollowerInitiative[];
+}) {
+  const sorted = [...initiative].sort(
+    (a, b) => a.timestamp_sec - b.timestamp_sec
+  );
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <CardTitle className="text-base flex items-center gap-2">
+          <Sparkles className="h-4 w-4 text-purple-400" />
+          Follower voice
+        </CardTitle>
+        <p className="text-xs text-muted-foreground mt-1">
+          Moments the follower authored — hijacks through the connection,
+          syncopations, styling hits, interpretations.
+        </p>
+      </CardHeader>
+      <CardContent>
+        <ul className="space-y-2.5 text-sm">
+          {sorted.map((m, i) => (
+            <li key={i} className="flex items-start gap-2.5">
+              <Sparkles className="h-4 w-4 text-purple-400 mt-0.5 shrink-0" />
+              <div className="flex-1 min-w-0">
+                <div className="flex items-baseline justify-between gap-2 flex-wrap">
+                  <span className="text-foreground">
+                    {m.kind && INITIATIVE_KIND_LABEL[m.kind]
+                      ? `${INITIATIVE_KIND_LABEL[m.kind]} · `
+                      : ""}
+                    <span className="text-muted-foreground">
+                      {m.description ?? "—"}
+                    </span>
+                  </span>
+                  <span className="flex items-center gap-1.5 text-[10px] font-mono tabular-nums shrink-0">
+                    {m.quality && INITIATIVE_QUALITY_COLOR[m.quality] && (
+                      <span
+                        className={`px-1.5 py-0.5 rounded ${INITIATIVE_QUALITY_COLOR[m.quality]}`}
+                      >
+                        {m.quality.replace("_", " ")}
+                      </span>
+                    )}
+                    <span className="text-muted-foreground">
+                      {formatInitiativeTime(m.timestamp_sec)}
+                    </span>
+                  </span>
+                </div>
+              </div>
+            </li>
+          ))}
+        </ul>
+      </CardContent>
+    </Card>
   );
 }

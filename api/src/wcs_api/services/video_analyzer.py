@@ -27,13 +27,21 @@ from google.genai import types as genai_types
 from ..settings import settings
 
 
-def _extract_beat_context(video_path: str) -> str | None:
+def _extract_beat_context(
+    video_path: str,
+) -> tuple[str | None, float | None]:
     """Pull audio out of the video, run beat tracking (Beat This!
-    preferred, librosa fallback), and return a prompt-ready string.
-    Gemini's native audio understanding is good, but a STRUCTURED
-    beat grid — especially one with real downbeats, not a heuristic
-    pick — gives the model an authoritative timing reference it can
-    snap pattern boundaries to.
+    preferred, librosa fallback), and return a prompt-ready string
+    plus the first detected downbeat (seconds). Gemini's native
+    audio understanding is good, but a STRUCTURED beat grid —
+    especially one with real downbeats, not a heuristic pick —
+    gives the model an authoritative timing reference it can snap
+    pattern boundaries to.
+
+    The first downbeat doubles as a lower bound on when dancing
+    can plausibly start — the couple can't be dancing to music
+    that hasn't begun — which the pre-pass uses to reject
+    hallucinated pre-dance pattern windows.
 
     Silent-fail on any error — this is a best-effort enrichment,
     not a blocker on the analysis itself.
@@ -62,8 +70,13 @@ def _extract_beat_context(video_path: str) -> str | None:
             )
             result = track_beats(wav_path)
             if result is None or len(result.beats) < 4:
-                return None
+                return None, None
             bpm = result.bpm
+            first_downbeat_sec = (
+                float(result.downbeats[0])
+                if result.downbeats
+                else float(result.beats[0])
+            )
             # Prefer real downbeats when Beat This! is in use. Fall
             # back to "every 4 beats from onset-offset pick" when on
             # librosa path. The prompt below flags which source we
@@ -134,11 +147,13 @@ def _extract_beat_context(video_path: str) -> str | None:
                 if source == "beat_this"
                 else "librosa (heuristic downbeats — treat with skepticism)"
             )
-            return (
+            prompt_text = (
                 f"DETECTED MUSIC CONTEXT (from {source_note}):\n"
                 f"- Estimated average BPM: {bpm:.1f}\n"
                 f"- Total beats detected: {total_beats} "
-                f"({total_downbeats} real downbeats)"
+                f"({total_downbeats} real downbeats)\n"
+                f"- FIRST DOWNBEAT at {first_downbeat_sec:.2f}s "
+                "(dancing cannot start earlier than this)"
                 f"{shift_notes}\n"
                 "- Full beat grid (use this as the AUTHORITATIVE timeline):\n"
                 f"{grid}\n\n"
@@ -153,13 +168,14 @@ def _extract_beat_context(video_path: str) -> str | None:
                 "flagged regions), re-anchor to the actual beat "
                 "timestamps rather than extrapolating.\n"
             )
+            return prompt_text, first_downbeat_sec
         finally:
             try:
                 os.unlink(wav_path)
             except OSError:
                 pass
     except Exception:
-        return None
+        return None, None
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -191,9 +207,19 @@ CORE CATEGORIES — the four WSDC "Ts"
    - Turn completion with balance (no post-turn wobble)
 
 3. **Teamwork** (20% weight)
-   - Lead/follow connection: shared weight, counter-balance, responsive to cues
-   - Follower waits for the lead, doesn't guess or hijack
-   - Lead offers patterns the follower can read; doesn't yank with biceps
+   - Partnership connection: shared weight, counter-balance, both dancers
+     reading and responding in real time
+   - At Newcomer/Novice: the follower following predictable cues is the
+     baseline expectation; guessing ahead and breaking connection is a
+     problem. "Hijack" here means disconnecting, not authoring.
+   - At Intermediate and above: the follower can and SHOULD author moments —
+     hijacks through the connection (not around it), syncopations that
+     mesh with the lead's plan, styling hits the lead didn't explicitly
+     cue. Score these as POSITIVE when they land cleanly WITH the
+     partnership, not as teamwork failures.
+   - Either partner can offer: invitations (space to fill), hits to catch
+     together, energy shifts. Neither partner is purely driving or purely
+     responding at the higher tiers.
    - Recovery from mismatch is clean (invisible to a non-judge eye at higher levels)
 
 4. **Presentation** (20% weight)
@@ -243,7 +269,9 @@ are clean. So: score Novice Presentation in the 3–5 range even for flat \
 performances; only elevate toward 5–6 when partnership conversation and \
 micro-musicality (body pulse matching groove, small accents hit) are visibly \
 present. Common kills: train-wreck partnering, dropped triples under \
-pressure, follower hijacking, attempting dips/syncopations that fall apart.
+pressure, disconnected hijacks (follower dropping the connection to do her \
+own thing rather than authoring through it), attempting dips/syncopations \
+that fall apart.
 
 **INTERMEDIATE (~4.5–7 typical):** Basics are assumed. Frame is elastic \
 (compression AND stretch both functional). Anchor settles on 5 & 6 with \
@@ -496,12 +524,50 @@ The beat grid above is the ground truth for timing. Every pattern:
 If two patterns look like they overlap, the boundary goes at the next
 downbeat after the first pattern's anchor.
 
+=== DANCE WINDOW (CRITICAL — READ BEFORE LISTING PATTERNS) ===
+
+Competition videos almost always have pre-dance footage: the couple
+walks onto the floor, stands waiting, talks with the MC, finds their
+frame, and waits for music to kick in. They only START DANCING once
+the music is playing AND they're taking weight changes to the beat.
+
+Before emitting ANY patterns, identify:
+- `dance_start_sec` — the first timestamp where the couple takes a
+  clear weight-change on the beat (a real triple, an anchor step,
+  walk-through, or entry pattern). NOT when they walk on, NOT when
+  they set up in closed position, NOT when the music starts.
+  If the music is playing but they're still standing still
+  waiting, dancing has NOT started yet.
+- `dance_end_sec` — the last timestamp where they're still dancing
+  to the music. Exclude the bow, applause walk-off, or standing
+  hold at the end.
+
+STRICT RULES:
+1. Do NOT emit pattern entries with start_time < dance_start_sec.
+2. Do NOT emit pattern entries with end_time > dance_end_sec.
+3. The FIRST pattern in your list MUST start at or very near
+   dance_start_sec. The LAST pattern MUST end at or near
+   dance_end_sec.
+4. Never backfill "starter step" or "unknown" over pre-dance time
+   just to reach the requested pattern density. If the dance truly
+   doesn't start until 0:25, the first 25 seconds has zero patterns
+   — that is CORRECT.
+5. If the beat grid above reports a FIRST DOWNBEAT timestamp,
+   dance_start_sec cannot be earlier than it — the couple can't
+   dance to music that hasn't begun.
+
+If you cannot tell where dancing starts or ends (e.g. the clip is
+a mid-song cut), set dance_start_sec = 0.0 and dance_end_sec =
+the video duration and proceed normally.
+
 === OUTPUT ===
 
-Contiguous, non-overlapping timeline covering the whole video. JSON only,
-no markdown, no prose:
+Contiguous, non-overlapping timeline covering ONLY the dance window
+(dance_start_sec → dance_end_sec). JSON only, no markdown, no prose:
 
 {
+  "dance_start_sec": 0.00,
+  "dance_end_sec": 11.56,
   "patterns": [
     {"start_time": 0.00, "end_time": 2.67, "name": "starter step", "variant": "basic", "count": 6, "confidence": 0.9},
     {"start_time": 2.67, "end_time": 5.33, "name": "sugar push", "variant": "with inside turn", "visual_cue": "follower rotates under raised arm on 3-4", "count": 6, "confidence": 0.8},
@@ -511,6 +577,10 @@ no markdown, no prose:
 }
 
 Fields:
+- dance_start_sec / dance_end_sec: decimal seconds bounding the
+  active dance portion of the clip. Everything outside this window
+  is pre-dance setup / post-dance walk-off and must not contain
+  patterns.
 - start_time / end_time: decimal seconds, snapped to beat grid
 - name: pattern family (e.g. "whip", "sugar push"), or "unknown"
 - variant: specific sub-type (e.g. "basket", "reverse", "with inside
@@ -530,20 +600,50 @@ Since you can hear the music, evaluate whether the dancers are truly on beat —
 listen for anchors landing on the downbeat, triples matching the rhythm, \
 and whether styling choices align with musical accents and breaks.
 
-For `patterns_identified`, walk through the entire video chronologically and \
-commit to a contiguous list of pattern windows that cover the dance from start \
-to end. Every pattern the dancers execute must appear as its own entry — do \
-NOT merge consecutive repeats of the same pattern into one window. If the \
-couple performs three sugar pushes in a row, emit three separate entries. A \
-typical WCS pattern is 6 or 8 beats, which at 90–130 BPM is roughly 3–6 \
-seconds; windows longer than ~10 seconds almost always mean you collapsed \
-repeats. A 90-second routine usually contains 15-25 pattern windows. \
-Common WCS patterns: sugar push, sugar tuck, left side pass, right \
-side pass (= underarm turn), tuck turn, free spin, throwout, starter \
-step, whip (and variants: basket, reverse, Texas Tommy, tandem, \
-shadow, with inside turn, with outside turn, with double turn), \
-slingshot. Modifiers that apply as variants to any pattern: inside \
-turn, outside turn, rock-and-go.
+This analysis has THREE independent lenses that each capture something \
+the others miss:
+1. `patterns_identified` — WHAT moves the couple danced (pattern-level \
+   execution, the traditional WSDC lens).
+2. `musical_moments` — moments where the MUSIC demanded a response, \
+   scored on whether the couple caught them. Independent of patterns: \
+   a couple can execute patterns cleanly but walk past every hit.
+3. `follower_initiative` — moments the FOLLOWER authored (hijacks, \
+   syncopations, styling, interpretations). WCS follows co-create the \
+   dance; this field captures their voice instead of treating them as \
+   someone who just responds to the lead.
+
+Fill all three. Patterns without musicality is just technical execution. \
+Musicality without follower voice is a one-sided story.
+
+For `patterns_identified`, first determine the DANCE WINDOW: \
+`dance_start_sec` is the first moment the couple takes a clear \
+weight-change on the beat (a triple, anchor, or entry pattern — NOT \
+walking onto the floor, NOT standing in closed position waiting for \
+music, NOT talking to the MC). `dance_end_sec` is the last moment \
+they're still dancing to the music (exclude bows and walk-offs). Only \
+emit patterns INSIDE this window — never backfill "starter step" or \
+"unknown" over pre-dance setup just to reach a density target. If the \
+dance doesn't start until 0:25, the first 25 seconds has zero \
+patterns. If a FIRST DOWNBEAT timestamp appears in the beat grid, \
+dance_start_sec cannot be earlier than it.
+
+Within the dance window, walk chronologically and commit to a \
+contiguous list of pattern windows covering dance_start_sec to \
+dance_end_sec with no gaps. Every pattern the dancers execute must \
+appear as its own entry — do NOT merge consecutive repeats. If the \
+couple performs three sugar pushes in a row, emit three separate \
+entries. A typical WCS pattern is 6 or 8 beats, which at 90–130 BPM \
+is roughly 3–6 seconds; windows longer than ~10 seconds almost \
+always mean you collapsed repeats. Expect 15–25 pattern windows per \
+90 seconds of ACTUAL DANCING (dance_end_sec − dance_start_sec), NOT \
+per 90 seconds of total video length. A 2-minute clip with a 30s \
+walk-on only has ~90s of dancing and should have ~15-25 patterns, \
+not 30+. Common WCS patterns: sugar push, sugar tuck, left side \
+pass, right side pass (= underarm turn), tuck turn, free spin, \
+throwout, starter step, whip (and variants: basket, reverse, Texas \
+Tommy, tandem, shadow, with inside turn, with outside turn, with \
+double turn), slingshot. Modifiers that apply as variants to any \
+pattern: inside turn, outside turn, rock-and-go.
 
 Respond in this exact JSON format. Fill `reasoning` BEFORE `score` in each category:
 {
@@ -587,6 +687,8 @@ Respond in this exact JSON format. Fill `reasoning` BEFORE `score` in each categ
     "styling": "<observations>",
     "notes": "<overall presentation observations>"
   },
+  "dance_start_sec": <seconds — first weight-change on the beat. 0.0 only if the clip is a mid-song cut with no setup footage>,
+  "dance_end_sec": <seconds — last moment they're still dancing, before any bow/walk-off>,
   "patterns_identified": [
     {
       "name": "<pattern family — e.g. sugar push, left side pass, whip, tuck turn>",
@@ -597,7 +699,24 @@ Respond in this exact JSON format. Fill `reasoning` BEFORE `score` in each categ
       "timing": "<on_beat|slightly_off|off_beat>",
       "notes": "<what was good or needs improvement in this pattern>",
       "styling": "<brief description of styling observed during this pattern — body rolls, arm styling, footwork flourishes, musical hits, syncopations. Use null when nothing notable. DO NOT invent styling that wasn't there.>",
-      "coaching_tip": "<one concrete, actionable suggestion specific to THIS pattern (e.g. 'stretch the anchor 2 extra beats to match the blues pocket', 'less arm on the lead into this whip — drive from the core'). Use null for patterns that execute cleanly and don't need targeted work.>"
+      "coaching_tip": "<one concrete, actionable suggestion specific to THIS pattern (e.g. 'stretch the anchor 2 extra beats to match the blues pocket', 'less arm on the entry — drive from the core'). Address whichever partner the tip applies to (or both). Use null for patterns that execute cleanly and don't need targeted work.>"
+    }
+  ],
+  "musical_moments": [
+    {
+      "timestamp_sec": <seconds from video start, float>,
+      "kind": "<one of: phrase_top | break | hit | pocket | drop | accent | build>",
+      "description": "<short phrase describing the musical event — e.g. 'horn hit', 'bass drop into chorus', 'vocal pocket after break', 'snare break at phrase top'>",
+      "caught": <true/false — did the couple actually catch/hit/match this musical moment with their movement?>,
+      "caught_how": "<short phrase describing HOW they caught it, or 'missed' if caught=false. Examples: 'anchor settle lands on the break', 'follower body roll matches the hit', 'both partners freeze together', 'walked through it as if it wasn't there'>"
+    }
+  ],
+  "follower_initiative": [
+    {
+      "timestamp_sec": <seconds from video start, float>,
+      "kind": "<one of: hijack | syncopation | styling | interpretation | musical_hit>",
+      "description": "<short phrase describing the follower-authored moment — something she added, redirected, or interpreted beyond what was strictly led. e.g. 'follower hijacks the anchor into a body roll', 'extra spin added on 5-6', 'shoulder isolation during the bass walk'>",
+      "quality": "<strong|solid|needs_work — how well did it land musically and with the connection?>"
     }
   ],
   "highlights": ["<notable positive moments with approximate timestamps>"],
@@ -618,12 +737,30 @@ Respond in this exact JSON format. Fill `reasoning` BEFORE `score` in each categ
   "song_style": "<e.g., blues, contemporary, lyrical>"
 }
 
+Constraints on musical_moments:
+- This field is independent of patterns. It's your audio-first analysis: listen to the song and identify moments where the music DEMANDS a response — a horn stab, a bass drop, the top of a chorus, a vocal break, a rhythmic hit. Then judge whether the couple caught it.
+- "Caught" means their movement aligned with the musical moment: an anchor that settles on the break, a freeze that matches a stop, a body roll that hits with the horn, a head snap on the accent. "Missed" means they kept dancing past it as if it weren't there.
+- Target: 4-12 moments per 90s of dancing, focused on the most salient events. Do NOT enumerate every beat. Pick the musical peaks that a dancer should be responding to.
+- Prefer moments that are unambiguous — a clear stop, a clear hit, a clear phrase top — over vague "build" moments.
+- Each timestamp_sec is a single moment in time (the moment of the musical event), not a range.
+- If the music is too continuous to pick standout moments (pure groove, no hits), return an empty array rather than inventing filler.
+
+Constraints on follower_initiative:
+- Capture moments where the FOLLOWER authored something — not just executed what was led. Modern WCS follows co-create: they hijack anchors, add syncopations, style through bass walks, interpret the music on their own. This field surfaces those moments.
+- Do NOT list moments that are just clean pattern execution. "Follower completed the sugar push" is not initiative.
+- Do list: body isolations she added, extra turns she styled in, hits she caught that the lead didn't cue, hijacks where she redirected energy, moments where she settled into an anchor with her own musicality.
+- If there's no follower initiative visible (e.g. the follower is executing strictly on the lead's cues), return an empty array. Do NOT invent initiative to be generous.
+- If there's no clearly identified follower (solo work, role-switch, same-role dancing), return an empty array.
+- Target: 0-6 entries per 90s of dancing. Quality over quantity.
+
 Constraints on patterns_identified:
-- Cover the full video end-to-end with non-overlapping contiguous time ranges, in chronological order.
+- Every entry's start_time MUST be >= dance_start_sec and end_time MUST be <= dance_end_sec. Nothing outside the dance window.
+- Cover the dance window end-to-end with non-overlapping contiguous time ranges, in chronological order.
+- The first entry starts at or very near dance_start_sec; the last ends at or very near dance_end_sec.
 - Each entry is ONE occurrence of ONE pattern — emit separate entries for repeated patterns.
 - Windows should be 3–8 seconds typical, rarely longer than 10 seconds.
-- For a 90-second clip expect 15–25 entries; scale proportionally for shorter/longer clips.
-- If a segment is truly unclear, name it "unknown", keep it short (≤8s), and explain in notes.
+- Density target: 15–25 entries per 90 seconds of ACTUAL DANCING (dance_end_sec − dance_start_sec). Scale proportionally for shorter / longer dance windows. Do NOT use total video length — a 2-minute clip with a 30s walk-on has ~90s of dancing, not 120s.
+- If a segment inside the dance window is truly unclear, name it "unknown", keep it short (≤8s), and explain in notes.
 - start_time and end_time are decimal seconds from the video start.
 - Use the beat grid in the context (if provided) to anchor window boundaries near anchor steps (beats 5–6).
 - `styling` and `coaching_tip`: populate when there's something real to say. Return null (not empty string) when a pattern is unremarkable — it's better to say nothing than to invent filler. These should feel like a coach's post-dance notes, not AI-generated text.
@@ -800,6 +937,7 @@ def _build_gen_config(
     *,
     system_prompt: str | None = None,
     thinking_level_override: str | None = None,
+    seed: int | None = 42,
 ) -> genai_types.GenerateContentConfig:
     config_kwargs: dict[str, Any] = {
         "system_instruction": system_prompt or SYSTEM_PROMPT,
@@ -815,13 +953,18 @@ def _build_gen_config(
         # toe rolling and a collapsed anchor." wcs-analyzer uses
         # HIGH by default and it's critical for technique scoring.
         "media_resolution": genai_types.MediaResolution.MEDIA_RESOLUTION_HIGH,
-        # Pin the seed. Even at temperature=0.0, Gemini has GPU
-        # non-determinism + thinking-token variance that produces
-        # ±0.3 score drift between identical runs. A fixed seed
-        # doesn't fully eliminate that (thinking and video sampling
-        # are still non-deterministic) but meaningfully reduces it.
-        "seed": 42,
     }
+    # Pin the seed by default. Even at temperature=0.0, Gemini has
+    # GPU non-determinism + thinking-token variance that produces
+    # ±0.3 score drift between identical runs. A fixed seed doesn't
+    # fully eliminate that (thinking and video sampling are still
+    # non-deterministic) but meaningfully reduces it.
+    #
+    # Callers can pass seed=None to opt out — used on Re-analyze so
+    # a second run doesn't return the exact same result (which
+    # confuses users who expect a re-run to "try harder").
+    if seed is not None:
+        config_kwargs["seed"] = seed
     # Extended thinking. The SDK accepts a ThinkingConfig on both
     # Gemini 3.x and 2.5 models, but the fields differ:
     #   - Gemini 3.x: thinking_level ("low"|"medium"|"high")
@@ -898,6 +1041,7 @@ def _call_gemini(
     *,
     system_prompt: str | None = None,
     thinking_level_override: str | None = None,
+    seed: int | None = 42,
 ) -> tuple[str, dict[str, Any]]:
     response = client.models.generate_content(
         model=model,
@@ -906,6 +1050,7 @@ def _call_gemini(
             model,
             system_prompt=system_prompt,
             thinking_level_override=thinking_level_override,
+            seed=seed,
         ),
     )
     text = getattr(response, "text", None)
@@ -918,8 +1063,19 @@ def _call_gemini(
 # Pattern pre-pass
 # ─────────────────────────────────────────────────────────────────────
 
-def _format_pattern_timeline(patterns: list[dict[str, Any]]) -> str:
+def _format_pattern_timeline(
+    patterns: list[dict[str, Any]],
+    dance_start_sec: float | None = None,
+    dance_end_sec: float | None = None,
+) -> str:
     lines = ["DETECTED PATTERN TIMELINE (from a dedicated pattern pre-pass):"]
+    if dance_start_sec is not None and dance_end_sec is not None:
+        lines.append(
+            f"Dance window: {dance_start_sec:.2f}s → "
+            f"{dance_end_sec:.2f}s (everything outside this window is "
+            "pre-dance setup or post-dance walk-off — do NOT fill it "
+            "with patterns in your response)."
+        )
     for i, seg in enumerate(patterns, 1):
         start = float(seg.get("start_time") or 0.0)
         end = float(seg.get("end_time") or 0.0)
@@ -935,7 +1091,8 @@ def _format_pattern_timeline(patterns: list[dict[str, Any]]) -> str:
         "\nUse this timeline as a strong prior when filling "
         "`patterns_identified` in your response. You can add patterns the "
         "pre-pass missed or correct obvious errors, but default to "
-        "trusting it."
+        "trusting it. Respect the dance window — no patterns before "
+        "dance_start_sec or after dance_end_sec."
     )
     return "\n".join(lines)
 
@@ -944,7 +1101,10 @@ def _run_pattern_pre_pass(
     client: genai.Client,
     model: str,
     video_file: Any,
-) -> tuple[str | None, dict[str, Any] | None]:
+    first_downbeat_sec: float | None = None,
+    duration_sec: float | None = None,
+    seed: int | None = 42,
+) -> tuple[str | None, dict[str, Any] | None, float | None, float | None]:
     """Single-purpose Gemini call asking ONLY about the pattern timeline.
 
     Per wcs-analyzer's docstring: "the per-pattern focus consistently
@@ -952,7 +1112,12 @@ def _run_pattern_pre_pass(
     scoring the dance." Failures here are non-fatal — we fall back to
     the main prompt enumerating patterns inline.
 
-    Returns (prompt_context, usage). Either may be None on failure.
+    `first_downbeat_sec` from Beat This! acts as a floor on
+    dance_start_sec — the couple can't be dancing to music that hasn't
+    started yet, so any value smaller than this is clamped up.
+
+    Returns (prompt_context, usage, dance_start_sec, dance_end_sec).
+    Any may be None on failure.
     """
     try:
         # Pattern ID benefits disproportionately from extra reasoning
@@ -973,16 +1138,71 @@ def _run_pattern_pre_pass(
                 "on quality — just identify WHAT happens WHEN."
             ),
             thinking_level_override="high",
+            seed=seed,
         )
     except VideoAnalysisError:
-        return None, None
+        return None, None, None, None
     data = _safe_parse_json(raw)
     if not data:
-        return None, usage
+        return None, usage, None, None
+
+    dance_start = _safe_float(data.get("dance_start_sec"))
+    dance_end = _safe_float(data.get("dance_end_sec"))
+    # Floor dance_start on the first detected downbeat — if the music
+    # hasn't kicked in yet, nobody's dancing.
+    if first_downbeat_sec is not None and dance_start is not None:
+        if dance_start + 0.25 < first_downbeat_sec:
+            dance_start = first_downbeat_sec
+    # Clamp dance_end to the video duration when we know it.
+    if duration_sec is not None and dance_end is not None:
+        dance_end = min(dance_end, duration_sec)
+
     patterns = data.get("patterns")
     if not isinstance(patterns, list) or not patterns:
-        return None, usage
-    return _format_pattern_timeline(patterns), usage
+        return None, usage, dance_start, dance_end
+    # Defensively drop any pre-pass patterns that fell outside the
+    # declared dance window — the pre-pass follows its own prompt, but
+    # we still occasionally see stragglers.
+    if dance_start is not None or dance_end is not None:
+        patterns = [
+            p for p in patterns
+            if _pattern_inside_window(p, dance_start, dance_end)
+        ]
+        if not patterns:
+            return None, usage, dance_start, dance_end
+    return (
+        _format_pattern_timeline(patterns, dance_start, dance_end),
+        usage,
+        dance_start,
+        dance_end,
+    )
+
+
+def _safe_float(v: Any) -> float | None:
+    try:
+        return float(v)
+    except (TypeError, ValueError):
+        return None
+
+
+def _pattern_inside_window(
+    pattern: dict[str, Any],
+    dance_start: float | None,
+    dance_end: float | None,
+) -> bool:
+    """True if the pattern overlaps the dance window at all. Used to
+    filter out stray pre-dance / post-dance entries. We keep patterns
+    that partially overlap — they'll get trimmed by _sanitize_patterns.
+    """
+    start = _safe_float(pattern.get("start_time"))
+    end = _safe_float(pattern.get("end_time"))
+    if start is None or end is None:
+        return False
+    if dance_end is not None and start >= dance_end:
+        return False
+    if dance_start is not None and end <= dance_start:
+        return False
+    return True
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -1132,6 +1352,7 @@ def analyze_video_path(
     video_path: str,
     duration_sec: float | None = None,
     context: dict[str, Any] | None = None,
+    fresh: bool = False,
 ) -> dict[str, Any]:
     """Upload video → optional pattern pre-pass → WSDC scoring call → parse.
 
@@ -1148,9 +1369,26 @@ def analyze_video_path(
     do ONE retry with the issues as corrective feedback. Retries
     cost one extra Gemini call (~$0.30 on 3.x Pro) but fix the
     "intro lasted 60s" class of hallucination without user intervention.
+
+    `fresh=True` opts out of the pinned seed so the call returns a
+    different result than previous runs on the same video. Used on
+    Re-analyze — without this, seed=42 + temperature=0 gives
+    near-identical output every run, which confuses users who expect
+    a re-run to actually retry. Fresh runs keep temperature=0 so
+    we're not introducing high variance — just enough seed jitter
+    for the thinking path to diverge.
     """
     if not settings.gemini_api_key:
         raise VideoAnalysisError("GEMINI_API_KEY not configured")
+
+    # Random seed on fresh runs; pinned on normal runs. Keep
+    # (pre-pass, main, retry) all on the SAME seed for a given
+    # analysis so they're internally consistent — a pre-pass that
+    # reasoned one way shouldn't get contradicted by a main call on
+    # a different seed.
+    import secrets as _secrets
+
+    seed: int | None = _secrets.randbelow(2**31) if fresh else 42
 
     client = genai.Client(api_key=settings.gemini_api_key)
     uploaded = client.files.upload(file=video_path)
@@ -1192,13 +1430,25 @@ def analyze_video_path(
             prompt = f"{user_context}\n{prompt}"
 
         # Prepend librosa-derived beat context to ground timing judgments.
-        beat_context = _extract_beat_context(video_path)
+        beat_context, first_downbeat_sec = _extract_beat_context(video_path)
         if beat_context:
             prompt = f"{beat_context}\n\n{prompt}"
 
+        dance_start_sec: float | None = None
+        dance_end_sec: float | None = None
         if settings.enable_pattern_prepass:
-            pre_pass_context, pre_pass_usage = _run_pattern_pre_pass(
-                client, settings.gemini_model, video_part
+            (
+                pre_pass_context,
+                pre_pass_usage,
+                dance_start_sec,
+                dance_end_sec,
+            ) = _run_pattern_pre_pass(
+                client,
+                settings.gemini_model,
+                video_part,
+                first_downbeat_sec=first_downbeat_sec,
+                duration_sec=duration_sec,
+                seed=seed,
             )
             if pre_pass_context:
                 prompt = f"{pre_pass_context}\n\n{prompt}"
@@ -1207,7 +1457,10 @@ def analyze_video_path(
                 total_response_tokens += int(pre_pass_usage.get("response_tokens", 0))
 
         raw, main_usage = _call_gemini(
-            client, settings.gemini_model, contents=[video_part, prompt]
+            client,
+            settings.gemini_model,
+            contents=[video_part, prompt],
+            seed=seed,
         )
         total_prompt_tokens += int(main_usage.get("prompt_tokens", 0))
         total_response_tokens += int(main_usage.get("response_tokens", 0))
@@ -1218,13 +1471,36 @@ def analyze_video_path(
                 f"Gemini returned unparseable JSON: {raw[:200]}"
             )
 
+        # Prefer the main model's dance_start / dance_end if it
+        # returned them; fall back to pre-pass values; floor on the
+        # first detected downbeat so nothing slips below the music.
+        main_dance_start = _safe_float(parsed.get("dance_start_sec"))
+        main_dance_end = _safe_float(parsed.get("dance_end_sec"))
+        if main_dance_start is not None:
+            dance_start_sec = main_dance_start
+        if main_dance_end is not None:
+            dance_end_sec = main_dance_end
+        if (
+            first_downbeat_sec is not None
+            and dance_start_sec is not None
+            and dance_start_sec + 0.25 < first_downbeat_sec
+        ):
+            dance_start_sec = first_downbeat_sec
+        if duration_sec is not None and dance_end_sec is not None:
+            dance_end_sec = min(dance_end_sec, duration_sec)
+
         # Sanity check: if the response has obvious implausibilities
         # (e.g. "intro lasted 60s" or only 2 patterns for a 2-minute
         # clip), do ONE corrective retry with the specific issues
         # fed back to the model. If the retry still has issues, we
         # accept it and surface the warnings in the response so the
         # frontend can display a "low confidence" badge.
-        issues = _sanity_check(parsed, duration_sec)
+        issues = _sanity_check(
+            parsed,
+            duration_sec,
+            dance_start_sec=dance_start_sec,
+            dance_end_sec=dance_end_sec,
+        )
         if issues:
             retry_prompt = _build_sanity_retry_prompt(issues, raw)
             try:
@@ -1232,6 +1508,7 @@ def analyze_video_path(
                     client,
                     settings.gemini_model,
                     contents=[uploaded, retry_prompt],
+                    seed=seed,
                 )
                 total_prompt_tokens += int(retry_usage.get("prompt_tokens", 0))
                 total_response_tokens += int(retry_usage.get("response_tokens", 0))
@@ -1239,7 +1516,12 @@ def analyze_video_path(
                 if retry_parsed is not None:
                     # Only accept the retry if it's strictly better —
                     # otherwise keep the original + warnings.
-                    retry_issues = _sanity_check(retry_parsed, duration_sec)
+                    retry_issues = _sanity_check(
+                        retry_parsed,
+                        duration_sec,
+                        dance_start_sec=dance_start_sec,
+                        dance_end_sec=dance_end_sec,
+                    )
                     if len(retry_issues) < len(issues):
                         parsed = retry_parsed
                         sanity_warnings = retry_issues
@@ -1271,7 +1553,11 @@ def analyze_video_path(
     }
 
     return _shape_response(
-        parsed, usage=usage, sanity_warnings=sanity_warnings
+        parsed,
+        usage=usage,
+        sanity_warnings=sanity_warnings,
+        dance_start_sec=dance_start_sec,
+        dance_end_sec=dance_end_sec,
     )
 
 
@@ -1279,10 +1565,16 @@ def _sanitize_patterns(
     raw: list[Any] | None,
     *,
     max_window_sec: float = 12.0,
+    dance_start_sec: float | None = None,
+    dance_end_sec: float | None = None,
 ) -> list[dict[str, Any]]:
     """Clean Gemini's patterns_identified output.
 
     - Drops entries with missing/invalid times.
+    - Drops entries entirely outside the dance window when one is
+      provided (defense against pre-dance hallucination even when
+      the model ignored the prompt). Entries that partially
+      overlap get trimmed to the window boundary.
     - Splits any window longer than `max_window_sec` into ~6s chunks
       sharing the same metadata (prevents the "45s Sugar Push" bug
       even when the model slips past the prompt guidance).
@@ -1301,6 +1593,23 @@ def _sanitize_patterns(
             continue
         if end <= start:
             continue
+        # Trim to dance window. Drop entries that fall entirely
+        # outside it — those are pre-dance / post-dance hallucinations.
+        if dance_start_sec is not None:
+            if end <= dance_start_sec:
+                continue
+            if start < dance_start_sec:
+                start = dance_start_sec
+        if dance_end_sec is not None:
+            if start >= dance_end_sec:
+                continue
+            if end > dance_end_sec:
+                end = dance_end_sec
+        if end <= start:
+            continue
+        entry = dict(entry)
+        entry["start_time"] = start
+        entry["end_time"] = end
         span = end - start
         if span <= max_window_sec:
             cleaned.append(entry)
@@ -1423,6 +1732,9 @@ def _summarize_patterns(
 def _sanity_check(
     parsed: dict[str, Any],
     duration_sec: float | None,
+    *,
+    dance_start_sec: float | None = None,
+    dance_end_sec: float | None = None,
 ) -> list[str]:
     """Return a human-readable list of implausibility issues in
     Gemini's response. Empty list = response looks reasonable.
@@ -1431,12 +1743,45 @@ def _sanity_check(
     "claimed there's only 2 patterns in a 2-minute clip" before
     we persist the result. Callers should use the issue list as
     a correction prompt for a single retry.
+
+    When a dance window is known, pattern-density expectations are
+    computed against the dance duration (not the total video
+    duration) so clips with long walk-ons don't get falsely
+    flagged as "too few patterns". Entries emitted outside the
+    dance window are also flagged — they're pre-dance or
+    post-dance hallucinations.
     """
     issues: list[str] = []
 
     patterns = parsed.get("patterns_identified") or []
     if not isinstance(patterns, list):
         return ["patterns_identified is missing or not a list"]
+
+    # Flag any pattern the model placed outside the declared dance
+    # window — even after sanitize trims these, the raw Gemini JSON
+    # still contains them at sanity-check time so we catch the
+    # "hallucinated pre-dance" failure mode and trigger a retry.
+    if dance_start_sec is not None or dance_end_sec is not None:
+        out_of_window = 0
+        for p in patterns:
+            if not isinstance(p, dict):
+                continue
+            try:
+                start = float(p.get("start_time"))
+                end = float(p.get("end_time"))
+            except (TypeError, ValueError):
+                continue
+            if dance_start_sec is not None and end <= dance_start_sec:
+                out_of_window += 1
+            elif dance_end_sec is not None and start >= dance_end_sec:
+                out_of_window += 1
+        if out_of_window > 0:
+            issues.append(
+                f"{out_of_window} pattern(s) placed outside the dance "
+                f"window ({dance_start_sec or 0:.1f}s - "
+                f"{dance_end_sec or 0:.1f}s) — the couple is not "
+                "dancing in that span"
+            )
 
     # 1. Non-dance labels that are suspiciously long. A real WCS
     # intro / starter step / anchor-only moment is a few seconds;
@@ -1481,33 +1826,68 @@ def _sanity_check(
                 "— way too long for a single WCS window; likely merged repeats"
             )
 
-    # 2. Not enough patterns for the video length. WCS runs at
-    # roughly one pattern per 4-6 seconds, so a 90s clip should
-    # have ~15-25 entries. Flag if we're under half that density.
-    if duration_sec and duration_sec > 30:
-        expected_min = max(5, int(duration_sec / 10))
-        if len(patterns) < expected_min:
+    # 2. Not enough patterns for the dance length. WCS runs at
+    # roughly one pattern per 4-6 seconds, so 90s of actual dancing
+    # should have ~15-25 entries. Prefer dance-window duration over
+    # total video duration so clips with long walk-ons / bows don't
+    # trigger false "too few patterns" flags.
+    if dance_start_sec is not None and dance_end_sec is not None:
+        effective_sec = max(0.0, dance_end_sec - dance_start_sec)
+    else:
+        effective_sec = duration_sec or 0.0
+    if effective_sec > 30:
+        expected_min = max(5, int(effective_sec / 10))
+        # Only count patterns inside the dance window for the density
+        # check — out-of-window entries are already flagged above.
+        in_window = 0
+        for p in patterns:
+            if not isinstance(p, dict):
+                continue
+            try:
+                start = float(p.get("start_time"))
+                end = float(p.get("end_time"))
+            except (TypeError, ValueError):
+                continue
+            if dance_start_sec is not None and end <= dance_start_sec:
+                continue
+            if dance_end_sec is not None and start >= dance_end_sec:
+                continue
+            in_window += 1
+        if in_window < expected_min:
             issues.append(
-                f"only {len(patterns)} patterns identified for "
-                f"{int(duration_sec)}s of video — expected at least "
+                f"only {in_window} patterns identified for "
+                f"{int(effective_sec)}s of dancing — expected at least "
                 f"{expected_min} based on typical WCS pattern density"
             )
 
-    # 3. Large uncovered gaps in the timeline. If the model skipped
-    # a 20-second stretch, it almost certainly missed patterns.
+    # 3. Large uncovered gaps INSIDE the dance window. If the
+    # model skipped a 20-second stretch of dancing, it almost
+    # certainly missed patterns. Gaps outside the dance window
+    # (pre-dance setup, post-dance walk-off) are expected.
     MAX_GAP_SEC = 10.0
-    timed = []
+    timed: list[tuple[float, float]] = []
     for p in patterns:
         if not isinstance(p, dict):
             continue
         try:
-            timed.append(
-                (float(p.get("start_time")), float(p.get("end_time")))
-            )
+            pstart = float(p.get("start_time"))
+            pend = float(p.get("end_time"))
         except (TypeError, ValueError):
             continue
+        # Skip out-of-window entries when computing gaps.
+        if dance_start_sec is not None and pend <= dance_start_sec:
+            continue
+        if dance_end_sec is not None and pstart >= dance_end_sec:
+            continue
+        timed.append((pstart, pend))
     timed.sort()
-    prev_end = 0.0
+    window_start = dance_start_sec if dance_start_sec is not None else 0.0
+    window_end = (
+        dance_end_sec
+        if dance_end_sec is not None
+        else (duration_sec or 0.0)
+    )
+    prev_end = window_start
     for start, end in timed:
         gap = start - prev_end
         if gap > MAX_GAP_SEC:
@@ -1516,15 +1896,119 @@ def _sanity_check(
                 "has no pattern labeled"
             )
         prev_end = max(prev_end, end)
-    if duration_sec and duration_sec - prev_end > MAX_GAP_SEC:
+    if window_end and window_end - prev_end > MAX_GAP_SEC:
         issues.append(
-            f"last {duration_sec - prev_end:.0f}s of the video "
-            "(from ~{prev:.0f}s onwards) has no pattern labeled".format(
-                prev=prev_end
-            )
+            f"last {window_end - prev_end:.0f}s of the dance "
+            f"(from ~{prev_end:.0f}s onwards) has no pattern labeled"
         )
 
     return issues
+
+
+_MUSICAL_MOMENT_KINDS = {
+    "phrase_top",
+    "break",
+    "hit",
+    "pocket",
+    "drop",
+    "accent",
+    "build",
+}
+_FOLLOWER_INITIATIVE_KINDS = {
+    "hijack",
+    "syncopation",
+    "styling",
+    "interpretation",
+    "musical_hit",
+}
+
+
+def _sanitize_musical_moments(
+    raw: list[Any] | None,
+    *,
+    dance_start_sec: float | None = None,
+    dance_end_sec: float | None = None,
+) -> list[dict[str, Any]]:
+    """Clean Gemini's musical_moments output.
+
+    - Drops entries with missing / non-numeric timestamps.
+    - Drops entries outside the dance window (music happening
+      during walk-on / walk-off is not the dancers' problem).
+    - Normalizes kind to a known value or None (keep the entry
+      with unknown kind so the UI can still render it generically).
+    - Coerces `caught` to bool.
+    """
+    if not isinstance(raw, list):
+        return []
+    cleaned: list[dict[str, Any]] = []
+    for entry in raw:
+        if not isinstance(entry, dict):
+            continue
+        ts = _safe_float(entry.get("timestamp_sec"))
+        if ts is None:
+            continue
+        if dance_start_sec is not None and ts < dance_start_sec - 0.25:
+            continue
+        if dance_end_sec is not None and ts > dance_end_sec + 0.25:
+            continue
+        kind = (entry.get("kind") or "").strip().lower() or None
+        if kind and kind not in _MUSICAL_MOMENT_KINDS:
+            kind = None
+        cleaned.append(
+            {
+                "timestamp_sec": ts,
+                "kind": kind,
+                "description": (entry.get("description") or "").strip() or None,
+                "caught": bool(entry.get("caught")),
+                "caught_how": (
+                    (entry.get("caught_how") or "").strip() or None
+                ),
+            }
+        )
+    cleaned.sort(key=lambda m: m["timestamp_sec"])
+    return cleaned
+
+
+def _sanitize_follower_initiative(
+    raw: list[Any] | None,
+    *,
+    dance_start_sec: float | None = None,
+    dance_end_sec: float | None = None,
+) -> list[dict[str, Any]]:
+    """Clean Gemini's follower_initiative output. Same shape as
+    musical_moments but keyed on follower-authored moments. We keep
+    it separate from musical_moments so the frontend can render
+    them as distinct lenses.
+    """
+    if not isinstance(raw, list):
+        return []
+    cleaned: list[dict[str, Any]] = []
+    for entry in raw:
+        if not isinstance(entry, dict):
+            continue
+        ts = _safe_float(entry.get("timestamp_sec"))
+        if ts is None:
+            continue
+        if dance_start_sec is not None and ts < dance_start_sec - 0.25:
+            continue
+        if dance_end_sec is not None and ts > dance_end_sec + 0.25:
+            continue
+        kind = (entry.get("kind") or "").strip().lower() or None
+        if kind and kind not in _FOLLOWER_INITIATIVE_KINDS:
+            kind = None
+        quality = (entry.get("quality") or "").strip().lower() or None
+        if quality not in (None, "strong", "solid", "needs_work"):
+            quality = None
+        cleaned.append(
+            {
+                "timestamp_sec": ts,
+                "kind": kind,
+                "description": (entry.get("description") or "").strip() or None,
+                "quality": quality,
+            }
+        )
+    cleaned.sort(key=lambda m: m["timestamp_sec"])
+    return cleaned
 
 
 def _shape_response(
@@ -1532,6 +2016,8 @@ def _shape_response(
     *,
     usage: dict[str, Any] | None = None,
     sanity_warnings: list[str] | None = None,
+    dance_start_sec: float | None = None,
+    dance_end_sec: float | None = None,
 ) -> dict[str, Any]:
     """Map Gemini's rich response into the API's return shape.
 
@@ -1553,8 +2039,22 @@ def _shape_response(
     strengths = parsed.get("highlights") or parsed.get("strengths") or []
     improvements = parsed.get("improvements") or []
 
-    patterns_identified = _sanitize_patterns(parsed.get("patterns_identified"))
+    patterns_identified = _sanitize_patterns(
+        parsed.get("patterns_identified"),
+        dance_start_sec=dance_start_sec,
+        dance_end_sec=dance_end_sec,
+    )
     pattern_summary = _summarize_patterns(patterns_identified)
+    musical_moments = _sanitize_musical_moments(
+        parsed.get("musical_moments"),
+        dance_start_sec=dance_start_sec,
+        dance_end_sec=dance_end_sec,
+    )
+    follower_initiative = _sanitize_follower_initiative(
+        parsed.get("follower_initiative"),
+        dance_start_sec=dance_start_sec,
+        dance_end_sec=dance_end_sec,
+    )
 
     return {
         "overall": {
@@ -1566,6 +2066,10 @@ def _shape_response(
         "categories": categories,
         "patterns_identified": patterns_identified,
         "pattern_summary": pattern_summary,
+        "musical_moments": musical_moments,
+        "follower_initiative": follower_initiative,
+        "dance_start_sec": dance_start_sec,
+        "dance_end_sec": dance_end_sec,
         "strengths": strengths,
         "improvements": improvements,
         "lead": parsed.get("lead"),

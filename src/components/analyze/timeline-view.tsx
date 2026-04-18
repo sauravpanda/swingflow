@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type {
+  MusicalMoment,
   VideoPatternIdentified,
   VideoScoreResult,
 } from "@/lib/wcs-api";
@@ -294,6 +295,19 @@ export function TimelineView({
         </div>
       )}
 
+      {/* Musicality strip — audio-first lens showing whether the
+          couple caught each musical moment. Sits ABOVE the pattern
+          timeline so it reads as a peer, not a footnote. Hidden
+          entirely when Gemini returned no moments (e.g. pure-groove
+          music with no standout hits). */}
+      {(result.musical_moments?.length ?? 0) > 0 && (
+        <MusicalityStrip
+          moments={result.musical_moments ?? []}
+          effectiveDuration={effectiveDuration}
+          onSeek={seek}
+        />
+      )}
+
       {/* Pattern timeline = the scrubber (single source of truth) */}
       <div className="space-y-1.5">
         <div className="flex items-center justify-between text-xs text-muted-foreground">
@@ -315,6 +329,41 @@ export function TimelineView({
           aria-valuenow={Math.round(currentTime)}
           onClick={scrubToClick}
         >
+          {/* Pre-dance / post-dance bands. Rendered under the
+              pattern blocks so stray out-of-window entries (if any
+              slip through the backend sanitizer) still show on top.
+              Hatched muted fill visually separates setup / walk-off
+              from the dancing region. */}
+          {typeof result.dance_start_sec === "number" &&
+            result.dance_start_sec > 0.5 && (
+              <div
+                className="absolute top-0 h-full pointer-events-none bg-muted/60 border-r border-border/80"
+                style={{
+                  left: 0,
+                  width: `${Math.min(100, (result.dance_start_sec / effectiveDuration) * 100)}%`,
+                }}
+                title={`Pre-dance setup · ends ${formatTime(result.dance_start_sec)}`}
+              >
+                <span className="absolute inset-0 flex items-center justify-center text-[9px] sm:text-[10px] font-medium text-muted-foreground/70 uppercase tracking-wide">
+                  pre-dance
+                </span>
+              </div>
+            )}
+          {typeof result.dance_end_sec === "number" &&
+            result.dance_end_sec < effectiveDuration - 0.5 && (
+              <div
+                className="absolute top-0 h-full pointer-events-none bg-muted/60 border-l border-border/80"
+                style={{
+                  left: `${(result.dance_end_sec / effectiveDuration) * 100}%`,
+                  width: `${Math.max(0, ((effectiveDuration - result.dance_end_sec) / effectiveDuration) * 100)}%`,
+                }}
+                title={`After dance · starts ${formatTime(result.dance_end_sec)}`}
+              >
+                <span className="absolute inset-0 flex items-center justify-center text-[9px] sm:text-[10px] font-medium text-muted-foreground/70 uppercase tracking-wide">
+                  after
+                </span>
+              </div>
+            )}
           {patterns.map((p, i) => {
             // Clamp start/end to the effective timeline so patterns
             // whose model-reported end_time slightly overshoots the
@@ -509,6 +558,118 @@ export function TimelineView({
         {/* Play button moved into the custom video control strip
             above — the pattern timeline is the sole scrubber now. */}
       </div>
+    </div>
+  );
+}
+
+const MOMENT_KIND_LABEL: Record<string, string> = {
+  phrase_top: "Phrase",
+  break: "Break",
+  hit: "Hit",
+  pocket: "Pocket",
+  drop: "Drop",
+  accent: "Accent",
+  build: "Build",
+};
+
+function MusicalityStrip({
+  moments,
+  effectiveDuration,
+  onSeek,
+}: {
+  moments: MusicalMoment[];
+  effectiveDuration: number;
+  onSeek: (t: number) => void;
+}) {
+  const [hover, setHover] = useState<MusicalMoment | null>(null);
+  // Cull to what fits the strip. A 2-min clip with 8-12 moments is
+  // comfortable; much more than that and the markers collide.
+  const visible = useMemo(
+    () =>
+      moments
+        .filter((m) => Number.isFinite(m.timestamp_sec))
+        .filter(
+          (m) =>
+            m.timestamp_sec >= 0 && m.timestamp_sec <= effectiveDuration
+        ),
+    [moments, effectiveDuration]
+  );
+
+  const caughtCount = visible.filter((m) => m.caught).length;
+  const totalCount = visible.length;
+
+  return (
+    <div className="space-y-1.5">
+      <div className="flex items-center justify-between text-xs text-muted-foreground">
+        <span className="font-medium uppercase tracking-wide">
+          Musicality
+        </span>
+        <span className="text-[10px] tabular-nums">
+          {caughtCount} of {totalCount} moments caught
+        </span>
+      </div>
+      <div className="relative h-8 rounded-md bg-muted/30 border border-border overflow-visible">
+        {visible.map((m, i) => {
+          const pct = (m.timestamp_sec / effectiveDuration) * 100;
+          return (
+            <button
+              key={`mm-${i}`}
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onSeek(m.timestamp_sec);
+              }}
+              onMouseEnter={() => setHover(m)}
+              onMouseLeave={() =>
+                setHover((curr) => (curr === m ? null : curr))
+              }
+              className={cn(
+                "absolute top-1 bottom-1 w-[3px] rounded-sm transition-transform hover:scale-y-110",
+                m.caught ? "bg-emerald-500" : "bg-rose-500/80"
+              )}
+              style={{ left: `calc(${pct}% - 1.5px)` }}
+              aria-label={`${m.caught ? "Caught" : "Missed"} — ${m.description ?? "musical moment"} at ${formatTime(m.timestamp_sec)}`}
+              title={`${m.description ?? "Musical moment"} · ${m.caught ? "caught" : "missed"} · ${formatTime(m.timestamp_sec)}`}
+            >
+              {/* Kind label above the marker when there's room. Only
+                  shown on larger screens — on mobile the hover card
+                  below does the same job. */}
+              {m.kind && MOMENT_KIND_LABEL[m.kind] && (
+                <span className="hidden sm:inline absolute -top-[14px] left-1/2 -translate-x-1/2 text-[8px] font-medium uppercase tracking-wide text-muted-foreground whitespace-nowrap pointer-events-none">
+                  {MOMENT_KIND_LABEL[m.kind]}
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+      {hover && (
+        <div className="rounded-md border border-border bg-muted/20 p-2 text-xs">
+          <div className="flex items-baseline justify-between gap-2 flex-wrap">
+            <span className="font-semibold text-foreground">
+              {hover.kind && MOMENT_KIND_LABEL[hover.kind]
+                ? `${MOMENT_KIND_LABEL[hover.kind]} · `
+                : ""}
+              {hover.description ?? "Musical moment"}
+            </span>
+            <span
+              className={cn(
+                "font-mono tabular-nums text-[10px] px-1.5 py-0.5 rounded",
+                hover.caught
+                  ? "bg-emerald-500/20 text-emerald-300"
+                  : "bg-rose-500/20 text-rose-300"
+              )}
+            >
+              {hover.caught ? "caught" : "missed"} · {formatTime(hover.timestamp_sec)}
+            </span>
+          </div>
+          {hover.caught_how && (
+            <div className="text-muted-foreground mt-1">
+              {hover.caught_how}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

@@ -108,7 +108,11 @@ function AnalysisPageInner() {
     try {
       const resp = await analyzeVideoFromKey(
         record.object_key,
-        record.filename ?? "video.mp4"
+        record.filename ?? "video.mp4",
+        // fresh: true flips the backend off its pinned seed so the
+        // re-run actually diverges from the previous result instead
+        // of returning near-identical output. Costs nothing extra.
+        { fresh: true }
       );
       Analytics.analysisReanalyzed();
       setOverrideResult(resp.result);

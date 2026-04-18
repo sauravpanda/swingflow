@@ -154,6 +154,43 @@ export type VideoPartnerScore = {
   notes?: string;
 };
 
+export type MusicalMoment = {
+  // Timestamp of the musical event (single instant, not a range).
+  timestamp_sec: number;
+  // Kind of musical event, or null when Gemini couldn't place
+  // it into a known bucket.
+  kind?:
+    | "phrase_top"
+    | "break"
+    | "hit"
+    | "pocket"
+    | "drop"
+    | "accent"
+    | "build"
+    | null;
+  // Short phrase describing the musical event (e.g. "horn hit",
+  // "bass drop into chorus").
+  description?: string | null;
+  // Whether the couple caught / hit / matched the moment.
+  caught: boolean;
+  // Short phrase on HOW they caught it, or "missed" when not.
+  caught_how?: string | null;
+};
+
+export type FollowerInitiative = {
+  timestamp_sec: number;
+  // Kind of follower-authored moment, or null when unclear.
+  kind?:
+    | "hijack"
+    | "syncopation"
+    | "styling"
+    | "interpretation"
+    | "musical_hit"
+    | null;
+  description?: string | null;
+  quality?: "strong" | "solid" | "needs_work" | null;
+};
+
 export type PatternSummary = {
   name: string;
   // When the aggregate has a specific non-basic variant (e.g.
@@ -185,6 +222,22 @@ export type VideoScoreResult = {
   // Aggregated patterns: deduplicated by name with per-pattern
   // occurrence count + most-common quality/timing. Computed server-side.
   pattern_summary?: PatternSummary[];
+  // Audio-first lens: musical moments that demanded a response,
+  // scored on whether the couple caught them. Independent of
+  // patterns — a couple can execute cleanly but walk past every
+  // hit. Usually 4-12 per 90s of dancing.
+  musical_moments?: MusicalMoment[];
+  // Follower-authored moments: hijacks, syncopations, styling,
+  // interpretations. Surfaces the follower as a co-creator, not
+  // a responder. Empty when the follower executes strictly on
+  // the lead's cues.
+  follower_initiative?: FollowerInitiative[];
+  // Bounds of the active dance (walk-on / waiting / bow excluded).
+  // Both are seconds from video start. Null when the model couldn't
+  // identify a clean start/end (e.g. mid-song cut) — the UI then
+  // treats the whole video as the dance window.
+  dance_start_sec?: number | null;
+  dance_end_sec?: number | null;
   strengths: string[];
   improvements: string[];
   lead?: VideoPartnerScore;
@@ -391,6 +444,10 @@ export type VideoAnalyzeOptions = {
   // replay it against the pattern timeline. Default off — we
   // delete the clip right after scoring otherwise.
   storeVideo?: boolean;
+  // When true, the backend bypasses its pinned Gemini seed so the
+  // call returns a different result than prior runs on the same
+  // clip. Set this on Re-analyze; leave unset on fresh uploads.
+  fresh?: boolean;
 };
 
 export async function analyzeVideoFromKey(
@@ -409,6 +466,7 @@ export async function analyzeVideoFromKey(
     tags: options.tags && options.tags.length ? options.tags : null,
     dancer_description: options.dancerDescription || null,
     store_video: Boolean(options.storeVideo),
+    fresh: Boolean(options.fresh),
   });
 }
 

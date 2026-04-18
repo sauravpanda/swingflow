@@ -43,6 +43,12 @@ class VideoAnalyzeBody(BaseModel):
     # pattern timeline / off-beat markers. User can still click
     # "Delete video" on the history row to remove it any time.
     store_video: bool = False
+    # When True, skip the pinned seed so Gemini returns a different
+    # result than previous runs on the same video. Used by the
+    # "Re-analyze" button so a second run actually tries again
+    # instead of returning near-identical output (seed=42 +
+    # temperature=0 is close to deterministic).
+    fresh: bool = False
 
     @field_validator("tags")
     @classmethod
@@ -172,6 +178,7 @@ async def analyze_video_endpoint(
                     "tags": body.tags,
                     "dancer_description": body.dancer_description,
                 },
+                fresh=body.fresh,
             )
         except VideoAnalysisError as exc:
             raise HTTPException(status_code=502, detail=str(exc))
