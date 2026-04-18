@@ -15,7 +15,10 @@ import {
   ShieldCheck,
   Share2,
   HelpCircle,
+  Github,
 } from "lucide-react";
+
+const REPO_URL = "https://github.com/sauravpanda/swingflow";
 
 export default function HomePage() {
   return (
@@ -32,6 +35,22 @@ export default function HomePage() {
             <span className="text-lg font-semibold">SwingFlow</span>
           </div>
           <div className="flex items-center gap-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              asChild
+              className="hidden sm:inline-flex"
+              title="Open source on GitHub"
+            >
+              <a
+                href={REPO_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="SwingFlow on GitHub"
+              >
+                <Github className="h-4 w-4" />
+              </a>
+            </Button>
             <Button variant="ghost" asChild>
               <Link href="/login">Sign in</Link>
             </Button>
@@ -553,15 +572,28 @@ export default function HomePage() {
       </main>
 
       <footer className="border-t border-border/60 py-8">
-        <div className="container mx-auto px-4 text-center text-sm text-muted-foreground">
-          Created by{" "}
+        <div className="container mx-auto px-4 text-center text-sm text-muted-foreground flex flex-col sm:flex-row items-center justify-center gap-2 sm:gap-4">
+          <span>
+            Created by{" "}
+            <a
+              href="https://github.com/sauravpanda"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline hover:text-foreground transition-colors"
+            >
+              Saurav Panda
+            </a>
+          </span>
+          <span className="hidden sm:inline text-muted-foreground/50">·</span>
           <a
-            href="https://github.com/sauravpanda"
+            href={REPO_URL}
             target="_blank"
             rel="noopener noreferrer"
-            className="underline hover:text-foreground transition-colors"
+            className="inline-flex items-center gap-1.5 hover:text-foreground transition-colors"
+            title="Open source on GitHub"
           >
-            Saurav Panda
+            <Github className="h-3.5 w-3.5" />
+            <span className="underline">Open source on GitHub</span>
           </a>
         </div>
       </footer>

@@ -27,6 +27,110 @@ from google.genai import types as genai_types
 from ..settings import settings
 
 
+def _detect_motion_floor(video_path: str) -> float | None:
+    """Find the first timestamp in the video where sustained motion
+    appears, as a floor for dance_start_sec.
+
+    Dancers standing in closed position have low frame-to-frame pixel
+    variance (small sways, breathing). Active dancing has 3-10x higher
+    motion from traveling feet + body position changes. We sample at
+    2 FPS, compute per-frame motion scores, find the baseline (early
+    frames' motion), and return the first timestamp where smoothed
+    motion sustains above a multiplier over baseline.
+
+    Returns None when motion detection fails (ffmpeg error, numpy not
+    available, or no clear transition detected). Caller treats None
+    as "no motion floor available" and falls back to beat-based floor
+    alone. This is best-effort enrichment.
+    """
+    try:
+        import numpy as np
+
+        # Extract grayscale frames at 2 FPS, 64x48 resolution. That's
+        # ~3KB per frame, small enough to buffer a 10-minute clip
+        # entirely in RAM (~3.6MB) without worrying.
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            raw_path = os.path.join(tmp_dir, "frames.raw")
+            subprocess.run(
+                [
+                    "ffmpeg",
+                    "-i",
+                    video_path,
+                    "-vf",
+                    "fps=2,scale=64:48",
+                    "-pix_fmt",
+                    "gray",
+                    "-f",
+                    "rawvideo",
+                    raw_path,
+                ],
+                capture_output=True,
+                check=True,
+                timeout=60,
+            )
+            size = os.path.getsize(raw_path)
+            frame_bytes = 64 * 48
+            n_frames = size // frame_bytes
+            if n_frames < 6:
+                return None
+            with open(raw_path, "rb") as f:
+                data = f.read()
+            frames = np.frombuffer(data, dtype=np.uint8).reshape(
+                n_frames, 48, 64
+            )
+
+        # Per-frame motion = mean absolute difference from previous
+        # frame. Compute in int32 to avoid uint8 overflow.
+        motions = np.abs(
+            frames[1:].astype(np.int32) - frames[:-1].astype(np.int32)
+        ).mean(axis=(1, 2))
+
+        # 2-second smoothing window (4 samples at 2 FPS) — averages
+        # out transient blips (camera jitter, flash, a passerby in
+        # frame) while preserving the transition into dancing.
+        window = 4
+        if len(motions) < window * 2:
+            return None
+        smoothed = np.convolve(
+            motions, np.ones(window) / window, mode="valid"
+        )
+
+        # Baseline from first 2 seconds of smoothed signal. If the
+        # baseline is already high (clip is already dancing from
+        # frame 1 — a mid-song cut), return 0 so nothing gets
+        # clamped unexpectedly.
+        baseline = float(smoothed[: min(4, len(smoothed))].mean())
+        # Guard: if the baseline is high (>20/255 mean pixel change),
+        # the clip has no clear "waiting" period. Trust the LLM.
+        if baseline > 20.0:
+            return 0.0
+        # Multiplier of 2.5x baseline catches real dance motion
+        # without flagging camera pans / audience applause motion.
+        threshold = max(baseline * 2.5, baseline + 5.0)
+
+        # Find first sustained crossing — require 3 consecutive
+        # smoothed samples (~1.5s) above threshold so a brief flash
+        # doesn't count.
+        streak_needed = 3
+        streak = 0
+        for i, m in enumerate(smoothed):
+            if m > threshold:
+                streak += 1
+                if streak >= streak_needed:
+                    # Smoothed index i corresponds to motions index
+                    # i + window - 1, which is the START of the 4-
+                    # sample window (i.e. the frame-transition at
+                    # time i/2 seconds into the video, since motions
+                    # starts at frame 1 at 2 FPS).
+                    crossing_idx = i - streak_needed + 1
+                    return float(crossing_idx) / 2.0
+            else:
+                streak = 0
+        return None
+    except Exception:
+        return None
+
+
 def _extract_beat_context(
     video_path: str,
 ) -> tuple[str | None, float | None, dict[str, Any] | None]:
@@ -613,21 +717,53 @@ not at the audio downbeat.
 
 === DANCE WINDOW (CRITICAL — READ BEFORE LISTING PATTERNS) ===
 
-Competition videos almost always have pre-dance footage: the couple
-walks onto the floor, stands waiting, talks with the MC, finds their
-frame, and waits for music to kick in. They only START DANCING once
-the music is playing AND they're taking weight changes to the beat.
+Competition and social-floor videos almost ALWAYS have pre-dance
+footage: the couple walks onto the floor, stands waiting, talks
+with the MC, finds their frame, and holds closed position while
+the music plays its intro. Assume pre-dance setup exists UNLESS
+you see a clear mid-song cut in the first frame (music at full
+volume from frame 1 AND dancers actively taking weight changes
+from frame 1). Most clips have 5-25 seconds of setup.
 
 Before emitting ANY patterns, identify:
-- `dance_start_sec` — the first timestamp where the couple takes a
-  clear weight-change on the beat (a real triple, an anchor step,
-  walk-through, or entry pattern). NOT when they walk on, NOT when
-  they set up in closed position, NOT when the music starts.
-  If the music is playing but they're still standing still
-  waiting, dancing has NOT started yet.
+- `dance_start_sec` — the first timestamp where you can SEE a
+  clear weight change: one dancer's foot lifts and plants, the
+  body moves to a different location, a triple-step starts. NOT
+  when they walk on, NOT when they set up in closed position,
+  NOT when the music starts, NOT when they gently sway.
 - `dance_end_sec` — the last timestamp where they're still dancing
   to the music. Exclude the bow, applause walk-off, or standing
   hold at the end.
+
+**VERIFICATION CHECKLIST for dance_start_sec — run through this
+BEFORE committing to a value:**
+1. At dance_start_sec, can I see ONE specific foot leaving the
+   ground and planting in a new location within 0.5s? If not,
+   dance_start_sec is too early.
+2. In the 2 seconds AFTER dance_start_sec, can I count at least
+   3 clear weight changes (alternating feet)? If not, that isn't
+   dancing yet — increase dance_start_sec.
+3. Could I label the moment at dance_start_sec as "walk 1 of a
+   pattern" with confidence? If I'd have to call it "hmm maybe
+   they're starting" it's too early.
+
+**NON-EXAMPLES — these are NOT dance start, keep looking:**
+- Closed-position frame, feet planted, slight swaying or bouncing
+  in place. That's waiting, not dancing.
+- Both dancers holding hands but standing still while the lead
+  scans the floor for other couples. Waiting.
+- Follower's hand on the lead's chest, bodies close, no weight
+  transfer. That's setup, not dancing.
+- Gentle bounce with music but no defined step. Waiting.
+- Music at full volume but dancers haven't moved yet. Waiting.
+
+**EXAMPLES of legitimate dance_start_sec:**
+- Lead lifts his left foot, follower mirrors — weight transfers
+  onto the heel → this is beat 1 of an entry pattern.
+- First clean triple-step visible (3 weight changes in rapid
+  succession) → dance has started.
+- A starter-step with clear triple pairs, foot movement visible
+  on each beat → dancing.
 
 STRICT RULES:
 1. Do NOT emit pattern entries with start_time < dance_start_sec.
@@ -641,11 +777,17 @@ STRICT RULES:
    — that is CORRECT.
 5. If the beat grid above reports a FIRST DOWNBEAT timestamp,
    dance_start_sec cannot be earlier than it — the couple can't
-   dance to music that hasn't begun.
+   dance to music that hasn't begun. If a MOTION FLOOR is provided
+   below, dance_start_sec cannot be earlier than that either.
+6. When in doubt, err LATER (by up to 2s). Users perceive early
+   dance_start_sec as "the tool missed the setup" — a slightly
+   late value reads as "the tool caught the setup."
 
-If you cannot tell where dancing starts or ends (e.g. the clip is
-a mid-song cut), set dance_start_sec = 0.0 and dance_end_sec =
-the video duration and proceed normally.
+**ESCAPE HATCH (use sparingly):** Only set dance_start_sec = 0.0
+when the very first frame of the video shows dancers already
+mid-pattern (a triple, a rotation, a walk-through). If there's
+ANY closed-position setup visible in the first 3 seconds,
+dance_start_sec is NOT 0.
 
 === OUTPUT ===
 
@@ -1189,6 +1331,7 @@ def _run_pattern_pre_pass(
     model: str,
     video_file: Any,
     first_downbeat_sec: float | None = None,
+    motion_floor_sec: float | None = None,
     duration_sec: float | None = None,
     seed: int | None = 42,
 ) -> tuple[str | None, dict[str, Any] | None, float | None, float | None]:
@@ -1240,6 +1383,17 @@ def _run_pattern_pre_pass(
     if first_downbeat_sec is not None and dance_start is not None:
         if dance_start + 0.25 < first_downbeat_sec:
             dance_start = first_downbeat_sec
+    # Floor on motion start — if no visible movement yet, still not
+    # dancing regardless of what the pre-pass model said.
+    if (
+        motion_floor_sec is not None
+        and motion_floor_sec > 0.5
+        and (
+            dance_start is None
+            or dance_start + 0.25 < motion_floor_sec
+        )
+    ):
+        dance_start = motion_floor_sec
     # Clamp dance_end to the video duration when we know it.
     if duration_sec is not None and dance_end is not None:
         dance_end = min(dance_end, duration_sec)
@@ -1525,6 +1679,28 @@ def analyze_video_path(
         if beat_context:
             prompt = f"{beat_context}\n\n{prompt}"
 
+        # Pre-compute a motion floor by sampling frame-to-frame pixel
+        # change. When the first N seconds of the clip have low motion
+        # (dancers in closed position), this floor floors dance_start_sec
+        # above the pre-dance window, catching cases where Gemini would
+        # hallucinate patterns over setup time.
+        motion_floor_sec = _detect_motion_floor(video_path)
+        if motion_floor_sec is not None and motion_floor_sec > 0.5:
+            motion_note = (
+                f"\n\nDETECTED MOTION FLOOR: "
+                f"{motion_floor_sec:.2f}s — the video's first "
+                "sustained movement begins here (frame-to-frame pixel "
+                "change transitions from low to high at this "
+                "timestamp). Use this as an additional floor on "
+                "dance_start_sec: the couple cannot be dancing "
+                "before there is measurable motion in the frame. "
+                "dance_start_sec must be >= this value UNLESS you "
+                "can clearly see weight changes happening before it "
+                "(rare — usually means camera pan or an object "
+                "moving in the background).\n"
+            )
+            prompt = f"{motion_note}\n{prompt}"
+
         dance_start_sec: float | None = None
         dance_end_sec: float | None = None
         if settings.enable_pattern_prepass:
@@ -1538,6 +1714,7 @@ def analyze_video_path(
                 settings.gemini_model,
                 video_part,
                 first_downbeat_sec=first_downbeat_sec,
+                motion_floor_sec=motion_floor_sec,
                 duration_sec=duration_sec,
                 seed=seed,
             )
@@ -1564,19 +1741,33 @@ def analyze_video_path(
 
         # Prefer the main model's dance_start / dance_end if it
         # returned them; fall back to pre-pass values; floor on the
-        # first detected downbeat so nothing slips below the music.
+        # first detected downbeat + motion floor so nothing slips
+        # below the music or below the first visible movement.
         main_dance_start = _safe_float(parsed.get("dance_start_sec"))
         main_dance_end = _safe_float(parsed.get("dance_end_sec"))
         if main_dance_start is not None:
             dance_start_sec = main_dance_start
         if main_dance_end is not None:
             dance_end_sec = main_dance_end
+        # Floor on audio first-downbeat.
         if (
             first_downbeat_sec is not None
             and dance_start_sec is not None
             and dance_start_sec + 0.25 < first_downbeat_sec
         ):
             dance_start_sec = first_downbeat_sec
+        # Floor on motion start. Catches the "dancers are in closed
+        # position holding frame" case where Gemini misreads the
+        # setup as a starter step.
+        if (
+            motion_floor_sec is not None
+            and motion_floor_sec > 0.5
+            and (
+                dance_start_sec is None
+                or dance_start_sec + 0.25 < motion_floor_sec
+            )
+        ):
+            dance_start_sec = motion_floor_sec
         if duration_sec is not None and dance_end_sec is not None:
             dance_end_sec = min(dance_end_sec, duration_sec)
 
