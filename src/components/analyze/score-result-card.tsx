@@ -3,7 +3,14 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { CheckCircle2, Target, Quote, Sparkles } from "lucide-react";
+import {
+  CheckCircle2,
+  Target,
+  Quote,
+  Sparkles,
+  Activity,
+  Music2,
+} from "lucide-react";
 import type { FollowerInitiative, VideoScoreResult } from "@/lib/wcs-api";
 import { getLevelContext } from "@/lib/level-context";
 import {
@@ -288,6 +295,8 @@ export function ScoreResultCard({
             )}
           </div>
 
+          <LensStrip result={result} />
+
           <div className="space-y-4 pt-2 border-t border-border">
             {(
               Object.keys(CATEGORY_LABELS) as Array<keyof typeof CATEGORY_LABELS>
@@ -391,6 +400,157 @@ export function ScoreResultCard({
         <Button onClick={onClear} variant="outline" className="w-full">
           {clearLabel}
         </Button>
+      )}
+    </div>
+  );
+}
+
+function LensStrip({ result }: { result: VideoScoreResult }) {
+  // Execution lens — summary of patterns identified. Counts distinct
+  // pattern families and the dominant quality across them so the user
+  // sees "18 patterns · mostly solid" rather than just a raw count.
+  const patterns = result.patterns_identified ?? [];
+  const patternFamilies = new Set(
+    patterns.map((p) => (p.name || "").toLowerCase().trim()).filter(Boolean)
+  );
+  const qualities = patterns
+    .map((p) => (p.quality || "").toLowerCase())
+    .filter(Boolean);
+  const dominantQuality = (() => {
+    if (qualities.length === 0) return null;
+    const counts = new Map<string, number>();
+    for (const q of qualities) counts.set(q, (counts.get(q) ?? 0) + 1);
+    let best: [string, number] | null = null;
+    for (const [q, c] of counts) {
+      if (!best || c > best[1]) best = [q, c];
+    }
+    return best ? best[0].replace("_", " ") : null;
+  })();
+
+  // Musicality lens — caught / total.
+  const moments = result.musical_moments ?? [];
+  const caught = moments.filter((m) => m.caught).length;
+  const total = moments.length;
+  const pctCaught = total > 0 ? Math.round((caught / total) * 100) : null;
+
+  // Voice lens — follower-authored moments, split by quality bucket.
+  const voice = result.follower_initiative ?? [];
+  const strongCount = voice.filter((m) => m.quality === "strong").length;
+  const solidCount = voice.filter((m) => m.quality === "solid").length;
+
+  return (
+    <div className="grid grid-cols-3 gap-2 sm:gap-3">
+      <LensTile
+        icon={<Activity className="h-3.5 w-3.5" />}
+        label="Execution"
+        headline={patterns.length > 0 ? `${patterns.length}` : "—"}
+        headlineSuffix={patterns.length > 0 ? "patterns" : null}
+        secondary={
+          patterns.length > 0
+            ? dominantQuality
+              ? `mostly ${dominantQuality}`
+              : `${patternFamilies.size} families`
+            : null
+        }
+        tone="neutral"
+      />
+      <LensTile
+        icon={<Music2 className="h-3.5 w-3.5" />}
+        label="Musicality"
+        headline={
+          total > 0 ? `${caught}` : "—"
+        }
+        headlineSuffix={total > 0 ? `of ${total}` : null}
+        secondary={
+          pctCaught !== null
+            ? `${pctCaught}% caught`
+            : "no standout hits"
+        }
+        tone={
+          pctCaught === null
+            ? "neutral"
+            : pctCaught >= 70
+            ? "good"
+            : pctCaught >= 40
+            ? "mixed"
+            : "poor"
+        }
+      />
+      <LensTile
+        icon={<Sparkles className="h-3.5 w-3.5" />}
+        label="Voice"
+        headline={voice.length > 0 ? `${voice.length}` : "—"}
+        headlineSuffix={voice.length > 0 ? "moments" : null}
+        secondary={
+          voice.length === 0
+            ? "follower executed the lead"
+            : strongCount > 0
+            ? `${strongCount} strong${solidCount ? `, ${solidCount} solid` : ""}`
+            : solidCount > 0
+            ? `${solidCount} solid`
+            : null
+        }
+        tone={
+          voice.length === 0 ? "neutral" : strongCount > 0 ? "good" : "mixed"
+        }
+      />
+    </div>
+  );
+}
+
+const TONE_CLASS: Record<string, string> = {
+  neutral: "border-border bg-muted/20",
+  good: "border-emerald-500/40 bg-emerald-500/10",
+  mixed: "border-amber-500/40 bg-amber-500/10",
+  poor: "border-rose-500/40 bg-rose-500/10",
+};
+
+const TONE_ACCENT: Record<string, string> = {
+  neutral: "text-muted-foreground",
+  good: "text-emerald-300",
+  mixed: "text-amber-300",
+  poor: "text-rose-300",
+};
+
+function LensTile({
+  icon,
+  label,
+  headline,
+  headlineSuffix,
+  secondary,
+  tone,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  headline: string;
+  headlineSuffix: string | null;
+  secondary: string | null;
+  tone: "neutral" | "good" | "mixed" | "poor";
+}) {
+  return (
+    <div
+      className={`rounded-md border px-2.5 py-2 sm:px-3 sm:py-2.5 ${TONE_CLASS[tone]}`}
+    >
+      <div
+        className={`flex items-center gap-1.5 text-[10px] uppercase tracking-wide ${TONE_ACCENT[tone]}`}
+      >
+        {icon}
+        <span className="font-medium">{label}</span>
+      </div>
+      <div className="mt-1 flex items-baseline gap-1">
+        <span className="text-xl sm:text-2xl font-bold tabular-nums leading-none text-foreground">
+          {headline}
+        </span>
+        {headlineSuffix && (
+          <span className="text-[10px] sm:text-xs text-muted-foreground">
+            {headlineSuffix}
+          </span>
+        )}
+      </div>
+      {secondary && (
+        <div className="mt-0.5 text-[10px] sm:text-xs text-muted-foreground truncate">
+          {secondary}
+        </div>
       )}
     </div>
   );
