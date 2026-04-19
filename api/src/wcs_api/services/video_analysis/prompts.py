@@ -630,8 +630,20 @@ Respond in this exact JSON format. Fill `reasoning` BEFORE `score` in each categ
       "quality": "<strong|solid|needs_work — how well did it land musically and with the connection?>"
     }
   ],
-  "highlights": ["<notable positive moments with approximate timestamps>"],
-  "improvements": ["<specific actionable suggestions>"],
+  "highlights": [
+    {
+      "timestamp_sec": <seconds from video start, float — the moment you observed this>,
+      "observed_cue": "<SHORT phrase describing the specific visual evidence — what you actually saw. e.g. 'follower's anchor triples arrive on 5-6 for 14 consecutive patterns', 'lead's left hand stays connected through the basket whip at 0:47'. NOT a generic trait like 'good posture' — the specific, moment-anchored thing you saw.>",
+      "text": "<one-sentence strength, written to the dancer. Connects to the observed_cue so it reads as a direct observation, not a horoscope.>"
+    }
+  ],
+  "improvements": [
+    {
+      "timestamp_sec": <seconds from video start, float — the moment you observed this>,
+      "observed_cue": "<SHORT phrase describing the specific visual evidence — what you actually saw at this moment. e.g. 'anchor at 0:34 drops from 3rd foot position to feet together', 'arm pull on the whip entry at 1:12 pulls follower off her line'. NOT a generic coaching platitude — the specific moment-anchored thing you saw that gave rise to this suggestion.>",
+      "text": "<one-sentence, actionable improvement written to the dancer. Must reference the observed_cue so the dancer can verify it on their video. DO NOT write generic coaching ('roll through your feet', 'stack your posture', 'introduce pattern variety', 'initiate from your core', 'elastic stretch at the anchor') unless you have a specific moment where that problem is visible — if you can't anchor it to a timestamp with an observed_cue, leave it out entirely.>"
+    }
+  ],
   "lead": {
     "technique_score": <1-10>,
     "presentation_score": <1-10>,

@@ -641,6 +641,142 @@ def _coerce_str_list(
     return cleaned
 
 
+# Stock coaching phrases we've observed the model ship on nearly every
+# analysis regardless of what was in the video. Each pattern matches
+# case-insensitively against the raw suggestion text. When a suggestion
+# text matches one of these AND has no grounded observed_cue, we drop
+# it — it's horoscope coaching, not feedback. Sourced from real-world
+# Discord feedback (2026-04-18) + the three share tokens we audited.
+_STOCK_COACHING_PATTERNS = tuple(
+    _re.compile(pat, _re.IGNORECASE)
+    for pat in (
+        # "Roll through your feet", "rolling through the feet", etc.
+        r"roll(?:ing)? through (?:the |your )?feet",
+        r"\bheel[- ]toe\b",
+        # "Stack your posture", "stacking the posture"
+        r"stack(?:ing)? (?:the |your )?posture",
+        r"shoulders over hips",
+        # "Initiate movement from your core", "initiate patterns by
+        # shifting your body weight", etc. — loose enough to catch the
+        # live-data variants, strict enough not to fire on specific
+        # moment-grounded feedback.
+        r"\binitiate\b[^.]{0,60}(?:body ?weight|\b(?:core|center|body)\b)",
+        # "Introduce more variety", "add pattern variety"
+        r"(?:introduce|add|bring|more|greater)\b[^.]{0,30}\bvariety\b",
+        r"break up the repetitive loop",
+        # "Settle deeper into the anchor", "elastic stretch at the anchor"
+        r"settle (?:deeper|more)[^.]{0,30}\banchor\b",
+        r"elastic stretch[^.]{0,20}anchor",
+        # "Keep the chest lifted", "lift the chest"
+        r"(?:keep the chest lifted|lift (?:the|your) chest)",
+        # "Engage the core", "engage your core"
+        r"engage (?:the|your) core\b",
+        # "avoid pitching forward", "avoid hinging at the waist"
+        r"avoid (?:pitching|hinging|breaking|collapsing)\b[^.]{0,40}(?:forward|waist|hips)",
+        # "eliminate the clomping / flat-footed look"
+        r"eliminate the (?:clomping|flat[- ]footed) look",
+        # "compression [...] in the arms rather than the core"
+        r"compression[^.]{0,40}\barms?\b[^.]{0,20}(?:rather|instead|core)",
+    )
+)
+
+
+def _is_stock_coaching(text: str) -> bool:
+    """True if the text matches one of the documented stock-phrase
+    patterns. Used to drop 'horoscope' coaching that isn't tied to a
+    specific video moment.
+    """
+    return any(pat.search(text) for pat in _STOCK_COACHING_PATTERNS)
+
+
+def _fmt_timestamp(sec: float) -> str:
+    """Format seconds as 'M:SS' for human-readable coaching prefixes."""
+    if sec < 0:
+        sec = 0.0
+    m = int(sec // 60)
+    s = int(round(sec - m * 60))
+    if s == 60:
+        m += 1
+        s = 0
+    return f"{m}:{s:02d}"
+
+
+def _sanitize_coaching_list(
+    raw: Any,
+    *,
+    max_items: int = 3,
+    dance_start_sec: float | None = None,
+    dance_end_sec: float | None = None,
+) -> list[str]:
+    """Coerce strengths / improvements into a grounded, de-horoscoped
+    list of display strings.
+
+    Accepts either the new rich shape from the prompt:
+        [{"text": "...", "observed_cue": "...", "timestamp_sec": 12.5}, ...]
+    or the legacy bare-string shape:
+        ["...", "..."]
+
+    For the rich shape:
+      - entries without a non-empty `observed_cue` are dropped
+      - entries whose `text` matches a stock-coaching pattern are dropped
+      - entries outside the dance window are dropped
+      - survivors render as `"[M:SS] text"` (the cue powers the drop
+        decision but doesn't need to show twice in the UI).
+
+    For the legacy shape: we keep the entries but still drop any that
+    match a stock-coaching pattern — better to show fewer items than
+    ship the horoscope triad.
+    """
+    if raw is None:
+        return []
+    items: list[Any]
+    if isinstance(raw, list):
+        items = raw
+    elif isinstance(raw, str):
+        items = [raw]
+    else:
+        return []
+
+    cleaned: list[str] = []
+    for item in items:
+        if isinstance(item, dict):
+            text_raw = item.get("text") or item.get("suggestion") or ""
+            text = str(text_raw).strip() if text_raw else ""
+            if not text:
+                continue
+            cue_raw = item.get("observed_cue") or ""
+            cue = str(cue_raw).strip() if cue_raw else ""
+            ts = _safe_float(item.get("timestamp_sec"))
+            # Drop horoscope text even when the model also attached a
+            # cue — if the cue is just a restatement of the platitude,
+            # the rendered suggestion is still generic.
+            if _is_stock_coaching(text):
+                continue
+            # Rich-shape contract: require an observed_cue. Without
+            # one, the suggestion can't be verified against the video
+            # and is indistinguishable from a horoscope.
+            if not cue:
+                continue
+            if ts is not None:
+                if dance_start_sec is not None and ts < dance_start_sec - 0.5:
+                    continue
+                if dance_end_sec is not None and ts > dance_end_sec + 0.5:
+                    continue
+                cleaned.append(f"[{_fmt_timestamp(ts)}] {text[:500]}")
+            else:
+                cleaned.append(text[:500])
+        elif isinstance(item, str):
+            trimmed = item.strip()
+            if not trimmed:
+                continue
+            if _is_stock_coaching(trimmed):
+                continue
+            cleaned.append(trimmed[:500])
+        if len(cleaned) >= max_items:
+            break
+    return cleaned
+
+
 def _coerce_category(cat: Any) -> dict[str, Any]:
     """Coerce a single category dict into a shape the frontend can
     safely render. Missing or malformed `score` becomes 0.0 (never
@@ -696,10 +832,25 @@ def _shape_response(
     # than 2 points — matches wcs-analyzer's scoring.py heuristic.
     confidence = "low" if max_interval > 2.0 else "high"
 
-    strengths = _coerce_str_list(
-        parsed.get("highlights") or parsed.get("strengths")
+    # Grounded coaching: the prompt now asks for
+    # [{text, observed_cue, timestamp_sec}, ...] so we can drop
+    # entries that aren't tied to a moment in the video. Stock
+    # phrases ("roll through your feet", "stack your posture", ...)
+    # get stripped even when the model obeys the shape, because
+    # they're the horoscope triad users called out in feedback.
+    # Falls back to the legacy string-only shape when the model
+    # returns bare strings — old clips re-analyzed before the
+    # prompt change still render.
+    strengths = _sanitize_coaching_list(
+        parsed.get("highlights") or parsed.get("strengths"),
+        dance_start_sec=dance_start_sec,
+        dance_end_sec=dance_end_sec,
     )
-    improvements = _coerce_str_list(parsed.get("improvements"))
+    improvements = _sanitize_coaching_list(
+        parsed.get("improvements"),
+        dance_start_sec=dance_start_sec,
+        dance_end_sec=dance_end_sec,
+    )
 
     patterns_identified = _sanitize_patterns(
         parsed.get("patterns_identified"),
