@@ -14,12 +14,15 @@ to ensure scoring consistency with the canonical research tool.
 
 from __future__ import annotations
 
+import logging
 import os
 import tempfile
 import time
 from typing import Any
 
 from google import genai
+
+logger = logging.getLogger(__name__)
 
 from ...settings import settings
 from .gemini_client import (
@@ -96,10 +99,15 @@ def _run_pattern_pre_pass(
             thinking_level_override="high",
             seed=seed,
         )
-    except VideoAnalysisError:
+    except VideoAnalysisError as exc:
+        logger.warning("video_analysis.pre_pass_failed error=%r", exc)
         return None, None, None, None
     data = _safe_parse_json(raw)
     if not data:
+        logger.warning(
+            "video_analysis.pre_pass_unparseable raw_prefix=%r",
+            raw[:200] if raw else None,
+        )
         return None, usage, None, None
 
     dance_start = _safe_float(data.get("dance_start_sec"))
@@ -335,6 +343,72 @@ def analyze_video_path(
             dance_start_sec = motion_floor_sec
         if duration_sec is not None and dance_end_sec is not None:
             dance_end_sec = min(dance_end_sec, duration_sec)
+
+        # Fallback: if neither the pre-pass nor the main call emitted
+        # a dance window but the main call DID emit patterns with
+        # start_time / end_time, derive the window from those. Without
+        # this, a main call that silently drops dance_start_sec/
+        # dance_end_sec (empirically common on the large schema we
+        # send today) ships to the user with `dance_window=null`,
+        # which breaks the timeline UI's window-clamping and the
+        # sanitizer's pre-dance-pattern trimming.
+        if dance_start_sec is None or dance_end_sec is None:
+            pattern_times: list[tuple[float, float]] = []
+            for p in parsed.get("patterns_identified") or []:
+                if not isinstance(p, dict):
+                    continue
+                ps = _safe_float(p.get("start_time"))
+                pe = _safe_float(p.get("end_time"))
+                if ps is not None and pe is not None and pe > ps:
+                    pattern_times.append((ps, pe))
+            if pattern_times:
+                if dance_start_sec is None:
+                    dance_start_sec = min(s for s, _ in pattern_times)
+                    logger.info(
+                        "video_analysis.dance_start_fallback derived=%s",
+                        dance_start_sec,
+                    )
+                if dance_end_sec is None:
+                    dance_end_sec = max(e for _, e in pattern_times)
+                    logger.info(
+                        "video_analysis.dance_end_fallback derived=%s",
+                        dance_end_sec,
+                    )
+            # Re-apply floors after the fallback.
+            if (
+                first_downbeat_sec is not None
+                and dance_start_sec is not None
+                and dance_start_sec + 0.25 < first_downbeat_sec
+            ):
+                dance_start_sec = first_downbeat_sec
+            if (
+                motion_floor_sec is not None
+                and motion_floor_sec > 0.5
+                and dance_start_sec is not None
+                and dance_start_sec + 0.25 < motion_floor_sec
+            ):
+                dance_start_sec = motion_floor_sec
+            if duration_sec is not None and dance_end_sec is not None:
+                dance_end_sec = min(dance_end_sec, duration_sec)
+
+        # Log load-bearing fields that the main call silently dropped.
+        # These are the four lenses the UX advertises; missing them
+        # in prod is how Sarah's feedback arrived as "horoscope".
+        missing_fields = [
+            f
+            for f in (
+                "dance_start_sec",
+                "dance_end_sec",
+                "musical_moments",
+                "follower_initiative",
+            )
+            if parsed.get(f) in (None, [], {})
+        ]
+        if missing_fields:
+            logger.warning(
+                "video_analysis.main_call_missing_fields fields=%s",
+                missing_fields,
+            )
 
         # Sanity check: if the response has obvious implausibilities
         # (e.g. "intro lasted 60s" or only 2 patterns for a 2-minute
