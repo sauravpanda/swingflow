@@ -291,10 +291,14 @@ def _extract_beat_context(
             # Compact grid for the frontend metronome. Round to
             # milliseconds to keep the payload small — sub-ms
             # precision doesn't matter for a visual pulse.
+            # Sort downbeats chronologically — `downbeat_set` is a
+            # plain set, so iterating it yields arbitrary order, and
+            # the frontend metronome does a binary search that assumes
+            # sorted input.
             beat_grid = {
                 "bpm": round(float(bpm), 1),
                 "beats": [round(float(t), 3) for t in all_beats],
-                "downbeats": [round(float(t), 3) for t in downbeat_set],
+                "downbeats": [round(float(t), 3) for t in sorted(downbeat_set)],
                 "source": source,
             }
             return prompt_text, first_downbeat_sec, beat_grid
@@ -337,7 +341,10 @@ def get_video_duration(path: str) -> float:
     except subprocess.TimeoutExpired as exc:
         raise VideoAnalysisError("ffprobe timed out") from exc
 
-    data = json.loads(result.stdout or "{}")
+    try:
+        data = json.loads(result.stdout or "{}")
+    except json.JSONDecodeError as exc:
+        raise VideoAnalysisError("could not parse video duration") from exc
     try:
         return float(data["format"]["duration"])
     except (KeyError, TypeError, ValueError) as exc:

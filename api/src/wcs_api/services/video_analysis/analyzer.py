@@ -192,19 +192,10 @@ def analyze_video_path(
     seed: int | None = _secrets.randbelow(2**31) if fresh else 42
 
     client = genai.Client(api_key=settings.gemini_api_key)
+    # Upload outside the try so `uploaded` is bound before we enter
+    # cleanup territory; if the upload itself raises, there's nothing
+    # to delete.
     uploaded = client.files.upload(file=video_path)
-
-    # Poll until the file is ACTIVE on Gemini's side.
-    deadline = time.time() + 120
-    while uploaded.state and uploaded.state.name == "PROCESSING":
-        if time.time() > deadline:
-            raise VideoAnalysisError("Gemini file processing timed out")
-        time.sleep(1.5)
-        uploaded = client.files.get(name=uploaded.name)
-
-    if not uploaded.state or uploaded.state.name != "ACTIVE":
-        state_name = uploaded.state.name if uploaded.state else "UNKNOWN"
-        raise VideoAnalysisError(f"Gemini file upload state: {state_name}")
 
     # Aggregate token usage across pre-pass + main call so cost
     # tracking reflects the full billed spend for this analysis.
@@ -213,14 +204,28 @@ def analyze_video_path(
 
     sanity_warnings: list[str] = []
 
-    # Wrap the uploaded video with an explicit fps=2 sampling hint.
-    # Default Gemini sampling is ~1 FPS; doubling it catches the
-    # "&" counts between beats (kick-ball-changes, quick anchor
-    # settles) that 1 FPS routinely misses. Video token cost ~2x,
-    # still bounded because we only upload short clips.
-    video_part = _video_part_with_fps(uploaded, fps=2.0)
-
     try:
+        # Poll until the file is ACTIVE on Gemini's side. Inside the
+        # try block so a timeout or non-ACTIVE state still triggers
+        # the cleanup in `finally`.
+        deadline = time.time() + 120
+        while uploaded.state and uploaded.state.name == "PROCESSING":
+            if time.time() > deadline:
+                raise VideoAnalysisError("Gemini file processing timed out")
+            time.sleep(1.5)
+            uploaded = client.files.get(name=uploaded.name)
+
+        if not uploaded.state or uploaded.state.name != "ACTIVE":
+            state_name = uploaded.state.name if uploaded.state else "UNKNOWN"
+            raise VideoAnalysisError(f"Gemini file upload state: {state_name}")
+
+        # Wrap the uploaded video with an explicit fps=2 sampling hint.
+        # Default Gemini sampling is ~1 FPS; doubling it catches the
+        # "&" counts between beats (kick-ball-changes, quick anchor
+        # settles) that 1 FPS routinely misses. Video token cost ~2x,
+        # still bounded because we only upload short clips.
+        video_part = _video_part_with_fps(uploaded, fps=2.0)
+
         prompt = GEMINI_VIDEO_PROMPT
 
         # User-provided metadata (level, role, event, stage, tags)
@@ -421,7 +426,10 @@ def analyze_video_bytes(
 
     try:
         duration = get_video_duration(tmp_path)
-        result = analyze_video_path(tmp_path)
+        # Pass duration through so sanity checks (pattern density,
+        # gap detection) and dance_end_sec clamping work on this
+        # byte-upload path the same way they do on the R2 path.
+        result = analyze_video_path(tmp_path, duration_sec=duration)
         return result, duration
     finally:
         try:

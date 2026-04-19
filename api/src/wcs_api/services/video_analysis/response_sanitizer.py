@@ -223,15 +223,21 @@ def _summarize_patterns(
     stylings: dict[str, list[str]] = defaultdict(list)
     tips: dict[str, list[str]] = defaultdict(list)
 
+    def _s(v: Any) -> str:
+        """Coerce any field that should be a string into one safely,
+        so .strip() / .lower() below can't raise on a nested dict or
+        number returned by Gemini."""
+        return str(v).strip() if isinstance(v, str) else ""
+
     for p in patterns:
-        raw_name = (p.get("name") or "").strip()
+        raw_name = _s(p.get("name"))
         if not raw_name:
             continue
         # Key on (family + variant) so "basket whip" and "reverse whip"
         # count as distinct patterns even though they share the "whip"
         # family. "basic" variant groups with null — both mean
         # "plain execution of the family".
-        raw_variant = (p.get("variant") or "").strip().lower()
+        raw_variant = _s(p.get("variant")).lower()
         variant_key_part = "" if raw_variant in ("", "basic") else raw_variant
         key = _normalize_pattern_name(raw_name) + (
             f"|{variant_key_part}" if variant_key_part else ""
@@ -248,13 +254,13 @@ def _summarize_patterns(
         t = p.get("timing")
         if isinstance(t, str) and t:
             timings[key].append(t)
-        n = (p.get("notes") or "").strip()
+        n = _s(p.get("notes"))
         if n and n not in notes[key]:
             notes[key].append(n)
-        styling_val = (p.get("styling") or "").strip()
+        styling_val = _s(p.get("styling"))
         if styling_val and styling_val not in stylings[key]:
             stylings[key].append(styling_val)
-        tip_val = (p.get("coaching_tip") or "").strip()
+        tip_val = _s(p.get("coaching_tip"))
         if tip_val and tip_val not in tips[key]:
             tips[key].append(tip_val)
 
@@ -512,7 +518,7 @@ def _sanitize_musical_moments(
                 "timestamp_sec": ts,
                 "kind": kind,
                 "description": (entry.get("description") or "").strip() or None,
-                "caught": bool(entry.get("caught")),
+                "caught": _coerce_bool(entry.get("caught")),
                 "caught_how": (
                     (entry.get("caught_how") or "").strip() or None
                 ),
@@ -584,6 +590,25 @@ def _coerce_score(v: Any, default: float = 0.0) -> float:
     if f > 10:
         return 10.0
     return round(f, 2)
+
+
+def _coerce_bool(v: Any) -> bool:
+    """Coerce a loosely-typed 'caught' flag into a strict boolean.
+
+    `bool(x)` is too permissive: Gemini occasionally returns the
+    string "false" or "missed" here, both of which bool() would
+    treat as truthy. Parse known true/false tokens explicitly and
+    default to False for anything else — "caught" should be an
+    explicit positive, not a fuzzy fallback.
+    """
+    if isinstance(v, bool):
+        return v
+    if isinstance(v, (int, float)):
+        return v != 0
+    if isinstance(v, str):
+        normalized = v.strip().lower()
+        return normalized in ("true", "1", "yes", "y", "caught", "hit")
+    return False
 
 
 def _coerce_str_list(
