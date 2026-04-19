@@ -694,15 +694,28 @@ def _format_pattern_timeline(
             "with patterns in your response)."
         )
     for i, seg in enumerate(patterns, 1):
-        start = float(seg.get("start_time") or 0.0)
-        end = float(seg.get("end_time") or 0.0)
+        # Defensive coercion: the pre-pass is usually well-formed, but
+        # if Gemini returns "unknown" or a non-numeric timestamp, we
+        # don't want the whole timeline-rendering call to crash.
+        try:
+            start = float(seg.get("start_time") or 0.0)
+        except (TypeError, ValueError):
+            start = 0.0
+        try:
+            end = float(seg.get("end_time") or 0.0)
+        except (TypeError, ValueError):
+            end = 0.0
         name = seg.get("name", "unknown")
+        if not isinstance(name, str):
+            name = "unknown"
         # Surface variant + visual_cue from the pre-pass so the main
         # prompt doesn't have to re-derive "what KIND of whip" — the
         # pre-pass already spent a high-thinking pass identifying it.
-        variant = (seg.get("variant") or "").strip()
+        variant_raw = seg.get("variant")
+        variant = str(variant_raw).strip() if variant_raw is not None else ""
         variant_str = f" · {variant}" if variant and variant.lower() != "basic" else ""
-        cue = (seg.get("visual_cue") or "").strip()
+        cue_raw = seg.get("visual_cue")
+        cue = str(cue_raw).strip() if cue_raw is not None else ""
         cue_str = f" [cue: {cue}]" if cue else ""
         conf = seg.get("confidence")
         conf_str = (
