@@ -114,6 +114,51 @@ def _pattern_inside_window(
     return True
 
 
+_CONFIDENCE_UNGROUNDED_VARIANT = 0.4
+_CONFIDENCE_UNSET = 0.6
+
+
+def _detect_repeating_cycle(names: list[str]) -> int | None:
+    """Detect a repeating cycle in the pattern-name sequence.
+
+    Returns the cycle length N (2..5) when the sequence contains ≥3
+    consecutive repetitions of the same N-length block at any
+    starting offset within the sequence. Returns None when no such
+    cycle is present.
+
+    Sarah v2 (27 entries) and Jon prelim (26 entries) both exhibit
+    this failure mode: the model emits a tidy
+    `throwout → L side pass → R side pass → sugar push → whip` or
+    `underarm turn → whip → L side pass` cycle instead of grounding
+    each pattern in visible evidence. The detector scans from any
+    offset because real dances may legitimately have an intro or
+    starter step before the hallucinated loop begins. It fires on
+    3+ reps because 2 reps can legitimately happen (a pair of side
+    passes is a real WCS figure).
+    """
+    n = len(names)
+    if n < 6:
+        return None
+    for cycle_len in range(2, 6):
+        # Scan all starting offsets — a hallucinated loop may begin
+        # after a legitimate intro / starter-step entry.
+        for offset in range(min(cycle_len + 2, n)):
+            if offset + cycle_len * 3 > n:
+                break
+            block = names[offset : offset + cycle_len]
+            reps = 1
+            for start in range(
+                offset + cycle_len, n - cycle_len + 1, cycle_len
+            ):
+                if names[start : start + cycle_len] == block:
+                    reps += 1
+                else:
+                    break
+            if reps >= 3:
+                return cycle_len
+    return None
+
+
 def _sanitize_patterns(
     raw: list[Any] | None,
     *,
@@ -131,6 +176,18 @@ def _sanitize_patterns(
     - Splits any window longer than `max_window_sec` into ~6s chunks
       sharing the same metadata (prevents the "45s Sugar Push" bug
       even when the model slips past the prompt guidance).
+    - Enforces the variant/visual_cue contract: entries that commit
+      to a non-basic variant without supplying a visual_cue get
+      demoted to `variant=null, confidence=0.4`. The model claimed
+      specificity it couldn't substantiate — downgrade to "family
+      known, variant uncertain" so the UI doesn't surface confident
+      fictions (e.g. "7 underarm turns" from a single cue'd one that
+      propagated through a hallucinated repeat cycle).
+    - Detects the repeating-cycle failure mode (3+ reps of the same
+      2–5 pattern block) and halves confidence across ALL entries
+      in the run. Fires on real Discord-reported cases where the
+      model emits a metronomic `X → Y → Z → X → Y → Z → ...` output
+      instead of grounding each pattern in visible evidence.
     - Keeps all other fields untouched.
     """
     if not isinstance(raw, list):
@@ -163,6 +220,38 @@ def _sanitize_patterns(
         entry = dict(entry)
         entry["start_time"] = start
         entry["end_time"] = end
+
+        # Variant/visual_cue contract: if the model committed to a
+        # non-basic variant ("basket", "with inside turn", ...) but
+        # didn't supply a visual_cue, it's confident specificity
+        # without evidence. Demote to variant=null so the summary
+        # doesn't aggregate uncertain labels into a confident count.
+        variant_raw = entry.get("variant")
+        variant = (
+            str(variant_raw).strip() if isinstance(variant_raw, str) else ""
+        )
+        cue_raw = entry.get("visual_cue")
+        cue = str(cue_raw).strip() if isinstance(cue_raw, str) else ""
+        conf_raw = entry.get("confidence")
+        try:
+            confidence = float(conf_raw) if conf_raw is not None else None
+        except (TypeError, ValueError):
+            confidence = None
+
+        if variant and variant.lower() not in ("basic", "null") and not cue:
+            entry["variant"] = None
+            # Only demote confidence if the model hadn't already
+            # rated itself below our ungrounded-variant floor.
+            if confidence is None or confidence > _CONFIDENCE_UNGROUNDED_VARIANT:
+                entry["confidence"] = _CONFIDENCE_UNGROUNDED_VARIANT
+                confidence = _CONFIDENCE_UNGROUNDED_VARIANT
+        elif confidence is None:
+            # Preserve existing shape when confidence wasn't provided;
+            # mark it as a default value so downstream can tell the
+            # model abstained rather than committing to a number.
+            entry["confidence"] = _CONFIDENCE_UNSET
+            confidence = _CONFIDENCE_UNSET
+
         span = end - start
         if span <= max_window_sec:
             cleaned.append(entry)
@@ -188,6 +277,26 @@ def _sanitize_patterns(
                     else marker
                 )
             cleaned.append(clone)
+
+    # Repeating-cycle detector: Jon prelim and Sarah v2 both shipped
+    # 26–27 entries in a clean 3–5 pattern cycle. Run the detector on
+    # the family name sequence (ignoring variant). When it fires, halve
+    # the confidence on every entry in the locked run and tag them for
+    # the UI.
+    if cleaned:
+        family_names = [
+            _normalize_pattern_name(str(p.get("name") or ""))
+            for p in cleaned
+        ]
+        cycle_len = _detect_repeating_cycle(family_names)
+        if cycle_len is not None:
+            for p in cleaned:
+                try:
+                    cur = float(p.get("confidence", _CONFIDENCE_UNSET))
+                except (TypeError, ValueError):
+                    cur = _CONFIDENCE_UNSET
+                p["confidence"] = round(min(cur * 0.5, 0.4), 2)
+                p["timeline_locked"] = True
     return cleaned
 
 
@@ -232,6 +341,17 @@ def _summarize_patterns(
     for p in patterns:
         raw_name = _s(p.get("name"))
         if not raw_name:
+            continue
+        # Drop entries with sub-threshold confidence from the *summary
+        # count* only — they still appear in the detailed timeline (so
+        # the UI can render them with a "low confidence" marker) but
+        # don't contribute to "7 underarm turns" aggregates the user
+        # would otherwise read as a definitive tally.
+        try:
+            confidence = float(p.get("confidence", _CONFIDENCE_UNSET))
+        except (TypeError, ValueError):
+            confidence = _CONFIDENCE_UNSET
+        if confidence < 0.5:
             continue
         # Key on (family + variant) so "basket whip" and "reverse whip"
         # count as distinct patterns even though they share the "whip"
@@ -858,6 +978,23 @@ def _shape_response(
         dance_end_sec=dance_end_sec,
     )
     pattern_summary = _summarize_patterns(patterns_identified)
+    # Top-level flag so the frontend can render a "pattern
+    # identification was low confidence on this analysis" banner
+    # without having to re-derive it from the timeline. Set when
+    # `_sanitize_patterns` detected a hallucinated repeating cycle
+    # (real dances rarely hit the 3+ reps of the same 2-5 pattern
+    # block threshold).
+    timeline_locked = any(
+        p.get("timeline_locked") for p in patterns_identified
+    )
+    extra_warnings: list[str] = []
+    if timeline_locked:
+        extra_warnings.append(
+            "Pattern timeline shows a repeating cycle — the model "
+            "likely fell into a template rather than identifying each "
+            "pattern from the video. Treat the pattern labels as "
+            "low-confidence."
+        )
     musical_moments = _sanitize_musical_moments(
         parsed.get("musical_moments"),
         dance_start_sec=dance_start_sec,
@@ -891,6 +1028,7 @@ def _shape_response(
         "estimated_bpm": parsed.get("estimated_bpm"),
         "song_style": parsed.get("song_style"),
         "observed_level": parsed.get("observed_level"),
-        "sanity_warnings": sanity_warnings or [],
+        "timeline_locked": timeline_locked,
+        "sanity_warnings": (sanity_warnings or []) + extra_warnings,
         "usage": usage,
     }
