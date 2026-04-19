@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import subprocess
 import tempfile
@@ -9,6 +10,8 @@ from typing import Any
 from google.genai import types as genai_types
 
 from .gemini_client import VideoAnalysisError
+
+logger = logging.getLogger(__name__)
 
 
 def _detect_motion_floor(video_path: str) -> float | None:
@@ -307,7 +310,17 @@ def _extract_beat_context(
                 os.unlink(wav_path)
             except OSError:
                 pass
-    except Exception:
+    except Exception as exc:  # noqa: BLE001
+        # Silent failure here cascades into an empty `beat_grid` and a
+        # missing `first_downbeat_sec` floor on the analyzer, which
+        # then lets pre-dance hallucinations through. Log loud enough
+        # that Railway logs show why the beat context is absent when
+        # a real analysis ships with beat_grid={}.
+        logger.warning(
+            "video_analysis.beat_context_failed video=%s error=%r",
+            video_path,
+            exc,
+        )
         return None, None, None
 
 
