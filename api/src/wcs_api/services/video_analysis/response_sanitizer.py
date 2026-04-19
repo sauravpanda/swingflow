@@ -581,6 +581,16 @@ def _sanity_check(
             f"(from ~{prev_end:.0f}s onwards) has no pattern labeled"
         )
 
+    # observed_level is now REQUIRED by the prompt. A null return means
+    # the model punted on tier placement — surface as a soft issue so
+    # we log it and can trigger a retry on the next cleanup.
+    observed = parsed.get("observed_level")
+    if observed is None or (isinstance(observed, str) and not observed.strip()):
+        issues.append(
+            "observed_level is missing — model must commit to a tier "
+            "(Newcomer|Novice|Intermediate|Advanced|All-Star|Champion)"
+        )
+
     return issues
 
 
