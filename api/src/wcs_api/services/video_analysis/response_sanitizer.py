@@ -118,6 +118,62 @@ _CONFIDENCE_UNGROUNDED_VARIANT = 0.4
 _CONFIDENCE_UNSET = 0.6
 
 
+def _detect_subject_drift(patterns: list[dict[str, Any]]) -> int:
+    """Count likely subject-drift transitions across a pattern timeline.
+
+    Gemini is prompted to emit a short `subject_location` phrase per
+    pattern using consistent language (e.g. 'center-left' across all
+    patterns for one couple). When consecutive patterns disagree on
+    which frame region the couple is in — and the disagreement is
+    farther than one 'adjacent' step (center → center-left is fine;
+    center-left → far right is not) — we suspect the model switched
+    to tracking a different couple mid-analysis.
+
+    Returns the number of suspected drift transitions. Downstream
+    surfaces a warning when the count is non-zero.
+    """
+    # Rough horizontal bands: a drift is worth flagging when a pattern
+    # jumps more than ~1 band. Map each location phrase to a band
+    # index; unrecognized phrases get -1 and are ignored.
+    BAND_MAP = {
+        "far left": 0,
+        "left": 1,
+        "left foreground": 1,
+        "left background": 1,
+        "center-left": 2,
+        "center left": 2,
+        "middle-left": 2,
+        "center": 3,
+        "middle": 3,
+        "center foreground": 3,
+        "center background": 3,
+        "center-right": 4,
+        "center right": 4,
+        "middle-right": 4,
+        "right": 5,
+        "right foreground": 5,
+        "right background": 5,
+        "far right": 6,
+    }
+    drift_count = 0
+    prev_band: int | None = None
+    for p in patterns:
+        if not isinstance(p, dict):
+            continue
+        loc_raw = p.get("subject_location")
+        if not isinstance(loc_raw, str):
+            continue
+        key = loc_raw.strip().lower()
+        band = BAND_MAP.get(key, -1)
+        if band < 0:
+            prev_band = None  # unknown phrase — don't chain against it
+            continue
+        if prev_band is not None and abs(band - prev_band) > 2:
+            drift_count += 1
+        prev_band = band
+    return drift_count
+
+
 def _detect_repeating_cycle(names: list[str]) -> int | None:
     """Detect a repeating cycle in the pattern-name sequence.
 
@@ -1006,6 +1062,37 @@ def _shape_response(
             "pattern from the video. Treat the pattern labels as "
             "low-confidence."
         )
+
+    # Subject tracking + multi-couple drift detection. On crowded
+    # floors the model sometimes slides its focus from the intended
+    # couple to an adjacent one mid-analysis — Jon's Discord
+    # complaint ("maybe it's locking onto the couple next to me").
+    # We don't prevent the drift, but we detect it and warn the user
+    # so they can flag the wrong-subject failure.
+    subject_description_raw = parsed.get("subject_description")
+    subject_description = (
+        subject_description_raw.strip()
+        if isinstance(subject_description_raw, str)
+        and subject_description_raw.strip()
+        else None
+    )
+    other_couples_visible = bool(parsed.get("other_couples_visible"))
+    subject_drift_count = _detect_subject_drift(patterns_identified)
+    if subject_drift_count >= 2:
+        extra_warnings.append(
+            f"Subject location jumped sharply {subject_drift_count} "
+            "times between patterns — we may have switched to tracking "
+            "a different couple mid-analysis. If the feedback doesn't "
+            "match your dance, add a 'dancer_description' on re-upload "
+            "(e.g. 'lead in blue shirt, center-left of frame')."
+        )
+    elif other_couples_visible and not subject_description:
+        extra_warnings.append(
+            "Other couples were visible in the frame and no subject "
+            "description was provided — the analysis may have tracked "
+            "the wrong couple. Add a 'dancer_description' on re-upload "
+            "to anchor the analysis."
+        )
     musical_moments = _sanitize_musical_moments(
         parsed.get("musical_moments"),
         dance_start_sec=dance_start_sec,
@@ -1053,6 +1140,9 @@ def _shape_response(
             else ("detector" if detected_style else "gemini")
         ),
         "observed_level": parsed.get("observed_level"),
+        "subject_description": subject_description,
+        "other_couples_visible": other_couples_visible,
+        "subject_drift_count": subject_drift_count,
         "timeline_locked": timeline_locked,
         "sanity_warnings": (sanity_warnings or []) + extra_warnings,
         "usage": usage,

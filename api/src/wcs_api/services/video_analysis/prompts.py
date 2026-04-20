@@ -644,7 +644,8 @@ Respond in this exact JSON format. Fill `reasoning` BEFORE `score` in each categ
       "timing": "<on_beat|slightly_off|off_beat>",
       "notes": "<what was good or needs improvement in this pattern>",
       "styling": "<brief description of styling observed during this pattern — body rolls, arm styling, footwork flourishes, musical hits, syncopations. Use null when nothing notable. DO NOT invent styling that wasn't there.>",
-      "coaching_tip": "<one concrete, actionable suggestion specific to THIS pattern (e.g. 'stretch the anchor 2 extra beats to match the blues pocket', 'less arm on the entry — drive from the core'). Address whichever partner the tip applies to (or both). Use null for patterns that execute cleanly and don't need targeted work.>"
+      "coaching_tip": "<one concrete, actionable suggestion specific to THIS pattern (e.g. 'stretch the anchor 2 extra beats to match the blues pocket', 'less arm on the entry — drive from the core'). Address whichever partner the tip applies to (or both). Use null for patterns that execute cleanly and don't need targeted work.>",
+      "subject_location": "<SHORT phrase describing WHERE in the frame the analyzed couple was for this pattern — e.g. 'center', 'center-left', 'left foreground', 'far right'. Used to detect whether you drifted to tracking a different couple mid-analysis. If the couple traveled across the slot during the pattern (which is normal), describe where they STARTED the pattern. Use the SAME language across patterns so consistency can be checked — don't say 'middle' once and 'center' next time.>"
     }
   ],
   "musical_moments": [
@@ -690,6 +691,8 @@ Respond in this exact JSON format. Fill `reasoning` BEFORE `score` in each categ
   },
   "overall_impression": "<1-2 sentence overall assessment>",
   "observed_level": "<REQUIRED — must be one of: Newcomer|Novice|Intermediate|Advanced|All-Star|Champion. The tier the dancing actually lands at, regardless of what was declared. If you default to Novice because the user didn't declare a level, that's a bug — commit to what you actually see. Do NOT return null. If truly uncertain between two tiers, pick the higher one and note the uncertainty in overall_impression.>",
+  "subject_description": "<REQUIRED — short phrase describing WHO you analyzed in the frame. Include lane / frame position AND one distinguishing visual (clothing color, height, frame position). e.g. 'lead in red shirt, couple in the center-left lane', 'follower in blue dress, center frame throughout'. If the video has multiple couples, pick the one matching the user's dancer_description — or, if no description was given, pick the most visually prominent couple and explicitly say so. Do NOT return null; commit to a specific couple.>",
+  "other_couples_visible": <true/false — were other dance couples visible in the frame at any point during the dance window? (Spectators / judges standing on the sidelines don't count.) Used to flag multi-couple videos where subject drift is a risk.>,
   "estimated_bpm": <estimated BPM from the music>,
   "song_style": "<e.g., blues, contemporary, lyrical>"
 }
