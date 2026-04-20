@@ -144,3 +144,82 @@ def track_beats(wav_path: str) -> BeatResult | None:
     if result is not None:
         return result
     return _track_with_librosa(wav_path)
+
+
+def detect_swing_ratio(wav_path: str, beats: list[float]) -> float | None:
+    """Estimate swung-vs-straight eighth-note feel from the onset
+    envelope.
+
+    For each beat interval, find where the onset energy peaks in the
+    offbeat region (0.40–0.80 of the interval). In straight time the
+    peak lands near 0.50 (even eighths). In swung/shuffle time it
+    lands near 0.67 (triplet-based "long-short" eighths). The median
+    peak position across all beats is the swing ratio.
+
+    Returns a float in roughly [0.45, 0.80] or None when the audio
+    is too quiet / the beat list too short to be meaningful.
+    Interpretation:
+      - ratio < 0.55  → straight (contemporary, lyrical, most pop/rock)
+      - 0.55 ≤ r < 0.62 → slight swing (many modern blues covers, country)
+      - ratio ≥ 0.62 → swung (classic blues, shuffle, some country/funk)
+    Callers should treat values near the boundaries with skepticism —
+    short clips (<20 beats) and tracks with quiet percussion can
+    produce noisy ratios.
+    """
+    if len(beats) < 16:
+        return None
+    try:
+        import librosa
+        import numpy as np
+
+        y, sr = librosa.load(wav_path, sr=22050, mono=True)
+        if y.size == 0:
+            return None
+        # hop_length=512 matches librosa defaults everywhere else.
+        onset_env = librosa.onset.onset_strength(y=y, sr=sr, hop_length=512)
+        times = librosa.times_like(onset_env, sr=sr, hop_length=512)
+        baseline = float(np.mean(onset_env)) if onset_env.size else 0.0
+        # Peak must be at least 0.75x the mean envelope to count as a
+        # real onset — rejects noise floor in near-silent intervals.
+        min_peak = baseline * 0.75
+
+        positions: list[float] = []
+        for i in range(len(beats) - 1):
+            b0, b1 = float(beats[i]), float(beats[i + 1])
+            duration = b1 - b0
+            # WCS is typically 65-160 BPM; inter-beat intervals outside
+            # ~0.33-0.95s are likely spurious (phrase boundary skipped
+            # a beat, tempo shift).
+            if duration < 0.33 or duration > 1.00:
+                continue
+            window_start = b0 + duration * 0.40
+            window_end = b0 + duration * 0.80
+            mask = (times >= window_start) & (times <= window_end)
+            if not mask.any():
+                continue
+            window_onsets = onset_env[mask]
+            window_times = times[mask]
+            if float(window_onsets.max()) < min_peak:
+                continue
+            peak_idx = int(np.argmax(window_onsets))
+            peak_time = float(window_times[peak_idx])
+            positions.append((peak_time - b0) / duration)
+
+        if len(positions) < 8:
+            return None
+        return round(float(np.median(positions)), 3)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("beat_tracker.swing_ratio_failed error=%r", exc)
+        return None
+
+
+def classify_song_style(swing_ratio: float | None) -> str | None:
+    """Coarse bucket based on swing-ratio. Returns None when the
+    detector couldn't commit (too few beats, too quiet)."""
+    if swing_ratio is None:
+        return None
+    if swing_ratio < 0.55:
+        return "contemporary"
+    if swing_ratio < 0.62:
+        return "contemporary-light-swing"
+    return "blues"
