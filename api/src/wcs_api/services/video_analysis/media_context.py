@@ -145,7 +145,11 @@ def _extract_beat_context(
     not a blocker on the analysis itself.
     """
     try:
-        from ..beat_tracker import track_beats
+        from ..beat_tracker import (
+            classify_song_style,
+            detect_swing_ratio,
+            track_beats,
+        )
 
         wav_path = tempfile.NamedTemporaryFile(delete=False, suffix=".wav").name
         try:
@@ -170,6 +174,14 @@ def _extract_beat_context(
             if result is None or len(result.beats) < 4:
                 return None, None, None
             bpm = result.bpm
+            # Swing-ratio heuristic: tells us whether eighth notes are
+            # swung (blues, shuffle) or straight (contemporary, pop).
+            # This informs triple-step timing — in swung tracks the "&"
+            # of a triple lands ~2/3 through the beat, not halfway.
+            # Runs on the already-extracted wav so there's no extra
+            # ffmpeg cost.
+            swing_ratio = detect_swing_ratio(wav_path, result.beats)
+            detected_style = classify_song_style(swing_ratio)
             # WCS-typical BPM is roughly 65-160. When Beat This! reports
             # something far outside that — usually because a busy
             # subdivision (hi-hats on 8ths, breakbeats) got picked up
@@ -269,6 +281,36 @@ def _extract_beat_context(
                 if source == "beat_this"
                 else "librosa (heuristic downbeats — treat with skepticism)"
             )
+            # Swing-vs-straight narrative so the model calibrates
+            # triple-step timing to the actual feel of the song. Empty
+            # string when the detector couldn't commit.
+            swing_note = ""
+            if detected_style == "blues" and swing_ratio is not None:
+                swing_note = (
+                    f"\n- SONG FEEL: swung eighths (triplet-based) — "
+                    f"detected swing ratio {swing_ratio:.2f}. Triple "
+                    "steps should land LONG-short (eighth lands at "
+                    "~2/3 of the beat), not straight halfway eighths. "
+                    "On-time triples here will SOUND swung, not even. "
+                    "Do not penalize the dancer for slightly late "
+                    "'&' counts if the music is swung — that's correct."
+                )
+            elif (
+                detected_style == "contemporary-light-swing"
+                and swing_ratio is not None
+            ):
+                swing_note = (
+                    f"\n- SONG FEEL: mostly straight with light "
+                    f"swing (ratio {swing_ratio:.2f}). Modern WCS "
+                    "covers often blend — triples can land slightly "
+                    "past halfway without being 'late'."
+                )
+            elif detected_style == "contemporary" and swing_ratio is not None:
+                swing_note = (
+                    f"\n- SONG FEEL: straight eighths "
+                    f"(ratio {swing_ratio:.2f}). Triples land evenly "
+                    "on the halfway point of each beat."
+                )
             prompt_text = (
                 f"DETECTED MUSIC CONTEXT (from {source_note}):\n"
                 f"- Estimated average BPM: {bpm:.1f}"
@@ -277,6 +319,7 @@ def _extract_beat_context(
                 f"({total_downbeats} real downbeats)\n"
                 f"- FIRST DOWNBEAT at {first_downbeat_sec:.2f}s "
                 "(dancing cannot start earlier than this)"
+                f"{swing_note}"
                 f"{shift_notes}\n"
                 "- Full beat grid (use this as the AUTHORITATIVE timeline):\n"
                 f"{grid}\n\n"
@@ -303,6 +346,8 @@ def _extract_beat_context(
                 "beats": [round(float(t), 3) for t in all_beats],
                 "downbeats": [round(float(t), 3) for t in sorted(downbeat_set)],
                 "source": source,
+                "swing_ratio": swing_ratio,
+                "detected_style": detected_style,
             }
             return prompt_text, first_downbeat_sec, beat_grid
         finally:

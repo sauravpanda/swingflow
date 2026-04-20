@@ -478,6 +478,11 @@ def analyze_video_path(
         "sanity_retry": bool(sanity_warnings),
     }
 
+    from .prompts import extract_song_style_from_tags
+
+    user_song_style = extract_song_style_from_tags(
+        (context or {}).get("tags")
+    )
     return _shape_response(
         parsed,
         usage=usage,
@@ -485,6 +490,7 @@ def analyze_video_path(
         dance_start_sec=dance_start_sec,
         dance_end_sec=dance_end_sec,
         beat_grid=beat_grid,
+        user_song_style=user_song_style,
     )
 
 

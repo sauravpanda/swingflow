@@ -940,6 +940,7 @@ def _shape_response(
     dance_start_sec: float | None = None,
     dance_end_sec: float | None = None,
     beat_grid: dict[str, Any] | None = None,
+    user_song_style: str | None = None,
 ) -> dict[str, Any]:
     """Map Gemini's rich response into the API's return shape.
 
@@ -1016,6 +1017,16 @@ def _shape_response(
         dance_end_sec=dance_end_sec,
     )
 
+    # Song-style precedence: user-tag > librosa swing-ratio > Gemini
+    # guess. The Gemini answer is routinely wrong (ships "contemporary"
+    # for blues), so we prefer any signal that isn't it.
+    detected_style = (beat_grid or {}).get("detected_style") if beat_grid else None
+    song_style = (
+        user_song_style
+        or detected_style
+        or parsed.get("song_style")
+    )
+
     return {
         "overall": {
             "score": overall_score,
@@ -1036,7 +1047,11 @@ def _shape_response(
         "lead": parsed.get("lead"),
         "follow": parsed.get("follow"),
         "estimated_bpm": parsed.get("estimated_bpm"),
-        "song_style": parsed.get("song_style"),
+        "song_style": song_style,
+        "song_style_source": (
+            "user-tag" if user_song_style
+            else ("detector" if detected_style else "gemini")
+        ),
         "observed_level": parsed.get("observed_level"),
         "timeline_locked": timeline_locked,
         "sanity_warnings": (sanity_warnings or []) + extra_warnings,

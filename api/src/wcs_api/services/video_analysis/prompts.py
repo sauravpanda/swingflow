@@ -5,6 +5,40 @@ from typing import Any
 from .response_sanitizer import _sanitize_user_field
 
 
+# Song-style labels we recognize from user-supplied tags. Keys are the
+# lowercased tokens we match against; values are the canonical label
+# we surface in the UI and hand to the prompt. `mix` is deliberately
+# broad — a "west coast swing mix" playlist spans genres, so we defer
+# to librosa detection rather than committing to one style.
+_SONG_STYLE_TAG_MAP: dict[str, str] = {
+    "blues": "blues",
+    "contemporary": "contemporary",
+    "lyrical": "lyrical",
+    "country": "country",
+    "pop": "contemporary",
+    "rnb": "contemporary",
+    "r&b": "contemporary",
+    "funk": "blues",  # funk triples are typically swung
+    "shuffle": "blues",
+    "wcs-mix": "mix",
+    "mix": "mix",
+}
+
+
+def extract_song_style_from_tags(tags: Any) -> str | None:
+    """Pull a canonical song-style label out of the user's tags list.
+    Returns None when no recognized style tag is present."""
+    if not isinstance(tags, (list, tuple)):
+        return None
+    for t in tags:
+        if not isinstance(t, str):
+            continue
+        key = t.strip().lower()
+        if key in _SONG_STYLE_TAG_MAP:
+            return _SONG_STYLE_TAG_MAP[key]
+    return None
+
+
 # ─────────────────────────────────────────────────────────────────────
 # Prompts — ported from wcs-analyzer/src/wcs_analyzer/prompts.py
 # ─────────────────────────────────────────────────────────────────────
@@ -824,6 +858,15 @@ def _build_user_context(context: dict[str, Any] | None) -> str:
         fields.append(f"- Stage: {stage}")
     if event_date:
         fields.append(f"- Event date: {event_date}")
+    # Lift a recognized song-style tag to its own line — it's a
+    # signal we actively want the model to calibrate on (swung vs
+    # straight triples), not just a free-form descriptor.
+    user_song_style = extract_song_style_from_tags(tags_in)
+    if user_song_style and user_song_style != "mix":
+        fields.append(
+            f"- Song style (user-tagged): {user_song_style} — "
+            "use as GROUND TRUTH for song feel; do not override."
+        )
     if tags:
         fields.append(f"- Tags: {', '.join(tags)}")
 
