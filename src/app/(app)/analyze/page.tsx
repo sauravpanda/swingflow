@@ -583,6 +583,7 @@ export default function AnalyzePage() {
               <TimelineView
                 result={state.result.result}
                 duration={state.result.duration}
+                analysisId={state.result.analysis_id ?? undefined}
               />
             </CardContent>
           </Card>

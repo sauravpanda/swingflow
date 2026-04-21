@@ -9,6 +9,8 @@ import {
   Maximize,
   SkipBack,
   Gauge,
+  Crosshair,
+  RotateCcw,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type {
@@ -21,6 +23,11 @@ type TimelineViewProps = {
   result: VideoScoreResult;
   duration: number;
   videoSrc?: string | null;
+  // When present, enables the "dance start" user-override UI and
+  // persists the override to localStorage keyed on this id. Absent
+  // on the shared view (no stable per-user id) so anonymous visitors
+  // can't fiddle with the timeline. See #70.
+  analysisId?: string;
 };
 
 const QUALITY_COLOR: Record<string, string> = {
@@ -64,6 +71,7 @@ export function TimelineView({
   result,
   duration,
   videoSrc,
+  analysisId,
 }: TimelineViewProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [currentTime, setCurrentTime] = useState(0);
@@ -78,6 +86,39 @@ export function TimelineView({
   // "not loaded yet; use the prop".
   const [videoDuration, setVideoDuration] = useState(0);
   const [muted, setMuted] = useState(false);
+  // User override for the "dance starts here" marker. See #70 — the
+  // model occasionally returns dance_start_sec=0 even when the first
+  // 10-20s is walk-on/setup, and the only signal the user has is
+  // "sugar push at 0:08 while the couple is clearly in closed
+  // position not dancing yet." This lets them drag the line to
+  // where dancing actually starts. Persisted to localStorage keyed
+  // on analysisId so it follows the analysis across refreshes.
+  // null means "no override" (use result.dance_start_sec).
+  const [danceStartOverride, setDanceStartOverride] = useState<
+    number | null
+  >(null);
+  useEffect(() => {
+    if (!analysisId || typeof window === "undefined") {
+      setDanceStartOverride(null);
+      return;
+    }
+    const raw = window.localStorage.getItem(
+      `swingflow:dance-start-override:${analysisId}`
+    );
+    const n = raw == null ? NaN : parseFloat(raw);
+    setDanceStartOverride(Number.isFinite(n) && n >= 0 ? n : null);
+  }, [analysisId]);
+  const writeDanceStartOverride = useCallback(
+    (t: number | null) => {
+      setDanceStartOverride(t);
+      if (!analysisId || typeof window === "undefined") return;
+      const key = `swingflow:dance-start-override:${analysisId}`;
+      if (t == null) window.localStorage.removeItem(key);
+      else window.localStorage.setItem(key, String(t));
+    },
+    [analysisId]
+  );
+
   // Practice-mode playback rate. Read from localStorage so a user's
   // preferred slow-down sticks across clips. preservesPitch keeps the
   // music listenable at 0.5x instead of sounding chipmunk/demonic.
@@ -210,7 +251,30 @@ export function TimelineView({
     }
   };
 
-  const patterns = result.patterns_identified ?? [];
+  // Effective dance-start: user override wins over the model's
+  // estimate. All downstream timeline rendering (pre-dance band,
+  // pattern filtering, currentPattern highlight) keys off this.
+  const effectiveDanceStart = useMemo(() => {
+    if (danceStartOverride != null) return danceStartOverride;
+    return typeof result.dance_start_sec === "number" &&
+      result.dance_start_sec > 0
+      ? result.dance_start_sec
+      : 0;
+  }, [danceStartOverride, result.dance_start_sec]);
+
+  // Patterns that end before dancing started are model noise —
+  // filter them out so the user isn't told they did a "sugar push"
+  // at 0:08 while still in closed position. Patterns that straddle
+  // the boundary get visually clamped in the render below.
+  const allPatterns = result.patterns_identified ?? [];
+  const patterns = useMemo(
+    () =>
+      allPatterns.filter((p) => {
+        const end = p.end_time ?? p.start_time ?? 0;
+        return end > effectiveDanceStart;
+      }),
+    [allPatterns, effectiveDanceStart]
+  );
   const offBeats = (result.categories.timing?.off_beat_moments ?? [])
     .map((m) => ({ ...m, t: parseTimestamp(m.timestamp_approx) }))
     .filter((m): m is typeof m & { t: number } => m.t !== null);
@@ -360,13 +424,39 @@ export function TimelineView({
 
       {/* Pattern timeline = the scrubber (single source of truth) */}
       <div className="space-y-1.5">
-        <div className="flex items-center justify-between text-xs text-muted-foreground">
+        <div className="flex items-center justify-between text-xs text-muted-foreground gap-2">
           <span className="font-medium uppercase tracking-wide">
             Pattern timeline
           </span>
-          <span className="font-mono tabular-nums">
-            {formatTime(currentTime)} / {formatTime(effectiveDuration)}
-          </span>
+          <div className="flex items-center gap-1.5 ml-auto">
+            {analysisId && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => writeDanceStartOverride(currentTime)}
+                  className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border border-border/60 hover:border-foreground/40 hover:bg-muted/40 transition-colors text-[10px]"
+                  title="Set dance start to the current playback time. The pre-dance band + pattern filter will update."
+                >
+                  <Crosshair className="h-3 w-3" />
+                  Set dance start
+                </button>
+                {danceStartOverride != null && (
+                  <button
+                    type="button"
+                    onClick={() => writeDanceStartOverride(null)}
+                    className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border border-border/60 hover:border-foreground/40 hover:bg-muted/40 transition-colors text-[10px] text-amber-500"
+                    title={`Override: ${formatTime(danceStartOverride)}. Click to clear and use the model's estimate.`}
+                  >
+                    <RotateCcw className="h-3 w-3" />
+                    Reset ({formatTime(danceStartOverride)})
+                  </button>
+                )}
+              </>
+            )}
+            <span className="font-mono tabular-nums">
+              {formatTime(currentTime)} / {formatTime(effectiveDuration)}
+            </span>
+          </div>
         </div>
 
         <div
@@ -384,15 +474,18 @@ export function TimelineView({
               slip through the backend sanitizer) still show on top.
               Hatched muted fill visually separates setup / walk-off
               from the dancing region. */}
-          {typeof result.dance_start_sec === "number" &&
-            result.dance_start_sec > 0.5 && (
+          {effectiveDanceStart > 0.5 && (
               <div
                 className="absolute top-0 h-full pointer-events-none bg-muted/60 border-r border-border/80"
                 style={{
                   left: 0,
-                  width: `${Math.min(100, (result.dance_start_sec / effectiveDuration) * 100)}%`,
+                  width: `${Math.min(100, (effectiveDanceStart / effectiveDuration) * 100)}%`,
                 }}
-                title={`Pre-dance setup · ends ${formatTime(result.dance_start_sec)}`}
+                title={
+                  danceStartOverride != null
+                    ? `Pre-dance setup · ends ${formatTime(effectiveDanceStart)} (your override)`
+                    : `Pre-dance setup · ends ${formatTime(effectiveDanceStart)}`
+                }
               >
                 <span className="absolute inset-0 flex items-center justify-center text-[9px] sm:text-[10px] font-medium text-muted-foreground/70 uppercase tracking-wide">
                   pre-dance
@@ -421,7 +514,11 @@ export function TimelineView({
             // against negative start_times from bad model output.
             const rawStart = p.start_time ?? 0;
             const rawEnd = p.end_time ?? rawStart;
-            const start = Math.max(0, Math.min(rawStart, effectiveDuration));
+            // Clamp visual start to the dance-start line so patterns
+            // that model-reported as straddling pre-dance don't bleed
+            // into the grey band.
+            const floorStart = Math.max(rawStart, effectiveDanceStart);
+            const start = Math.max(0, Math.min(floorStart, effectiveDuration));
             const end = Math.max(start, Math.min(rawEnd, effectiveDuration));
             const left = (start / effectiveDuration) * 100;
             const width = Math.max(

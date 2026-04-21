@@ -587,6 +587,7 @@ function AnalysisPageInner() {
         result={currentResult}
         duration={record.duration ?? 0}
         videoSrc={localVideo?.url ?? videoUrl}
+        analysisId={record.id}
       />
 
       {/* Score + sub-scores + patterns + strengths + improvements */}
