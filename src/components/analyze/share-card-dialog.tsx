@@ -9,7 +9,12 @@
 // the issue originally suggested — isn't an option. Canvas rendering
 // in the browser covers the same ground for this deployment model.
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import {
   Dialog,
   DialogContent,
@@ -216,27 +221,63 @@ export function ShareCardDialog({
   const songStyle =
     (result as { song_style?: string }).song_style ?? null;
 
-  // Redraw whenever the dialog opens or the data changes. Fonts
-  // in a canvas context don't pick up web-font swaps, so rendering
-  // on open ensures the user sees the up-to-date values in the
-  // expected Inter-like sans stack.
-  useEffect(() => {
+  // Radix Dialog mounts DialogContent inside a portal + runs an
+  // enter animation. If we draw in a plain useEffect the canvas ref
+  // has landed in the DOM but the portal mount + layout cycle isn't
+  // guaranteed to be finished on this tick — drawing races and leaves
+  // a blank buffer in some browsers. useLayoutEffect + rAF gives us a
+  // frame after the browser has committed the mount, when getContext
+  // is reliable. Also wait for document.fonts.ready (when available)
+  // so text is drawn with the declared Inter-family stack rather than
+  // whatever glyph state the browser happens to have on first paint.
+  useLayoutEffect(() => {
     if (!open) return;
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-    canvas.width = CARD_SIZE;
-    canvas.height = CARD_SIZE;
-    drawCard(ctx, {
-      score: result.overall?.score ?? null,
-      grade: result.overall?.grade ?? null,
-      role,
-      level: observedLevel ?? competitionLevel,
-      bpm,
-      style: songStyle,
-      url: shareUrl,
+    let cancelled = false;
+
+    const paint = () => {
+      const canvas = canvasRef.current;
+      if (!canvas || cancelled) return;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) {
+        console.error("share-card: 2d context unavailable");
+        return;
+      }
+      canvas.width = CARD_SIZE;
+      canvas.height = CARD_SIZE;
+      try {
+        drawCard(ctx, {
+          score: result.overall?.score ?? null,
+          grade: result.overall?.grade ?? null,
+          role,
+          level: observedLevel ?? competitionLevel,
+          bpm,
+          style: songStyle,
+          url: shareUrl,
+        });
+      } catch (err) {
+        // Surface, don't swallow — a blank card is worse than a logged
+        // error because there's no way to diagnose it after the fact.
+        console.error("share-card: drawCard failed", err);
+      }
+    };
+
+    const rafId = requestAnimationFrame(() => {
+      const fonts = (
+        document as Document & { fonts?: { ready?: Promise<unknown> } }
+      ).fonts;
+      if (fonts?.ready) {
+        fonts.ready.then(() => {
+          if (!cancelled) paint();
+        });
+      } else {
+        paint();
+      }
     });
+
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(rafId);
+    };
   }, [
     open,
     result,
