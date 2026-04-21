@@ -243,67 +243,243 @@ DO NOT default every ambiguous move to "sugar push" or "basic". Many WCS \
 patterns share silhouettes but differ in rotation, entry, exit, and travel. \
 Look for these specific cues:
 
+Every pattern below lists a BEAT MAP — what each partner is doing on \
+each beat. Use the beat map as the primary disambiguator when two \
+patterns share a silhouette. Patterns that fail the beat map do not \
+match, no matter how similar the overall shape looks.
+
+Notation: L = lead, F = follower, → = travels toward, ← = travels away. \
+"Triple" = a triple-step (step-together-step on & count). "Anchor" = \
+a settled triple with weight back, marking end of pattern.
+
 **6-count pattern FAMILIES** (2 walks + 2 triples + anchor; ~3-5s):
 
-- **Sugar push** — follower walks TOWARD lead (beats 1-2), compression
-  on 3&4 in place, follower walks back to anchor (5-6). NO travel,
-  NO rotation, stays in the slot. Hands stay connected in a V.
-  Common variants to identify explicitly when present:
-  - *basic* — plain execution, no styling or added turns
-  - *with inside turn* — follower adds an inside turn on 3-4
-  - *with hand change* — lead transfers from one hand to the other
-- **Sugar tuck** — follower executes a full tuck turn INSIDE a sugar-
-  push shape. Distinct 6-count pattern from plain sugar push because
-  of the added tuck rotation at 3-4. Do not call this "sugar push
-  with tuck" — it has its own name.
-- **Left side pass** / **Right side pass** — follower crosses to lead's
-  respective side on 3-4, anchors at the opposite end of the slot.
-  The "right side pass" is also commonly called "underarm turn" — the
-  two are the same pattern, not different.
-  Common variants:
-  - *basic* — straight pass, no turn added
-  - *with inside turn* — follower adds an inside turn during the pass
-  - *with outside turn* — follower adds an outside (CCW) turn
-- **Tuck turn** — compact 1-turn on follower during 3-4, caught at
-  the anchor. Variants: *basic*, *double tuck* (full turn-and-a-half
-  under the lead's left arm).
-- **Free spin** — follower spins on her OWN axis with no hand
-  connection or a very light finger connection during the spin.
-  Distinct from a whip (whip keeps full partnership through
-  rotation). Cue: you can see the lead letting go / barely touching
-  during the spin.
-- **Throwout** — lead sends follower out to the open end of the slot,
-  typically from closed position. Often paired with a starter step.
-  (Note: commonly misspelled "throwaway" — the WCS term is "throwout".)
-- **Starter step** — no travel, no rotation. Closed-position triple
-  pairs at the opening of a dance, usually to find the music.
+- **Sugar push** — in-slot compression pattern. NO travel, NO rotation.
+  Beat map:
+  · 1 — L steps back (right foot), F steps forward (left foot) → toward L
+  · 2 — L steps back again, F steps forward again; compression builds
+  · 3&4 — Triple: F compresses INTO L's hand pressure, light rebound
+    in place. Hands stay in a V connection.
+  · 5-6 — Anchor: F triples BACKWARD to settle at her slot end.
+  Locking cue: zero lateral slot travel and zero rotation; the F's
+  feet return to roughly their starting position. If either appears,
+  it's NOT a sugar push.
+  Variants: *basic*, *with inside turn* (F adds inside turn on 3&4),
+  *with hand change* (L transfers F's hand to his other hand during
+  the compression), *with hand change behind the back* (L swaps hands
+  behind HIS back on the return), *body roll* (F adds a body roll
+  styling on the anchor).
+
+- **Sugar tuck** — sugar-push shape PLUS a full follower tuck rotation
+  on 3&4. Its own 6-count pattern, not "sugar push with tuck".
+  Beat map:
+  · 1-2 — same as sugar push (F walks in toward L)
+  · 3&4 — Triple while F executes a full 360° tuck under L's raised
+    left arm, caught on the close side
+  · 5-6 — Anchor back to her slot end
+  Locking cue: compression on 3 BEFORE the rotation; no slot travel.
+
+- **Left side pass** — F crosses the slot to L's LEFT side.
+  Beat map:
+  · 1 — L steps back right foot, F steps forward left foot
+  · 2 — L opens the slot (small side-step left clearing lane), F
+    continues forward
+  · 3&4 — Triple with F traveling PAST L along the slot, ending on
+    L's left side of the dance space
+  · 5-6 — Anchor at the new (opposite) slot end
+  Locking cue: visible lateral displacement of F by several feet,
+  partnership maintained. F ends up where L started.
+  Variants: *basic*, *with inside turn* (F turns CW under L's right
+  arm during the pass), *with outside turn* (F turns CCW during the
+  pass), *with hand change* (L swaps leading hand during the pass).
+
+- **Right side pass** (a.k.a. **underarm turn** — same pattern, use
+  "right side pass") — F crosses the slot to L's RIGHT side, typically
+  turning under L's raised left arm.
+  Beat map:
+  · 1 — L steps back right foot, F steps forward left foot
+  · 2 — F continues forward; L raises left arm to form the arch
+  · 3&4 — Triple with F traveling under the arch, body moving to L's
+    right side of the dance space
+  · 5-6 — Anchor at the new slot end
+  Locking cue: underarm pass shape + F ends on L's right. Underarm
+  alone doesn't make it an "underarm turn" — the term means a right
+  side pass done under the raised arm.
+  Variants: *basic*, *with inside turn*, *with outside turn*.
+
+- **Tuck turn** — F tucks CW 360° in place during 3&4; minimal travel.
+  Beat map:
+  · 1-2 — walks in / slight approach, similar to sugar push entry
+  · 3&4 — Triple while F tucks (inside turn) 360° under L's left arm,
+    staying in roughly the same slot position
+  · 5-6 — Anchor in place (no slot change)
+  Locking cue: F's slot position nearly unchanged between beat 1 and
+  beat 6 — rotation without travel. This is the key to separating
+  tuck turn from right side pass.
+  Variants: *basic* (1 full turn), *double tuck* (turn-and-a-half
+  under the arm ending in a different position), *with hand change*.
+
+- **Free spin** — F spins on her OWN axis with connection RELEASED.
+  Beat map:
+  · 1-2 — L preps F for the spin (gentle stretch, often a palm-to-
+    palm setup)
+  · 3 — L OPENS HIS HAND / releases connection; F initiates her
+    own spin momentum
+  · &4 — F completes 360° (or more) on her own axis, no guide force
+  · 5-6 — L catches F's hand at the anchor; F settles
+  Locking cue: visible release of connection at beat 3. If you can
+  see L's hand open, drop away, or reduce to just fingertips with no
+  guiding pressure, it's a free spin — even if F ends on L's left.
+  DO NOT classify as left side pass based on end position.
+  Variants: *single* (360°), *double* (720°), *triple* (1080°),
+  *with styling* (hair brush, free arm extension), *into a catch*.
+
+- **Throwout** — from closed position, L sends F OUT to the open end
+  of the slot. Typically follows a starter step.
+  Beat map:
+  · 1-2 — from closed/sweetheart position, L leads F to unwind and
+    begin traveling
+  · 3&4 — Triple with F traveling to the far end of the slot,
+    extending out of closed hold
+  · 5-6 — Anchor at the open slot end
+  Locking cue: ENTRY from closed/cuddled/sweetheart position; L and
+  F start wrapped up, end apart. (NOT "throwaway" — that's ballroom.)
+
+- **Starter step** — closed-position triple pairs at the opening of
+  the dance. No travel, no rotation.
+  Beat map:
+  · 1-2 — L and F stand close, one pair of rocking/bouncing walks
+    in a small frame
+  · 3&4 — Closed-position triple
+  · 5-6 — Closed-position triple (or direct entry into throwout)
+  Locking cue: closed frame + zero travel + happens near the top of
+  the song (first 5 seconds). Almost never appears mid-dance.
+
+- **Push break** — closely related to sugar push but with an accented
+  break on beat 3 (not just compression). Often used by intermediate
+  dancers as the "textbook" sugar push; some schools treat them as
+  synonyms. Emit "sugar push" unless you see a clearly accented
+  brake-and-go on 3.
 
 **8-count pattern FAMILIES** (3 walks + 3 triples + anchor; ~5-7s):
 
-- **Whip** (family — has MANY variants; identify the specific one):
-  - *basic* — standard 8-count whip, no modifications
-  - *basket* (a.k.a. cradle / cuddle / locked — all one family) —
-    follower's hand held behind her back creating a basket shape;
-    tighter frame
-  - *reverse* — rotation goes the OPPOSITE direction; follower led
-    backwards through the pattern (also called "left-side whip")
-  - *Texas Tommy* (a.k.a. apache) — lead's arm cradles follower's
-    head or shoulder during the rotation. Prefer "Texas Tommy" —
-    that's the term used by Library of Dance and most top-level
-    WCS instructors.
-  - *tandem* — both partners face the same direction during the
-    rotation
-  - *shadow* (a.k.a. Titanic) — follower dances behind lead, both
-    facing the same direction
-  - *with inside turn* — whip + additional follower inside-turn on 5-6
-  - *with outside turn* — whip + follower outside-turn on 5-6
-  - *with double turn* — follower executes two full rotations on
-    5-6 instead of one
-- **Slingshot** — lead catches follower's momentum and redirects
-  her back across the slot with visible body-driven acceleration.
-  Intermediate WCS pattern, distinct from whip. Cue: lead's torso
-  rotation drives the redirect; follower "slingshots" back rather
-  than being pulled through.
+Standard 8-count beat structure (applies unless pattern-specific
+notes override): walks on 1-2, triple on 3&4, triple on 5&6, anchor
+triple on 7-8. F rotates around L through 3-6.
+
+- **Basic whip** — 8-count partnered rotation with F traveling in a
+  crescent around L.
+  Beat map:
+  · 1 — L steps back right, F steps forward
+  · 2 — L opens frame, begins rotational lead (shoulder/torso cue)
+  · 3&4 — Triple: F begins rotating around L; L's torso drives
+  · 5&6 — Triple: F completes rotation, ends facing L at opposite
+    slot end
+  · 7-8 — Anchor
+  Locking cue: ≥180° F rotation WITH partnership connection
+  maintained AND slot traversal. 3 clear walks before the first triple
+  (separates from 6-count).
+
+- **Basket whip** (a.k.a. *cradle* / *cuddle* / *locked whip*) — whip
+  where L's hand is held BEHIND F's back from ~3-5, forming a basket
+  shape. Tighter frame through the rotation.
+  Beat map: same 8-count whip skeleton, but on beat 3 L brings the
+  leading hand behind F's back (usually a hand change or a wrap),
+  maintains the basket through 4-5, releases or opens at 6-7.
+  Locking cue: visible hand-behind-F's-back through the middle of
+  the pattern.
+
+- **Reverse whip** (a.k.a. *left-side whip*) — rotation goes the
+  OPPOSITE direction (F rotates CCW around L instead of CW).
+  Beat map: entry mirrored from basic whip — L leads with left
+  instead of right shoulder; F travels to L's LEFT side on the
+  rotation, anchoring on the opposite end of the slot from a normal
+  whip.
+  Locking cue: direction of rotation reversed (F's body rotates CCW
+  as viewed from above).
+
+- **Texas Tommy** (a.k.a. *apache*) — whip variant where L's arm
+  CRADLES F's head / shoulder / neck area during the rotation. Use
+  "Texas Tommy" per Library of Dance and most WCS instructors.
+  Beat map: standard whip skeleton, but on beats 3-4 L wraps his
+  leading arm behind F's head/shoulder, cradles through 5-6, releases
+  at 7.
+  Locking cue: arm clearly behind or around F's HEAD/SHOULDER (not
+  just her back — that's basket).
+
+- **Tandem whip** — both partners face the SAME direction through
+  the rotation, typically with F in front.
+  Beat map: on beat 2-3, L leads F to turn and face the same way he
+  does (both looking down the slot); partnership stays connected in
+  a tandem/conga-line shape through 4-6; F unwinds on 7-8.
+  Locking cue: both torsos facing the same direction for ≥2 beats.
+
+- **Shadow whip** (a.k.a. *Titanic*) — F stays behind L facing the
+  same direction. Longer-held tandem/shadow position than tandem whip.
+  Locking cue: F's body is BEHIND L's through the middle of the
+  pattern, both facing away from each other's slot end.
+
+- **Whip with hand change behind the head** — whip where L transfers
+  F's hand behind HIS OWN head (or F's head) during the rotation.
+  This is its own named variant because the head-height hand swap
+  is visually distinct from basket (behind back) or hand-change
+  (front-of-body swap).
+  Beat map: standard whip through 1-4; on beat 5 L lifts the leading
+  hand up and passes it behind his own head (or F's head) to his
+  other hand; anchor with new hand on 7-8.
+  Locking cue: hand visibly crosses behind a head (L's or F's) in
+  the second half of the pattern.
+
+- **Whip with hand change behind the back** — same family as above
+  but the swap happens behind L's back instead of his head. Treat
+  as a distinct variant only when clearly back-not-head.
+
+- **Continuous whip** (a.k.a. *rolling whip*) — multiple whip
+  rotations chained with no anchor between them. F passes through
+  the slot more than once.
+  Locking cue: no clear anchor at beat 7-8 of the first rotation;
+  the pattern continues into another full whip before settling.
+  Emit as ONE pattern entry with variant "continuous" — do not split
+  into two whips.
+
+- **Whip with inside turn** — basic whip + an added F inside turn
+  on beats 5-6 (after the main rotation completes).
+  Beat map: standard whip 1-4, then on 5&6 F takes an extra CW turn
+  under L's raised arm before the anchor on 7-8.
+
+- **Whip with outside turn** — basic whip + F outside turn on 5-6.
+  Beat map: same as above but F's extra turn is CCW.
+
+- **Whip with double turn** — basic whip + F takes two full rotations
+  on 5-6 instead of one. Requires visible double revolution in that
+  window.
+
+- **Slingshot** — intermediate whip-family cousin where L's TORSO
+  drives a rotational redirect of F back across the slot.
+  Beat map:
+  · 1-2 — L catches F's incoming momentum (looks like a compression)
+  · 3-4 — L's torso rotates sharply, redirecting F's weight
+  · 5-6 — F slingshots back across the slot (visible acceleration)
+  · 7-8 — Anchor
+  Locking cue: L's torso rotation is the obvious driver — not hand
+  pressure. F "bounces back" with body-driven energy.
+
+- **Barrel roll** — 8-count pattern where L guides F around him in
+  a horizontal wrapping motion (like rolling a barrel forward); less
+  common in modern competition but still appears in showcases.
+  Locking cue: L's leading hand circles over F's head in a barrel
+  shape; F wraps and unwraps through the rotation.
+
+- **Changing places** (a.k.a. *change of places*) — 8-count pattern
+  where L and F swap ends of the slot (both travel, both end up
+  where the other started).
+  Beat map:
+  · 1-2 — L walks forward, F walks forward (they approach each other)
+  · 3&4 — Pass-through triple: both cross midline of slot
+  · 5&6 — Triple to the opposite end
+  · 7-8 — Anchor in new positions
+  Locking cue: L visibly moves to F's original slot end (not just F
+  traveling). Both partners travel in this pattern.
 
 === MODIFIERS (apply to any pattern as `variant`, not standalone) ===
 
@@ -585,10 +761,13 @@ per 90 seconds of total video length. A 2-minute clip with a 30s \
 walk-on only has ~90s of dancing and should have ~15-25 patterns, \
 not 30+. Common WCS patterns: sugar push, sugar tuck, left side \
 pass, right side pass (= underarm turn), tuck turn, free spin, \
-throwout, starter step, whip (and variants: basket, reverse, Texas \
-Tommy, tandem, shadow, with inside turn, with outside turn, with \
-double turn), slingshot. Modifiers that apply as variants to any \
-pattern: inside turn, outside turn, rock-and-go.
+throwout, starter step, push break, changing places, whip (and \
+variants: basket/cradle/cuddle, reverse, Texas Tommy, tandem, shadow, \
+continuous, with inside turn, with outside turn, with double turn, \
+with hand change behind the back, with hand change behind the head), \
+slingshot, barrel roll. Modifiers that apply as variants to any \
+pattern: inside turn, outside turn, rock-and-go, hand change, body \
+roll styling.
 
 Respond in this exact JSON format. Fill `reasoning` BEFORE `score` in each category:
 {
