@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from .routes import health, music, shared, uploads, video
+from .routes import health, music, peer_reviews, shared, uploads, video
 from .settings import settings
 
 app = FastAPI(title="wcs-api", version="0.1.0")
@@ -23,3 +23,4 @@ app.include_router(music.router)
 app.include_router(video.router)
 app.include_router(uploads.router)
 app.include_router(shared.router)
+app.include_router(peer_reviews.router)

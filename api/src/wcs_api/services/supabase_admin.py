@@ -142,6 +142,30 @@ async def insert_usage_event(
         r.raise_for_status()
 
 
+async def get_analysis_minimal(
+    analysis_id: str, *, include_soft_deleted: bool = False
+) -> dict[str, Any] | None:
+    """Service-role read of an analysis row, returning just the fields
+    the peer-review / admin code paths need. Used to (a) authorize a
+    review-request mint against the owner's user_id and (b) hand the
+    reviewer the playable video + user-supplied context without
+    exposing the AI score.
+    """
+    query = (
+        f"video_analyses?id=eq.{analysis_id}"
+        "&select=id,user_id,filename,duration,object_key,role,"
+        "competition_level,event_name,event_date,stage,"
+        "dancer_description,deleted_at"
+    )
+    if not include_soft_deleted:
+        query += "&deleted_at=is.null"
+    async with httpx.AsyncClient(timeout=10) as client:
+        r = await client.get(_rest(query), headers=_headers())
+        r.raise_for_status()
+        rows = r.json()
+        return rows[0] if rows else None
+
+
 async def get_shared_analysis(token: str) -> dict[str, Any] | None:
     """Unauthenticated read of a video analysis by its share token.
     Intentionally returns only the public-safe subset of fields (no

@@ -521,3 +521,171 @@ export async function fetchSharedAnalysis(
   }
   return (await res.json()) as SharedAnalysis;
 }
+
+// ───────────────────────────────────────────────────────────────────
+// Peer reviews
+// ───────────────────────────────────────────────────────────────────
+
+export type PeerReviewerRole =
+  | "dancer"
+  | "instructor"
+  | "judge"
+  | "friend"
+  | "other";
+
+export type PeerReview = {
+  id: string;
+  token: string;
+  requested_at: string;
+  reviewer_name: string | null;
+  reviewer_role: PeerReviewerRole | null;
+  timing_score: number | null;
+  technique_score: number | null;
+  teamwork_score: number | null;
+  presentation_score: number | null;
+  overall_notes: string | null;
+  per_moment_notes: Array<{ timestamp_sec: number; note: string }>;
+  submitted_at: string | null;
+};
+
+export type PeerReviewList = {
+  pending: PeerReview[];
+  submitted: PeerReview[];
+};
+
+export async function requestPeerReview(
+  analysisId: string
+): Promise<{ token: string; url: string }> {
+  if (!API_URL) throw new Error("NEXT_PUBLIC_WCS_API_URL is not set");
+  const token = await getAccessToken();
+  if (!token) throw new Error("not signed in");
+  const res = await fetch(`${API_URL}/peer-reviews/request`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ analysis_id: analysisId }),
+  });
+  if (!res.ok) {
+    let detail = res.statusText;
+    try {
+      const body = await res.json();
+      if (body?.detail) detail = String(body.detail);
+    } catch {
+      // ignore
+    }
+    throw new Error(`Request review failed (${res.status}): ${detail}`);
+  }
+  const data = (await res.json()) as { token: string };
+  const origin =
+    typeof window !== "undefined" ? window.location.origin : "";
+  return {
+    token: data.token,
+    url: `${origin}/peer-review?t=${encodeURIComponent(data.token)}`,
+  };
+}
+
+export async function listPeerReviews(
+  analysisId: string
+): Promise<PeerReviewList> {
+  if (!API_URL) throw new Error("NEXT_PUBLIC_WCS_API_URL is not set");
+  const token = await getAccessToken();
+  if (!token) throw new Error("not signed in");
+  const res = await fetch(
+    `${API_URL}/peer-reviews/for-analysis/${encodeURIComponent(analysisId)}`,
+    { headers: { Authorization: `Bearer ${token}` } }
+  );
+  if (!res.ok) {
+    throw new Error(`List reviews failed (${res.status})`);
+  }
+  return (await res.json()) as PeerReviewList;
+}
+
+export async function deletePeerReview(reviewId: string): Promise<void> {
+  if (!API_URL) throw new Error("NEXT_PUBLIC_WCS_API_URL is not set");
+  const token = await getAccessToken();
+  if (!token) throw new Error("not signed in");
+  const res = await fetch(
+    `${API_URL}/peer-reviews/${encodeURIComponent(reviewId)}`,
+    {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${token}` },
+    }
+  );
+  if (!res.ok) {
+    throw new Error(`Delete review failed (${res.status})`);
+  }
+}
+
+// ── Public (reviewer, unauthenticated) ──────────────────────────
+
+export type PublicReviewContext = {
+  token: string;
+  already_submitted: boolean;
+  video_url: string | null;
+  filename: string | null;
+  duration: number | null;
+  context: {
+    role: string | null;
+    competition_level: string | null;
+    event_name: string | null;
+    event_date: string | null;
+    stage: string | null;
+    dancer_description: string | null;
+  };
+};
+
+export async function fetchPublicReview(
+  token: string
+): Promise<PublicReviewContext> {
+  if (!API_URL) throw new Error("NEXT_PUBLIC_WCS_API_URL is not set");
+  const res = await fetch(
+    `${API_URL}/peer-reviews/public/${encodeURIComponent(token)}`
+  );
+  if (!res.ok) {
+    let detail = res.statusText;
+    try {
+      const body = await res.json();
+      if (body?.detail) detail = String(body.detail);
+    } catch {
+      // ignore
+    }
+    throw new Error(`Review fetch failed (${res.status}): ${detail}`);
+  }
+  return (await res.json()) as PublicReviewContext;
+}
+
+export async function submitPublicReview(
+  token: string,
+  body: {
+    reviewer_name: string;
+    reviewer_role: PeerReviewerRole;
+    timing_score: number;
+    technique_score: number;
+    teamwork_score: number;
+    presentation_score: number;
+    overall_notes?: string | null;
+    per_moment_notes?: Array<{ timestamp_sec: number; note: string }>;
+  }
+): Promise<void> {
+  if (!API_URL) throw new Error("NEXT_PUBLIC_WCS_API_URL is not set");
+  const res = await fetch(
+    `${API_URL}/peer-reviews/public/${encodeURIComponent(token)}/submit`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    }
+  );
+  if (!res.ok) {
+    let detail = res.statusText;
+    try {
+      const b = await res.json();
+      if (b?.detail) detail = String(b.detail);
+    } catch {
+      // ignore
+    }
+    throw new Error(`Submit review failed (${res.status}): ${detail}`);
+  }
+}

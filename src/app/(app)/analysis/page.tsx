@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { TimelineView } from "@/components/analyze/timeline-view";
 import { ScoreResultCard } from "@/components/analyze/score-result-card";
+import { PeerReviewsSection } from "@/components/analyze/peer-reviews-section";
 import {
   useAnalysisHistory,
   type AnalysisRecord,
@@ -492,6 +493,10 @@ function AnalysisPageInner() {
         duration={record.duration ?? 0}
         competitionLevel={record.competition_level}
       />
+
+      {/* Peer reviews — generate private review links, show submitted
+          reviews alongside the AI score */}
+      <PeerReviewsSection analysisId={record.id} />
     </div>
   );
 }
