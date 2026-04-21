@@ -100,12 +100,20 @@ async def analyze_video_endpoint(
     if not r2.object_key_belongs_to_user(body.object_key, user_id):
         raise HTTPException(status_code=403, detail="object does not belong to user")
 
-    # Quota gate.
+    # Quota reservation — atomic. Two concurrent requests from the
+    # same user cannot both claim the final slot; one will get
+    # reservation_id and the other None (→ 429). See #72.
     try:
         quota_status = await quota.get_video_quota_status(user_id)
     except httpx.HTTPStatusError as exc:
         raise _admin_error_to_http(exc)
-    if quota_status["remaining"] <= 0:
+    try:
+        reservation_id = await supabase_admin.claim_video_quota(
+            user_id=user_id, limit=quota_status["limit"]
+        )
+    except httpx.HTTPStatusError as exc:
+        raise _admin_error_to_http(exc)
+    if reservation_id is None:
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail=(
@@ -115,38 +123,43 @@ async def analyze_video_endpoint(
             ),
         )
 
-    if not settings.gemini_api_key:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="video analysis not configured (GEMINI_API_KEY missing)",
-        )
-
-    # Validate the object exists in R2 and check size.
-    head = r2.head_object(body.object_key)
-    if not head:
-        raise HTTPException(
-            status_code=404,
-            detail="object not found — upload may have expired or failed",
-        )
-
-    content_length = int(head.get("ContentLength", 0))
-    if content_length > settings.max_video_bytes:
-        r2.delete_object(body.object_key)
-        limit_mb = settings.max_video_bytes / (1024 * 1024)
-        size_mb = content_length / (1024 * 1024)
-        raise HTTPException(
-            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-            detail=f"file is {size_mb:.0f} MB, limit is {limit_mb:.0f} MB",
-        )
-
-    # Download to a tempfile and run the existing pipeline.
-    suffix = os.path.splitext(body.filename or body.object_key)[1] or ".mp4"
+    # From here on, a reservation is held. If anything short of a
+    # completed analysis happens, release it so the user doesn't get
+    # charged for validation failures / infra errors.
+    reservation_finalized = False
+    tmp_path: str | None = None
     try:
-        tmp_path = r2.download_to_tempfile(body.object_key, suffix=suffix)
-    except Exception as exc:  # noqa: BLE001
-        raise HTTPException(status_code=502, detail=f"failed to download from R2: {exc}")
+        if not settings.gemini_api_key:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="video analysis not configured (GEMINI_API_KEY missing)",
+            )
 
-    try:
+        # Validate the object exists in R2 and check size.
+        head = r2.head_object(body.object_key)
+        if not head:
+            raise HTTPException(
+                status_code=404,
+                detail="object not found — upload may have expired or failed",
+            )
+
+        content_length = int(head.get("ContentLength", 0))
+        if content_length > settings.max_video_bytes:
+            r2.delete_object(body.object_key)
+            limit_mb = settings.max_video_bytes / (1024 * 1024)
+            size_mb = content_length / (1024 * 1024)
+            raise HTTPException(
+                status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                detail=f"file is {size_mb:.0f} MB, limit is {limit_mb:.0f} MB",
+            )
+
+        # Download to a tempfile and run the existing pipeline.
+        suffix = os.path.splitext(body.filename or body.object_key)[1] or ".mp4"
+        try:
+            tmp_path = r2.download_to_tempfile(body.object_key, suffix=suffix)
+        except Exception as exc:  # noqa: BLE001
+            raise HTTPException(status_code=502, detail=f"failed to download from R2: {exc}")
+
         try:
             duration = get_video_duration(tmp_path)
         except VideoAnalysisError as exc:
@@ -192,22 +205,25 @@ async def analyze_video_endpoint(
         # admin dashboards can aggregate it.
         usage = result.pop("usage", None)
 
-        # Usage logging is analytics — if it fails, we still want to
-        # return the analysis the user paid for. A Supabase hiccup
-        # on the INSERT here should never throw away a completed
-        # Gemini call. Quota enforcement already ran above; the only
-        # downside to a missed usage_event is that the monthly count
-        # is off by one, which is self-healing the next month.
+        # Gemini succeeded — the user has consumed their slot. Mark
+        # the reservation finalized BEFORE attempting the cosmetic
+        # UPDATE / row insert so a Supabase hiccup on those side
+        # channels can't release the quota we legitimately charged.
+        reservation_finalized = True
+
+        # Best-effort: fill in usage fields on the reservation row.
+        # If this fails, the slot is still counted (reservation row
+        # already exists) and the analysis is still returned. The
+        # only downside is admin dashboards miss one cost row.
         try:
-            await supabase_admin.insert_usage_event(
-                user_id=user_id,
-                kind="video",
+            await supabase_admin.finalize_video_quota(
+                reservation_id=reservation_id,
                 duration_sec=int(duration),
                 usage=usage,
             )
         except Exception as exc:  # noqa: BLE001
             logger.warning(
-                "insert_usage_event failed for user=%s (analysis still returned): %s",
+                "finalize_video_quota failed for user=%s (analysis still returned): %s",
                 user_id,
                 exc,
             )
@@ -254,10 +270,25 @@ async def analyze_video_endpoint(
             },
         }
     finally:
-        try:
-            os.unlink(tmp_path)
-        except OSError:
-            pass
+        # Release the quota reservation if we didn't finalize — i.e.
+        # the analysis failed before Gemini returned useful work.
+        # Best-effort: a failure here leaves the reservation in
+        # place, which is the safer direction.
+        if not reservation_finalized:
+            try:
+                await supabase_admin.release_video_quota(reservation_id)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(
+                    "release_video_quota failed for user=%s res=%s: %s",
+                    user_id,
+                    reservation_id,
+                    exc,
+                )
+        if tmp_path is not None:
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
         # Delete from R2 by default — privacy-preserving. Users who
         # opted in to `store_video` keep their clip so they can
         # replay it against the pattern timeline later; they can
