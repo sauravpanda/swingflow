@@ -461,13 +461,41 @@ export function TimelineView({
 
         <div
           ref={barRef}
-          className="relative h-12 sm:h-14 rounded-md bg-muted/30 overflow-hidden border border-border cursor-pointer group/bar"
+          className="relative h-12 sm:h-14 rounded-md bg-muted/30 overflow-hidden border border-border cursor-pointer group/bar focus:outline-none focus-visible:ring-2 focus-visible:ring-foreground/40"
           role="slider"
-          aria-label="Pattern timeline — click to scrub"
+          tabIndex={0}
+          aria-label="Pattern timeline — click or use arrow keys to scrub"
           aria-valuemin={0}
           aria-valuemax={Math.round(effectiveDuration)}
           aria-valuenow={Math.round(currentTime)}
+          aria-valuetext={`${formatTime(currentTime)} of ${formatTime(effectiveDuration)}`}
           onClick={scrubToClick}
+          onKeyDown={(e) => {
+            // Arrow-key scrubbing. Step sizes tuned for reviewing
+            // technique: 1s fine step catches a single beat at most
+            // tempos; 5s large step (shift-arrow) lets you skip
+            // between patterns quickly. Home / End snap to boundaries.
+            const step = e.shiftKey ? 5 : 1;
+            if (e.key === "ArrowRight" || e.key === "ArrowUp") {
+              e.preventDefault();
+              seek(currentTime + step);
+            } else if (e.key === "ArrowLeft" || e.key === "ArrowDown") {
+              e.preventDefault();
+              seek(currentTime - step);
+            } else if (e.key === "Home") {
+              e.preventDefault();
+              seek(0);
+            } else if (e.key === "End") {
+              e.preventDefault();
+              seek(effectiveDuration);
+            } else if (e.key === " " || e.key === "Enter") {
+              // Space/Enter is the expected activation on a focused
+              // slider in most ATs — use it to play/pause so users
+              // can scrub + review without reaching for the mouse.
+              e.preventDefault();
+              togglePlay();
+            }
+          }}
         >
           {/* Pre-dance / post-dance bands. Rendered under the
               pattern blocks so stray out-of-window entries (if any
