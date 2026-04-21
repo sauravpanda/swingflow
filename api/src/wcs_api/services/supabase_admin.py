@@ -142,6 +142,28 @@ async def insert_usage_event(
         r.raise_for_status()
 
 
+async def get_analysis_result(analysis_id: str) -> dict[str, Any] | None:
+    """Service-role read of just the stored AI `result` blob for an
+    analysis. Used when we need to freeze a snapshot of the AI output
+    (e.g. when a peer review is submitted) so later re-analyses can't
+    mutate the training pair retroactively.
+    """
+    async with httpx.AsyncClient(timeout=10) as client:
+        r = await client.get(
+            _rest(
+                f"video_analyses?id=eq.{analysis_id}"
+                "&select=result"
+            ),
+            headers=_headers(),
+        )
+        r.raise_for_status()
+        rows = r.json()
+        if not rows:
+            return None
+        result = rows[0].get("result")
+        return result if isinstance(result, dict) else None
+
+
 async def get_analysis_minimal(
     analysis_id: str, *, include_soft_deleted: bool = False
 ) -> dict[str, Any] | None:

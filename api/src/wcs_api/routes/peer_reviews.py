@@ -175,6 +175,10 @@ class SubmitBody(BaseModel):
     presentation_score: float = Field(..., ge=0.0, le=10.0)
     overall_notes: str | None = Field(default=None, max_length=4000)
     per_moment_notes: list[dict[str, Any]] = Field(default_factory=list)
+    # Opt-in to let SwingFlow use this review to improve the AI
+    # scoring. Defaults to False — we never train on reviews where
+    # the reviewer didn't actively check the box.
+    training_consent: bool = Field(default=False)
 
     @field_validator("reviewer_role")
     @classmethod
@@ -221,6 +225,19 @@ async def submit_public_review(
     if review.get("submitted_at"):
         raise HTTPException(status_code=409, detail="review already submitted")
 
+    # Snapshot the AI result as it stands RIGHT NOW so the training
+    # pair is frozen. Best-effort: if the analysis was deleted between
+    # the public GET and this POST, we still accept the review — the
+    # snapshot is useful for training but not load-bearing for the
+    # submit itself.
+    ai_result_snapshot: dict[str, Any] | None = None
+    try:
+        ai_result_snapshot = await supabase_admin.get_analysis_result(
+            review["analysis_id"]
+        )
+    except httpx.HTTPStatusError:
+        ai_result_snapshot = None
+
     try:
         await peer_reviews_service.submit(
             token=token,
@@ -232,6 +249,8 @@ async def submit_public_review(
             presentation_score=body.presentation_score,
             overall_notes=(body.overall_notes or "").strip() or None,
             per_moment_notes=body.per_moment_notes,
+            training_consent=body.training_consent,
+            ai_result_snapshot=ai_result_snapshot,
         )
     except httpx.HTTPStatusError as exc:
         raise HTTPException(

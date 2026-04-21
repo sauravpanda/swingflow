@@ -20,6 +20,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Loader2, CheckCircle2, AlertCircle } from "lucide-react";
 import {
   Select,
@@ -57,6 +58,9 @@ function PeerReviewInner() {
   const [teamwork, setTeamwork] = useState<number>(7);
   const [presentation, setPresentation] = useState<number>(7);
   const [notes, setNotes] = useState("");
+  // Opt-in to use this review to improve the AI. Default false;
+  // stays off unless the reviewer actively checks the box.
+  const [trainingConsent, setTrainingConsent] = useState(false);
   const videoRef = useRef<HTMLVideoElement | null>(null);
 
   useEffect(() => {
@@ -101,6 +105,7 @@ function PeerReviewInner() {
         teamwork_score: teamwork,
         presentation_score: presentation,
         overall_notes: notes.trim() || null,
+        training_consent: trainingConsent,
       });
       setSubmitted(true);
     } catch (e) {
@@ -280,6 +285,33 @@ function PeerReviewInner() {
               placeholder="What stood out? Anything specific to work on?"
               className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
             />
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="py-4">
+            <label className="flex items-start gap-3 cursor-pointer">
+              <Checkbox
+                checked={trainingConsent}
+                onCheckedChange={(v) =>
+                  setTrainingConsent(v === true)
+                }
+                className="mt-0.5"
+              />
+              <div className="space-y-1">
+                <p className="text-sm font-medium leading-snug">
+                  It's OK to use my review to improve SwingFlow's AI
+                </p>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  Optional — off by default. If checked, we may use
+                  your scores and notes (along with the AI's score on
+                  the same clip) to calibrate and fine-tune the
+                  scoring model. Your name is stored with the review
+                  but isn't published anywhere outside the dancer you're
+                  reviewing for.
+                </p>
+              </div>
+            </label>
           </CardContent>
         </Card>
 

@@ -667,6 +667,8 @@ export async function submitPublicReview(
     presentation_score: number;
     overall_notes?: string | null;
     per_moment_notes?: Array<{ timestamp_sec: number; note: string }>;
+    // Opt-in: true = SwingFlow may use this review to improve scoring
+    training_consent: boolean;
   }
 ): Promise<void> {
   if (!API_URL) throw new Error("NEXT_PUBLIC_WCS_API_URL is not set");
