@@ -32,10 +32,10 @@ class Settings(BaseSettings):
     r2_secret_access_key: str = ""
     r2_bucket: str = "swingflow-uploads"
     r2_upload_ttl_seconds: int = 3600
-    # Everyone gets 2 video analyses per month (resets on the 1st via
+    # Everyone gets 10 video analyses per month (resets on the 1st via
     # the month-start usage-events query). Per-user comp credits live
     # on the profiles.monthly_video_override column.
-    monthly_video: int = 2
+    monthly_video: int = 10
     max_video_seconds: int = 200
 
     @property

@@ -291,7 +291,7 @@ export default function AnalyzePage() {
       </div>
 
       {/* Quota card — purely informational. Free for everyone; the
-          counter just helps users pace their 2/month allowance. */}
+          counter just helps users pace their 10/month allowance. */}
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-base">Monthly usage</CardTitle>

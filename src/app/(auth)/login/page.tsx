@@ -115,7 +115,7 @@ export default function LoginPage() {
             </TabsContent>
             <TabsContent value="signup" className="pt-2">
               <p className="text-center text-xs text-muted-foreground">
-                Free tier: 2 video analyses / month. Music analysis is
+                Free tier: 10 video analyses / month. Music analysis is
                 unlimited.
               </p>
             </TabsContent>
