@@ -17,6 +17,8 @@ import {
   Copy,
   Eye,
   AlertCircle,
+  FileVideo,
+  X,
 } from "lucide-react";
 import { TimelineView } from "@/components/analyze/timeline-view";
 import { ScoreResultCard } from "@/components/analyze/score-result-card";
@@ -61,6 +63,36 @@ function AnalysisPageInner() {
   const [overrideResult, setOverrideResult] = useState<VideoScoreResult | null>(
     null
   );
+  // Practice mode: let the user point the player at a local video
+  // file (not stored server-side) so they can slow-scrub any clip —
+  // their own, a pro's, a YouTube download — against the detected
+  // beat grid + pattern timeline. Local clips never leave the
+  // browser; we just create an object URL.
+  const [localVideo, setLocalVideo] = useState<{
+    url: string;
+    name: string;
+  } | null>(null);
+  const [dragging, setDragging] = useState(false);
+
+  // Revoke the object URL when the local clip changes or we unmount.
+  // Leaking object URLs holds the underlying Blob in memory and can
+  // easily pin 100s of MB per session for users trying a few clips.
+  useEffect(() => {
+    if (!localVideo) return;
+    return () => {
+      URL.revokeObjectURL(localVideo.url);
+    };
+  }, [localVideo]);
+
+  const handleLocalFile = useCallback((file: File) => {
+    if (!file.type.startsWith("video/")) return;
+    const url = URL.createObjectURL(file);
+    setLocalVideo({ url, name: file.name });
+  }, []);
+
+  const clearLocalVideo = useCallback(() => {
+    setLocalVideo(null);
+  }, []);
 
   // Find the record from the history hook. history.records already
   // filters soft-deleted rows by default, so if the id is missing
@@ -480,11 +512,81 @@ function AnalysisPageInner() {
         </Card>
       )}
 
+      {/* Practice-mode local clip picker. Drops a local video over
+          the stored clip so the user can scrub any video (their own,
+          a pro's, a download) against this analysis's beat + pattern
+          timeline. File stays in the browser — no upload. */}
+      <div
+        className={
+          "rounded-md border border-dashed p-3 text-xs transition-colors " +
+          (dragging
+            ? "border-primary bg-primary/5"
+            : "border-border bg-muted/10")
+        }
+        onDragOver={(e) => {
+          e.preventDefault();
+          setDragging(true);
+        }}
+        onDragLeave={() => setDragging(false)}
+        onDrop={(e) => {
+          e.preventDefault();
+          setDragging(false);
+          const f = e.dataTransfer.files?.[0];
+          if (f) handleLocalFile(f);
+        }}
+      >
+        {localVideo ? (
+          <div className="flex items-center gap-2">
+            <FileVideo className="h-4 w-4 text-primary shrink-0" />
+            <div className="min-w-0 flex-1">
+              <p className="font-medium truncate">
+                Practice clip: {localVideo.name}
+              </p>
+              <p className="text-muted-foreground text-[11px]">
+                Playing local clip against this analysis&rsquo;s beat + pattern
+                timeline. Use the speed control for slow practice.
+              </p>
+            </div>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={clearLocalVideo}
+              className="h-7"
+            >
+              <X className="h-3.5 w-3.5 mr-1" />
+              Remove
+            </Button>
+          </div>
+        ) : (
+          <div className="flex items-center gap-3 flex-wrap">
+            <FileVideo className="h-4 w-4 text-muted-foreground shrink-0" />
+            <span className="text-muted-foreground flex-1 min-w-[180px]">
+              Practice with a local clip — drop any video here (or pick one)
+              to play it against this beat map at 0.25&ndash;1.5x.
+            </span>
+            <label className="inline-flex items-center gap-1.5 cursor-pointer rounded-md border border-border bg-background px-2 py-1 text-xs hover:bg-muted/40 transition-colors">
+              <input
+                type="file"
+                accept="video/*"
+                className="hidden"
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) handleLocalFile(f);
+                  // Reset so selecting the same file twice still fires.
+                  e.target.value = "";
+                }}
+              />
+              Choose video
+            </label>
+          </div>
+        )}
+      </div>
+
       {/* Timeline + video */}
       <TimelineView
         result={currentResult}
         duration={record.duration ?? 0}
-        videoSrc={videoUrl}
+        videoSrc={localVideo?.url ?? videoUrl}
       />
 
       {/* Score + sub-scores + patterns + strengths + improvements */}

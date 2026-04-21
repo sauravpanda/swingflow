@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Play,
   Pause,
@@ -8,6 +8,7 @@ import {
   VolumeX,
   Maximize,
   SkipBack,
+  Gauge,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type {
@@ -77,6 +78,48 @@ export function TimelineView({
   // "not loaded yet; use the prop".
   const [videoDuration, setVideoDuration] = useState(0);
   const [muted, setMuted] = useState(false);
+  // Practice-mode playback rate. Read from localStorage so a user's
+  // preferred slow-down sticks across clips. preservesPitch keeps the
+  // music listenable at 0.5x instead of sounding chipmunk/demonic.
+  const [playbackRate, setPlaybackRate] = useState<number>(1);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const raw = window.localStorage.getItem("swingflow:playbackRate");
+    const n = raw ? parseFloat(raw) : NaN;
+    if (Number.isFinite(n) && n > 0 && n <= 2) setPlaybackRate(n);
+  }, []);
+  const applyRate = useCallback((rate: number) => {
+    setPlaybackRate(rate);
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem("swingflow:playbackRate", String(rate));
+    }
+    const v = videoRef.current;
+    if (v) {
+      v.playbackRate = rate;
+      // Prefixed flags for older Safari/Chrome so pitch stays native.
+      v.preservesPitch = true;
+      const vAny = v as HTMLVideoElement & {
+        mozPreservesPitch?: boolean;
+        webkitPreservesPitch?: boolean;
+      };
+      vAny.mozPreservesPitch = true;
+      vAny.webkitPreservesPitch = true;
+    }
+  }, []);
+  // Re-apply after the video element mounts / src changes — a fresh
+  // video element defaults back to rate=1 and preservesPitch=false.
+  useEffect(() => {
+    const v = videoRef.current;
+    if (!v) return;
+    v.playbackRate = playbackRate;
+    v.preservesPitch = true;
+    const vAny = v as HTMLVideoElement & {
+      mozPreservesPitch?: boolean;
+      webkitPreservesPitch?: boolean;
+    };
+    vAny.mozPreservesPitch = true;
+    vAny.webkitPreservesPitch = true;
+  }, [videoSrc, playbackRate]);
   // Detail shown below the bar. Manual intent (hover / tap-select)
   // wins. Otherwise track whatever pattern the video is currently
   // playing through so a user just pressing play watches the detail
@@ -274,6 +317,7 @@ export function TimelineView({
               />
             )}
             <div className="ml-auto flex items-center gap-1">
+              <SpeedSelector rate={playbackRate} onChange={applyRate} />
               <button
                 type="button"
                 onClick={toggleMute}
@@ -493,6 +537,20 @@ export function TimelineView({
             });
           })()}
         </div>
+
+        {/* Beat-map strip — renders the detected beat grid underneath
+            the pattern timeline so users practicing at slow speed can
+            visually track boom-tick-boom-tick against what they hear.
+            Hidden when beat detection failed (silent-fallback path). */}
+        {result.beat_grid &&
+          (result.beat_grid.beats?.length ?? 0) > 0 && (
+            <BeatStrip
+              grid={result.beat_grid}
+              effectiveDuration={effectiveDuration}
+              currentTime={currentTime}
+              onSeek={seek}
+            />
+          )}
 
         {/* Legend */}
         <div className="flex flex-wrap items-center gap-3 text-[10px] text-muted-foreground pt-1">
@@ -753,6 +811,208 @@ function MusicalityStrip({
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+const SPEED_OPTIONS: number[] = [0.25, 0.5, 0.75, 1, 1.25, 1.5];
+
+function SpeedSelector({
+  rate,
+  onChange,
+}: {
+  rate: number;
+  onChange: (r: number) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  // Close on outside click. Pointerdown (not click) so the dropdown
+  // closes before any click handler on a different button fires.
+  const rootRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: PointerEvent) => {
+      if (!rootRef.current?.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("pointerdown", onDown);
+    return () => document.removeEventListener("pointerdown", onDown);
+  }, [open]);
+  const label = rate === 1 ? "1x" : `${rate}x`;
+  return (
+    <div className="relative" ref={rootRef}>
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="flex items-center gap-1 text-white/80 hover:text-white px-1.5 py-1 rounded transition-colors font-mono tabular-nums text-[11px]"
+        aria-label={`Playback speed (${label})`}
+        title={`Playback speed (${label}) — pitch preserved`}
+        aria-haspopup="menu"
+        aria-expanded={open}
+      >
+        <Gauge className="h-3.5 w-3.5" />
+        <span>{label}</span>
+      </button>
+      {open && (
+        <div
+          role="menu"
+          className="absolute right-0 bottom-full mb-1 min-w-[72px] rounded-md border border-border bg-black/95 shadow-lg py-1 z-20"
+        >
+          {SPEED_OPTIONS.map((r) => (
+            <button
+              key={r}
+              type="button"
+              role="menuitemradio"
+              aria-checked={r === rate}
+              onClick={() => {
+                onChange(r);
+                setOpen(false);
+              }}
+              className={cn(
+                "block w-full text-left px-2.5 py-1 font-mono tabular-nums text-[11px] transition-colors",
+                r === rate
+                  ? "bg-primary/30 text-white"
+                  : "text-white/80 hover:bg-white/10 hover:text-white"
+              )}
+            >
+              {r === 1 ? "1x" : `${r}x`}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function BeatStrip({
+  grid,
+  effectiveDuration,
+  currentTime,
+  onSeek,
+}: {
+  grid: NonNullable<VideoScoreResult["beat_grid"]>;
+  effectiveDuration: number;
+  currentTime: number;
+  onSeek: (t: number) => void;
+}) {
+  const beats = grid.beats ?? [];
+  const downbeats = grid.downbeats ?? [];
+
+  const visibleBeats = useMemo(
+    () => beats.filter((b) => b >= 0 && b <= effectiveDuration),
+    [beats, effectiveDuration]
+  );
+  const downbeatSet = useMemo(
+    () => new Set(downbeats.map((d) => d.toFixed(3))),
+    [downbeats]
+  );
+
+  // Phrase markers — every 8 counts of music. A WCS phrase is 8 beats
+  // starting on a downbeat. Step through downbeats and mark every 8th
+  // so the user can see where the "1" of each phrase lands.
+  const phraseMarkers = useMemo(() => {
+    if (downbeats.length < 2) return [];
+    // Infer beats-per-downbeat from the beat:downbeat ratio. WCS and
+    // most swing music is in 4 — one downbeat per 4 beats. Two
+    // downbeats therefore span one bar; 8 beats = 2 bars = 1 phrase.
+    const barsPerPhrase = 2;
+    const out: number[] = [];
+    for (let i = 0; i < downbeats.length; i += barsPerPhrase) {
+      const d = downbeats[i];
+      if (d >= 0 && d <= effectiveDuration) out.push(d);
+    }
+    return out;
+  }, [downbeats, effectiveDuration]);
+
+  const barRef = useRef<HTMLDivElement>(null);
+  const scrub = (e: React.MouseEvent<HTMLDivElement>) => {
+    const bar = barRef.current;
+    if (!bar) return;
+    const rect = bar.getBoundingClientRect();
+    if (rect.width <= 0) return;
+    const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+    onSeek(pct * effectiveDuration);
+  };
+
+  // Cull dense beat grids — at 150 BPM over 2 minutes you get 300
+  // ticks and the strip becomes a smear. Subsample to ~240 max,
+  // always keeping downbeats so the bar structure stays readable.
+  const renderedBeats = useMemo(() => {
+    const MAX = 240;
+    if (visibleBeats.length <= MAX) return visibleBeats;
+    const stride = Math.ceil(visibleBeats.length / MAX);
+    return visibleBeats.filter(
+      (b, i) => i % stride === 0 || downbeatSet.has(b.toFixed(3))
+    );
+  }, [visibleBeats, downbeatSet]);
+
+  return (
+    <div className="space-y-1.5 pt-1">
+      <div className="flex items-center justify-between text-xs text-muted-foreground">
+        <span className="font-medium uppercase tracking-wide">Beat map</span>
+        <span className="text-[10px] tabular-nums">
+          {grid.bpm.toFixed(0)} BPM
+          {grid.source ? ` · ${grid.source}` : ""}
+          {" · "}
+          {downbeats.length} bars
+        </span>
+      </div>
+      <div
+        ref={barRef}
+        className="relative h-7 rounded-md bg-muted/30 border border-border overflow-hidden cursor-pointer"
+        onClick={scrub}
+        role="img"
+        aria-label={`Beat map — ${downbeats.length} bars at ${grid.bpm.toFixed(0)} BPM`}
+        title="Click to seek. Tall ticks = downbeats (boom). Short = offbeats (tick)."
+      >
+        {/* Beat ticks */}
+        {renderedBeats.map((b, i) => {
+          const pct = (b / effectiveDuration) * 100;
+          const isDownbeat = downbeatSet.has(b.toFixed(3));
+          return (
+            <div
+              key={`bt-${i}-${b}`}
+              className={cn(
+                "absolute top-1 bottom-1 pointer-events-none",
+                isDownbeat
+                  ? "w-[2px] bg-emerald-400"
+                  : "w-px bg-white/40"
+              )}
+              style={{ left: `calc(${pct}% - 0.5px)` }}
+            />
+          );
+        })}
+        {/* Phrase markers — full-height ghost lines every 8 counts. */}
+        {phraseMarkers.map((t, i) => (
+          <div
+            key={`ph-${i}`}
+            className="absolute top-0 bottom-0 w-[2px] bg-amber-400/60 pointer-events-none"
+            style={{ left: `calc(${(t / effectiveDuration) * 100}% - 1px)` }}
+            title={`Phrase ${i + 1} at ${formatTime(t)}`}
+          />
+        ))}
+        {/* Playhead */}
+        <div
+          className="absolute top-0 bottom-0 w-[2px] bg-foreground pointer-events-none"
+          style={{
+            left: `${Math.min(100, (currentTime / effectiveDuration) * 100)}%`,
+          }}
+        />
+      </div>
+      <div className="flex flex-wrap items-center gap-3 text-[10px] text-muted-foreground">
+        <span className="flex items-center gap-1.5">
+          <span className="inline-block h-3 w-[2px] bg-emerald-400" />
+          downbeat (boom)
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="inline-block h-3 w-px bg-white/40" />
+          beat (tick)
+        </span>
+        {phraseMarkers.length > 0 && (
+          <span className="flex items-center gap-1.5">
+            <span className="inline-block h-3 w-[2px] bg-amber-400/60" />
+            phrase (every 8)
+          </span>
+        )}
+      </div>
     </div>
   );
 }
