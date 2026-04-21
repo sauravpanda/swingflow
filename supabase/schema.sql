@@ -188,6 +188,66 @@ grant update (
   dancer_description
 ) on public.video_analyses to authenticated;
 
+-- ────────────────────────────────────────────────────────────
+-- Peer reviews
+-- ────────────────────────────────────────────────────────────
+--
+-- A dancer clicks "Ask someone to review" on their analysis page.
+-- We mint a one-time token, the dancer shares the link however they
+-- like (DM / text / email), the reviewer opens /review/<token>,
+-- watches the video, and submits a structured score. Reviewer
+-- doesn't need an account. Token is single-use: once submitted_at
+-- is set, subsequent fetches render the thank-you state instead of
+-- the form.
+create table if not exists public.peer_reviews (
+  id                    uuid primary key default gen_random_uuid(),
+  analysis_id           uuid not null references public.video_analyses(id) on delete cascade,
+  token                 text not null unique,      -- opaque; in the /review/<token> URL
+  requester_user_id     uuid not null references public.profiles(id) on delete cascade,
+  requested_at          timestamptz not null default now(),
+
+  -- Reviewer-supplied metadata (nullable until submit)
+  reviewer_name         text,
+  reviewer_role         text check (
+    reviewer_role is null
+    or reviewer_role in ('dancer', 'instructor', 'judge', 'friend', 'other')
+  ),
+
+  -- Scores (nullable until submitted). 1-10 with one decimal.
+  timing_score          numeric(3,1) check (timing_score is null or (timing_score >= 0 and timing_score <= 10)),
+  technique_score       numeric(3,1) check (technique_score is null or (technique_score >= 0 and technique_score <= 10)),
+  teamwork_score        numeric(3,1) check (teamwork_score is null or (teamwork_score >= 0 and teamwork_score <= 10)),
+  presentation_score    numeric(3,1) check (presentation_score is null or (presentation_score >= 0 and presentation_score <= 10)),
+
+  overall_notes         text,
+  -- Per-moment notes as JSON array of {timestamp_sec: number, note: string}
+  per_moment_notes      jsonb not null default '[]'::jsonb,
+
+  submitted_at          timestamptz,
+  created_at            timestamptz not null default now()
+);
+create index if not exists peer_reviews_analysis_id_idx
+  on public.peer_reviews(analysis_id);
+create index if not exists peer_reviews_requester_idx
+  on public.peer_reviews(requester_user_id, created_at desc);
+
+alter table public.peer_reviews enable row level security;
+
+-- Owner (requester) can read + delete their own review requests.
+-- Writes (insert to request, update to submit) always go through the
+-- service role — the reviewer is unauthenticated, and the requester
+-- shouldn't be writing scores on behalf of reviewers.
+drop policy if exists peer_reviews_owner_select on public.peer_reviews;
+create policy peer_reviews_owner_select on public.peer_reviews
+  for select using (auth.uid() = requester_user_id);
+
+drop policy if exists peer_reviews_owner_delete on public.peer_reviews;
+create policy peer_reviews_owner_delete on public.peer_reviews
+  for delete using (auth.uid() = requester_user_id);
+
+revoke insert, update on public.peer_reviews from authenticated;
+
+
 create table if not exists public.feature_requests (
   id          uuid primary key default gen_random_uuid(),
   user_id     uuid references public.profiles(id) on delete set null,
