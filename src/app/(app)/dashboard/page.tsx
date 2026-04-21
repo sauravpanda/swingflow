@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { useAppStore } from "@/components/store-provider";
 import { useAnalysisHistory } from "@/hooks/use-analysis-history";
 import { ScoreTrendChart } from "@/components/analyze/score-trend";
+import { TrendCallouts } from "@/components/analyze/trend-callouts";
 import {
   Video,
   Music,
@@ -168,6 +169,8 @@ export default function DashboardPage() {
           historical progress, matching the delete copy ("stays on
           the score trend"). `use-analysis-history` already fetches
           them in chartRecords for this purpose. */}
+      <TrendCallouts records={history.chartRecords} />
+
       <ScoreTrendChart
         records={history.chartRecords}
         loading={history.loading}
