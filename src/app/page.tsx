@@ -93,7 +93,7 @@ export default function HomePage() {
                 </Button>
               </div>
               <p className="text-xs text-muted-foreground pt-2">
-                Free · 2 video analyses / month · Unlimited music analysis
+                Free · 10 video analyses / month · Unlimited music analysis
               </p>
             </div>
           </div>
@@ -397,7 +397,7 @@ export default function HomePage() {
                     <li className="flex items-start gap-2">
                       <Check className="h-4 w-4 text-primary mt-0.5 shrink-0" />
                       <span>
-                        2 dance video analyses / month (up to ~3 min each)
+                        10 dance video analyses / month (up to ~3 min each)
                       </span>
                     </li>
                     <li className="flex items-start gap-2">
@@ -494,7 +494,7 @@ export default function HomePage() {
             />
             <FaqItem
               q="What if I run out of videos for the month?"
-              a="Your 2/month allowance resets on the 1st of each month. If you need more sooner, drop us a line via the Feedback page — we can usually comp extra credits for active users."
+              a="Your 10/month allowance resets on the 1st of each month. If you need more sooner, drop us a line via the Feedback page — we can usually comp extra credits for active users."
             />
             <FaqItem
               q="Do you support longer videos?"
