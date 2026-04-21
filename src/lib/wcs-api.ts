@@ -72,24 +72,6 @@ async function postJson<T>(path: string, body: unknown): Promise<T> {
   return (await res.json()) as T;
 }
 
-export async function createCheckoutSession(
-  successUrl: string,
-  cancelUrl: string
-): Promise<string> {
-  const data = await postJson<{ url: string }>("/billing/checkout", {
-    success_url: successUrl,
-    cancel_url: cancelUrl,
-  });
-  return data.url;
-}
-
-export async function createPortalSession(returnUrl: string): Promise<string> {
-  const data = await postJson<{ url: string }>("/billing/portal", {
-    return_url: returnUrl,
-  });
-  return data.url;
-}
-
 // ───────────────────────────────────────────────────────────────────
 // Video analysis
 // ───────────────────────────────────────────────────────────────────
@@ -266,7 +248,6 @@ export type VideoScoreResult = {
 };
 
 export type VideoQuota = {
-  plan: "free" | "basic";
   used: number;
   limit: number;
   max_seconds: number;
@@ -281,7 +262,6 @@ export type VideoAnalysisResponse = {
   // inline render).
   analysis_id?: string | null;
   quota: {
-    plan: "free" | "basic";
     used: number;
     limit: number;
     remaining: number;

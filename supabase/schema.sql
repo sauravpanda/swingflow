@@ -8,43 +8,32 @@
 create table if not exists public.profiles (
   id                          uuid primary key references auth.users(id) on delete cascade,
   email                       text,
-  plan                        text not null default 'free' check (plan in ('free', 'basic')),
-  stripe_customer_id          text unique,
-  monthly_video_override      int,    -- per-user override; NULL = plan default
-  max_video_seconds_override  int,    -- per-user override; NULL = plan default
+  monthly_video_override      int,    -- per-user override; NULL = global default
+  max_video_seconds_override  int,    -- per-user override; NULL = global default
   created_at                  timestamptz not null default now(),
   updated_at                  timestamptz not null default now()
 );
 
--- Migration: older versions used 'pro' as the paid tier name. Rename to
--- 'basic' if we're coming from that state. Idempotent and no-op on fresh.
+-- Migration: drop Stripe / plan columns from older schemas. Everyone
+-- is on the same free allowance now; per-user credits live on the
+-- override columns. Idempotent.
 do $$
 begin
-  update public.profiles set plan = 'basic' where plan = 'pro';
   if exists (
     select 1 from pg_constraint c
     join pg_class r on c.conrelid = r.oid
     where r.relname = 'profiles' and c.conname = 'profiles_plan_check'
-      and pg_get_constraintdef(c.oid) like '%pro%'
   ) then
     alter table public.profiles drop constraint profiles_plan_check;
-    alter table public.profiles add constraint profiles_plan_check
-      check (plan in ('free', 'basic'));
   end if;
 end $$;
+alter table public.profiles drop column if exists plan;
+alter table public.profiles drop column if exists stripe_customer_id;
 
-create table if not exists public.subscriptions (
-  id                     text primary key,
-  user_id                uuid not null references public.profiles(id) on delete cascade,
-  status                 text not null,
-  price_id               text,
-  current_period_start   timestamptz,
-  current_period_end     timestamptz,
-  cancel_at_period_end   boolean not null default false,
-  created_at             timestamptz not null default now(),
-  updated_at             timestamptz not null default now()
-);
-create index if not exists subscriptions_user_id_idx on public.subscriptions(user_id);
+-- Drop the subscriptions table entirely — no paid users ever existed,
+-- Stripe integration is removed. Safe to cascade because nothing
+-- references it anymore.
+drop table if exists public.subscriptions cascade;
 
 create table if not exists public.usage_events (
   id              uuid primary key default gen_random_uuid(),
@@ -76,13 +65,12 @@ alter table public.usage_events
 -- ────────────────────────────────────────────────────────────
 
 alter table public.profiles      enable row level security;
-alter table public.subscriptions enable row level security;
 alter table public.usage_events  enable row level security;
 
 -- Profiles: user reads/updates own row. RLS scopes which ROWS
 -- (their own); column-level GRANTs (below) restrict which COLUMNS
--- they can touch so they can't self-grant Basic plan or bump their
--- quota overrides. Service role bypasses RLS + GRANTs automatically.
+-- they can touch so they can't self-grant extra quota. Service role
+-- bypasses RLS + GRANTs automatically.
 drop policy if exists profiles_self_select on public.profiles;
 create policy profiles_self_select on public.profiles
   for select using (auth.uid() = id);
@@ -92,17 +80,11 @@ create policy profiles_self_update on public.profiles
   for update using (auth.uid() = id);
 
 -- Authenticated users may only update their own `email` column.
--- Everything else (plan, monthly_video_override, max_video_seconds_
--- override, stripe_customer_id) is service-role-only — those are
--- set by the backend when Stripe webhooks fire or when an admin
--- manually grants overrides via the service key.
+-- The override columns (monthly_video_override,
+-- max_video_seconds_override) are service-role-only — admins grant
+-- extra credits manually via the service key.
 revoke update on public.profiles from authenticated;
 grant update (email) on public.profiles to authenticated;
-
--- Subscriptions: user reads own. Only service role writes (Stripe webhook).
-drop policy if exists subscriptions_self_select on public.subscriptions;
-create policy subscriptions_self_select on public.subscriptions
-  for select using (auth.uid() = user_id);
 
 -- Usage events: user reads own. Only service role writes (quota enforcement).
 drop policy if exists usage_events_self_select on public.usage_events;

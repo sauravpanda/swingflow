@@ -63,9 +63,6 @@ export const Analytics = {
   musicAnalysisCompleted: (p: { bpm?: number; duration?: number }) =>
     track("music_analysis_completed", p),
 
-  upgradeClicked: (p: { source: string }) => track("upgrade_clicked", p),
-  manageSubscriptionClicked: () => track("manage_subscription_clicked"),
-
   shareLinkCreated: () => track("share_link_created"),
   shareLinkRevoked: () => track("share_link_revoked"),
   sharedAnalysisViewed: () => track("shared_analysis_viewed"),

@@ -107,11 +107,11 @@ async def analyze_video_endpoint(
         raise _admin_error_to_http(exc)
     if quota_status["remaining"] <= 0:
         raise HTTPException(
-            status_code=status.HTTP_402_PAYMENT_REQUIRED,
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail=(
-                f"Monthly video quota reached "
-                f"({quota_status['used']}/{quota_status['limit']} on "
-                f"{quota_status['plan']} plan). Upgrade for more."
+                f"Monthly video limit reached "
+                f"({quota_status['used']}/{quota_status['limit']}). "
+                "Your allowance resets on the 1st of next month."
             ),
         )
 

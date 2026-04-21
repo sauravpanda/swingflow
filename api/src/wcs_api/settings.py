@@ -13,10 +13,6 @@ class Settings(BaseSettings):
     max_music_bytes: int = 25 * 1024 * 1024
     max_music_seconds: int = 480
 
-    stripe_secret_key: str = ""
-    stripe_webhook_secret: str = ""
-    stripe_price_id: str = ""
-
     gemini_api_key: str = ""
     # Default matches sibling `wcs-analyzer` project. Requires Google
     # AI paid billing — on the free tier this model returns a 429 with
@@ -36,10 +32,11 @@ class Settings(BaseSettings):
     r2_secret_access_key: str = ""
     r2_bucket: str = "swingflow-uploads"
     r2_upload_ttl_seconds: int = 3600
-    free_monthly_video: int = 2
-    free_max_video_seconds: int = 120
-    basic_monthly_video: int = 10
-    basic_max_video_seconds: int = 300
+    # Everyone gets 2 video analyses per month (resets on the 1st via
+    # the month-start usage-events query). Per-user comp credits live
+    # on the profiles.monthly_video_override column.
+    monthly_video: int = 2
+    max_video_seconds: int = 200
 
     @property
     def allowed_origins_list(self) -> list[str]:
