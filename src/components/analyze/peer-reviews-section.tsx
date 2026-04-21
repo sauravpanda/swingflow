@@ -81,7 +81,7 @@ export function PeerReviewsSection({ analysisId }: { analysisId: string }) {
   };
 
   const handleCopy = async (token: string) => {
-    const url = `${window.location.origin}/review/${token}`;
+    const url = `${window.location.origin}/peer-review?t=${encodeURIComponent(token)}`;
     try {
       await navigator.clipboard.writeText(url);
       setCopiedToken(token);
@@ -211,7 +211,7 @@ export function PeerReviewsSection({ analysisId }: { analysisId: string }) {
               Awaiting response ({pending.length})
             </p>
             {pending.map((r) => {
-              const url = `${typeof window !== "undefined" ? window.location.origin : ""}/review/${r.token}`;
+              const url = `${typeof window !== "undefined" ? window.location.origin : ""}/peer-review?t=${encodeURIComponent(r.token)}`;
               const isCopied = copiedToken === r.token || copiedToken === url;
               return (
                 <div

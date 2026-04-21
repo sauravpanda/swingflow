@@ -6,8 +6,8 @@
  * AI score here, to avoid priming the reviewer's judgment.
  */
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import { useParams } from "next/navigation";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import {
   fetchPublicReview,
@@ -30,8 +30,19 @@ import {
 } from "@/components/ui/select";
 
 export default function PeerReviewPage() {
-  const params = useParams<{ token: string }>();
-  const token = params?.token;
+  // useSearchParams needs a Suspense boundary under Next's static
+  // export mode, otherwise the whole page falls back to client-only
+  // rendering warnings at build time.
+  return (
+    <Suspense fallback={null}>
+      <PeerReviewInner />
+    </Suspense>
+  );
+}
+
+function PeerReviewInner() {
+  const params = useSearchParams();
+  const token = params.get("t");
 
   const [ctx, setCtx] = useState<PublicReviewContext | null>(null);
   const [loading, setLoading] = useState(true);

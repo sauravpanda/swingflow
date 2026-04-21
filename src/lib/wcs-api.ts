@@ -580,7 +580,10 @@ export async function requestPeerReview(
   const data = (await res.json()) as { token: string };
   const origin =
     typeof window !== "undefined" ? window.location.origin : "";
-  return { token: data.token, url: `${origin}/review/${data.token}` };
+  return {
+    token: data.token,
+    url: `${origin}/peer-review?t=${encodeURIComponent(data.token)}`,
+  };
 }
 
 export async function listPeerReviews(
