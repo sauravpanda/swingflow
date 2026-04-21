@@ -62,15 +62,21 @@ async def submit(
     presentation_score: float,
     overall_notes: str | None,
     per_moment_notes: list[dict[str, Any]],
+    training_consent: bool,
+    ai_result_snapshot: dict[str, Any] | None,
 ) -> None:
     """Patch the row identified by `token` with the reviewer's scores
     and mark submitted_at. Filters on `submitted_at.is.null` so a
     double-submit race lands with exactly one winner; the loser gets
     a no-op PATCH which the caller interprets via the 409 check it
     made before arriving here.
+
+    Also freezes the AI result snapshot so future re-analyses don't
+    desync the (human_score, ai_score) training pair, and stamps
+    `consent_given_at` when the reviewer opted in to training use.
     """
     now = _dt.datetime.now(_dt.timezone.utc).isoformat()
-    update = {
+    update: dict[str, Any] = {
         "reviewer_name": reviewer_name[:80],
         "reviewer_role": reviewer_role,
         "timing_score": round(float(timing_score), 1),
@@ -79,6 +85,9 @@ async def submit(
         "presentation_score": round(float(presentation_score), 1),
         "overall_notes": overall_notes,
         "per_moment_notes": per_moment_notes,
+        "training_consent": bool(training_consent),
+        "consent_given_at": now if training_consent else None,
+        "ai_result_snapshot": ai_result_snapshot,
         "submitted_at": now,
     }
     async with httpx.AsyncClient(timeout=10) as client:

@@ -223,13 +223,40 @@ create table if not exists public.peer_reviews (
   -- Per-moment notes as JSON array of {timestamp_sec: number, note: string}
   per_moment_notes      jsonb not null default '[]'::jsonb,
 
+  -- Training-data consent. We ask the reviewer explicitly on the
+  -- submit form whether we can use their score + notes to improve
+  -- the AI. Default false — nothing training-usable unless the
+  -- reviewer actively checks the box.
+  training_consent      boolean not null default false,
+  consent_given_at      timestamptz,
+
+  -- Frozen snapshot of the AI analysis result as it stood at the
+  -- time this review was submitted. Necessary for training because
+  -- the owner can re-analyze the same video later and mutate
+  -- `video_analyses.result` — without a snapshot the human score
+  -- and AI score could desync, ruining the training pair.
+  ai_result_snapshot    jsonb,
+
   submitted_at          timestamptz,
   created_at            timestamptz not null default now()
 );
+
+-- Migration: add training-data columns to pre-existing rows. Idempotent.
+alter table public.peer_reviews
+  add column if not exists training_consent   boolean not null default false,
+  add column if not exists consent_given_at   timestamptz,
+  add column if not exists ai_result_snapshot jsonb;
+
 create index if not exists peer_reviews_analysis_id_idx
   on public.peer_reviews(analysis_id);
 create index if not exists peer_reviews_requester_idx
   on public.peer_reviews(requester_user_id, created_at desc);
+-- Partial index to make 'give me every training-usable row' cheap.
+-- Only submitted + consented rows count as training data, and that's
+-- what a calibration/fine-tune export always filters on.
+create index if not exists peer_reviews_training_idx
+  on public.peer_reviews(submitted_at desc)
+  where submitted_at is not null and training_consent = true;
 
 alter table public.peer_reviews enable row level security;
 
