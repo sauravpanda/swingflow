@@ -216,9 +216,7 @@ export default function AnalyzePage() {
           const dur = await probeDuration(f);
           if (dur > quota.max_seconds) {
             setLocalError(
-              `Video is ${Math.round(dur)}s, your ${quota.plan} plan allows up to ${
-                quota.max_seconds
-              }s.`
+              `Video is ${Math.round(dur)}s; clips must be ${quota.max_seconds}s or less.`
             );
             if (inputRef.current) inputRef.current.value = "";
             return;
@@ -292,17 +290,11 @@ export default function AnalyzePage() {
         </p>
       </div>
 
-      {/* Quota card */}
+      {/* Quota card — purely informational. Free for everyone; the
+          counter just helps users pace their 2/month allowance. */}
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-base flex items-center justify-between">
-            <span>Monthly usage</span>
-            {quota && (
-              <Badge variant={quota.plan === "basic" ? "default" : "secondary"}>
-                {quota.plan === "basic" ? "Basic" : "Free"}
-              </Badge>
-            )}
-          </CardTitle>
+          <CardTitle className="text-base">Monthly usage</CardTitle>
         </CardHeader>
         <CardContent className="space-y-2">
           {quotaLoading ? (
@@ -326,26 +318,15 @@ export default function AnalyzePage() {
                 value={Math.min(100, (quota.used / quota.limit) * 100)}
                 className="h-2"
               />
+              {isPaywalled && state.status !== "success" && (
+                <p className="text-xs text-muted-foreground">
+                  Your allowance resets on the 1st of next month.
+                </p>
+              )}
             </>
           ) : null}
         </CardContent>
       </Card>
-
-      {/* Paywall — hide when showing a fresh result so the score owns the hero slot */}
-      {isPaywalled && state.status !== "success" && (
-        <Card className="border-primary/40">
-          <CardContent className="py-6 space-y-3 text-center">
-            <Sparkles className="h-8 w-8 text-primary mx-auto" />
-            <h2 className="text-lg font-semibold">Monthly limit reached</h2>
-            <p className="text-sm text-muted-foreground">
-              Upgrade to Basic for 10 videos / month and 5-minute clips.
-            </p>
-            <Link href="/billing" onClick={() => Analytics.upgradeClicked({ source: "/analyze-paywall" })}>
-              <Button className="w-full">Upgrade to Basic — $10/mo</Button>
-            </Link>
-          </CardContent>
-        </Card>
-      )}
 
       {/* How scoring works — quietly collapsed by default so it
           doesn't dominate the page, but always accessible for users
@@ -605,20 +586,13 @@ export default function AnalyzePage() {
               />
             </CardContent>
           </Card>
-          {/* Paywall pushed below the result when both are present */}
+          {/* Gentle note when the user has now consumed their monthly
+              allowance. No upsell — just tells them when it refills. */}
           {isPaywalled && (
-            <Card className="border-primary/40">
-              <CardContent className="py-5 text-center space-y-2">
-                <p className="text-sm">
-                  <Sparkles className="h-4 w-4 text-primary inline-block mr-1.5 -mt-0.5" />
-                  That was your free analysis for the month. Upgrade for 10
-                  per month and 5-minute clips.
-                </p>
-                <Link href="/billing">
-                  <Button size="sm" className="mt-1">
-                    Upgrade to Basic — $10/mo
-                  </Button>
-                </Link>
+            <Card className="border-muted">
+              <CardContent className="py-4 text-center text-sm text-muted-foreground">
+                That was your last analysis for the month. Your
+                allowance resets on the 1st.
               </CardContent>
             </Card>
           )}

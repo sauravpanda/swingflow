@@ -7,7 +7,6 @@ import {
   Timer,
   Music,
   Video,
-  CreditCard,
   Settings,
   MessageSquare,
 } from "lucide-react";
@@ -18,7 +17,6 @@ const navItems = [
   { href: "/rhythm", label: "Rhythm", icon: Music },
   { href: "/analyze", label: "Analyze", icon: Video },
   { href: "/practice", label: "Practice", icon: Timer },
-  { href: "/billing", label: "Billing", icon: CreditCard },
   { href: "/feedback", label: "Feedback", icon: MessageSquare },
   { href: "/settings", label: "Settings", icon: Settings },
 ];

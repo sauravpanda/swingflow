@@ -1717,19 +1717,6 @@ wheels = [
 ]
 
 [[package]]
-name = "stripe"
-version = "15.0.1"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "requests" },
-    { name = "typing-extensions" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/90/b4/bd4baf56cfb9ec7ee66b0d33611e196afaabd12ddcc2322f29449649ec5f/stripe-15.0.1.tar.gz", hash = "sha256:3c04e8cc9ec8d9542f9dd998e2a4361dbe3d0b6150ca17d3f352546cf22c5565", size = 1490326, upload-time = "2026-04-01T23:52:21.218Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/e4/ee/4537ba64d6c2f8bc58667f4381429c804bbc2e854b5857337cbc39add620/stripe-15.0.1-py3-none-any.whl", hash = "sha256:0a525e4550b5bf7fb44ff682266b9d46cfb38dd6f1f97a85d361c452f69e6b4b", size = 2132160, upload-time = "2026-04-01T23:52:18.647Z" },
-]
-
-[[package]]
 name = "sympy"
 version = "1.14.0"
 source = { registry = "https://pypi.org/simple" }
@@ -2052,7 +2039,6 @@ dependencies = [
     { name = "pyjwt" },
     { name = "python-multipart" },
     { name = "soundfile" },
-    { name = "stripe" },
     { name = "torch" },
     { name = "uvicorn", extra = ["standard"] },
 ]
@@ -2071,7 +2057,6 @@ requires-dist = [
     { name = "pyjwt", specifier = ">=2.9.0" },
     { name = "python-multipart", specifier = ">=0.0.12" },
     { name = "soundfile", specifier = ">=0.12.1" },
-    { name = "stripe", specifier = ">=11.0.0" },
     { name = "torch", specifier = ">=2.0" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.32.0" },
 ]

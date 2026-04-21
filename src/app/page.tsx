@@ -93,8 +93,7 @@ export default function HomePage() {
                 </Button>
               </div>
               <p className="text-xs text-muted-foreground pt-2">
-                No credit card required · 2 video analyses / month free ·
-                Unlimited music analysis
+                Free · 2 video analyses / month · Unlimited music analysis
               </p>
             </div>
           </div>
@@ -367,29 +366,25 @@ export default function HomePage() {
           </div>
         </section>
 
-        {/* ─── Pricing ─── */}
+        {/* ─── What's included ─── */}
         <section className="border-t border-border/60 bg-card/20">
-          <div className="container mx-auto px-4 py-12 sm:py-24">
+          <div className="container mx-auto px-4 py-12 sm:py-20">
             <div className="text-center max-w-2xl mx-auto mb-10 space-y-3">
               <h2 className="text-2xl sm:text-4xl font-bold tracking-tight">
-                Simple pricing
+                Free to use
               </h2>
               <p className="text-muted-foreground text-lg">
-                Music analysis is unlimited for everyone. Upgrade for more
-                video scoring.
+                No subscription, no credit card. Just sign in and start
+                analyzing.
               </p>
             </div>
-            <div className="grid sm:grid-cols-2 gap-6 max-w-3xl mx-auto">
-              {/* Free */}
+            <div className="max-w-xl mx-auto">
               <Card className="border-border/60 bg-card/40 backdrop-blur">
                 <CardContent className="p-6 space-y-4">
                   <div className="flex items-baseline justify-between">
-                    <h3 className="text-xl font-bold">Free</h3>
+                    <h3 className="text-xl font-bold">What's included</h3>
                     <Badge variant="secondary">$0</Badge>
                   </div>
-                  <p className="text-sm text-muted-foreground">
-                    Everything you need to start practicing smarter.
-                  </p>
                   <ul className="space-y-2 text-sm pt-2">
                     <li className="flex items-start gap-2">
                       <Check className="h-4 w-4 text-primary mt-0.5 shrink-0" />
@@ -401,61 +396,17 @@ export default function HomePage() {
                     </li>
                     <li className="flex items-start gap-2">
                       <Check className="h-4 w-4 text-primary mt-0.5 shrink-0" />
-                      <span>2 dance video analyses / month (up to 2 min each)</span>
+                      <span>
+                        2 dance video analyses / month (up to ~3 min each)
+                      </span>
                     </li>
                     <li className="flex items-start gap-2">
                       <Check className="h-4 w-4 text-primary mt-0.5 shrink-0" />
                       <span>Practice timer + streak tracking</span>
                     </li>
                   </ul>
-                  <Button variant="outline" className="w-full mt-4" asChild>
-                    <Link href="/login">Start free</Link>
-                  </Button>
-                </CardContent>
-              </Card>
-
-              {/* Basic */}
-              <Card className="border-border bg-card/40 backdrop-blur">
-                <CardContent className="p-6 space-y-4">
-                  <div className="flex items-baseline justify-between">
-                    <h3 className="text-xl font-bold">Basic</h3>
-                    <div className="flex items-baseline gap-1">
-                      <span className="text-2xl font-bold">$10</span>
-                      <span className="text-sm text-muted-foreground">
-                        /mo
-                      </span>
-                    </div>
-                  </div>
-                  <p className="text-sm text-muted-foreground">
-                    Serious practice. More videos, longer clips.{" "}
-                    <span className="text-foreground font-medium">
-                      Break-even pricing
-                    </span>{" "}
-                    — each analysis costs ~$1 to run on a frontier AI
-                    model; 10 at $10/mo is cost-recovery, not profit.
-                  </p>
-                  <ul className="space-y-2 text-sm pt-2">
-                    <li className="flex items-start gap-2">
-                      <Check className="h-4 w-4 text-primary mt-0.5 shrink-0" />
-                      <span>Everything in Free</span>
-                    </li>
-                    <li className="flex items-start gap-2">
-                      <Check className="h-4 w-4 text-primary mt-0.5 shrink-0" />
-                      <span className="font-medium">
-                        10 dance video analyses / month
-                      </span>
-                    </li>
-                    <li className="flex items-start gap-2">
-                      <Check className="h-4 w-4 text-primary mt-0.5 shrink-0" />
-                      <span>Up to 5-minute clips</span>
-                    </li>
-                    <li className="flex items-start gap-2">
-                      <Check className="h-4 w-4 text-primary mt-0.5 shrink-0" />
-                      <span>Cancel anytime, access until period end</span>
-                    </li>
-                  </ul>
                   <Button className="w-full mt-4" asChild>
-                    <Link href="/login">Upgrade to Basic — $10/mo</Link>
+                    <Link href="/login">Get started</Link>
                   </Button>
                 </CardContent>
               </Card>
@@ -542,12 +493,12 @@ export default function HomePage() {
               a="Yes. Each analysis has a Share button that generates a private link. Send it to anyone — no account required on their side. You can revoke the link any time."
             />
             <FaqItem
-              q="What if I run out of free videos?"
-              a="Basic is $10/month with 10 analyses and 5-minute clips. Your free tier resets monthly. Cancel anytime, access stays until the end of the period."
+              q="What if I run out of videos for the month?"
+              a="Your 2/month allowance resets on the 1st of each month. If you need more sooner, drop us a line via the Feedback page — we can usually comp extra credits for active users."
             />
             <FaqItem
-              q="Do you support video longer than 5 minutes?"
-              a="Not on Basic. Much longer clips dilute the rubric feedback anyway — the sweet spot for useful judging is a 1–3 minute routine or an entire J&J heat."
+              q="Do you support longer videos?"
+              a="Up to about 3 minutes per clip today. Longer routines tend to dilute the rubric feedback anyway — the sweet spot is a 1–3 minute routine or an entire J&J heat."
             />
           </div>
         </section>
@@ -559,7 +510,7 @@ export default function HomePage() {
               Ready to practice smarter?
             </h2>
             <p className="text-muted-foreground text-lg">
-              Free to start. No credit card required.
+              Free. No subscription, no credit card.
             </p>
             <Button size="lg" asChild>
               <Link href="/login">

@@ -7,7 +7,6 @@ import {
   Timer,
   Music,
   Video,
-  CreditCard,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -16,7 +15,6 @@ const mobileNavItems = [
   { href: "/rhythm", label: "Rhythm", icon: Music },
   { href: "/analyze", label: "Analyze", icon: Video },
   { href: "/practice", label: "Practice", icon: Timer },
-  { href: "/billing", label: "Plan", icon: CreditCard },
 ];
 
 export function MobileNav() {
