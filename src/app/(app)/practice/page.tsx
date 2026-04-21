@@ -8,6 +8,7 @@ import { useTimer, formatTime } from "@/hooks/use-timer";
 import { routines, type Routine } from "@/lib/routines";
 import { useAppStore } from "@/components/store-provider";
 import { Play, Pause, RotateCcw, Check, Clock } from "lucide-react";
+import { PlayAlongCard } from "@/components/practice/play-along-card";
 
 export default function PracticePage() {
   const [selectedRoutine, setSelectedRoutine] = useState<Routine | null>(null);
@@ -42,13 +43,17 @@ export default function PracticePage() {
     return (
       <div className="space-y-6">
         <div>
-          <h1 className="text-2xl font-bold">Practice Timer</h1>
+          <h1 className="text-2xl font-bold">Practice</h1>
           <p className="text-muted-foreground">
-            Choose a structured warm-up routine
+            Play along with a clip, or run a structured warm-up routine
           </p>
         </div>
 
-        <div className="grid gap-4 sm:grid-cols-3">
+        <PlayAlongCard />
+
+        <h2 className="text-lg font-semibold">Warm-up routines</h2>
+
+        <div className="grid gap-4 sm:grid-cols-3 -mt-2">
           {routines.map((routine) => (
             <Card
               key={routine.id}
