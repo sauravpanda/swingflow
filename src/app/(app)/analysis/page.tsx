@@ -19,10 +19,12 @@ import {
   AlertCircle,
   FileVideo,
   X,
+  ImageDown,
 } from "lucide-react";
 import { TimelineView } from "@/components/analyze/timeline-view";
 import { ScoreResultCard } from "@/components/analyze/score-result-card";
 import { PeerReviewsSection } from "@/components/analyze/peer-reviews-section";
+import { ShareCardDialog } from "@/components/analyze/share-card-dialog";
 import {
   useAnalysisHistory,
   type AnalysisRecord,
@@ -73,6 +75,7 @@ function AnalysisPageInner() {
     name: string;
   } | null>(null);
   const [dragging, setDragging] = useState(false);
+  const [shareCardOpen, setShareCardOpen] = useState(false);
 
   // Revoke the object URL when the local clip changes or we unmount.
   // Leaking object URLs holds the underlying Blob in memory and can
@@ -478,6 +481,16 @@ function AnalysisPageInner() {
 
           <Button
             size="sm"
+            variant="outline"
+            onClick={() => setShareCardOpen(true)}
+            title="Generate a shareable score card for Instagram / Discord / X"
+          >
+            <ImageDown className="h-3.5 w-3.5 sm:mr-2" />
+            <span className="hidden sm:inline">Share card</span>
+          </Button>
+
+          <Button
+            size="sm"
             variant="ghost"
             className="text-muted-foreground hover:text-destructive sm:ml-auto"
             onClick={handleDeleteAnalysis}
@@ -600,6 +613,15 @@ function AnalysisPageInner() {
       {/* Peer reviews — generate private review links, show submitted
           reviews alongside the AI score */}
       <PeerReviewsSection analysisId={record.id} />
+
+      <ShareCardDialog
+        open={shareCardOpen}
+        onOpenChange={setShareCardOpen}
+        result={currentResult}
+        role={record.role}
+        competitionLevel={record.competition_level}
+        shareUrl={shareUrl}
+      />
     </div>
   );
 }
