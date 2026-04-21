@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { useAppStore } from "@/components/store-provider";
 import { useAnalysisHistory } from "@/hooks/use-analysis-history";
 import { ScoreTrendChart } from "@/components/analyze/score-trend";
+import { PatternStatsCard } from "@/components/analyze/pattern-stats-card";
 import {
   Video,
   Music,
@@ -170,6 +171,12 @@ export default function DashboardPage() {
           them in chartRecords for this purpose. */}
       <ScoreTrendChart
         records={history.chartRecords}
+        loading={history.loading}
+      />
+
+      {/* ─── My patterns (aggregated across history) ─── */}
+      <PatternStatsCard
+        records={history.records}
         loading={history.loading}
       />
 
