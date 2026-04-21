@@ -22,9 +22,17 @@ import {
   Copy,
   Loader2,
   MessageSquare,
+  Pin,
   UserPlus,
   X,
 } from "lucide-react";
+
+function formatPinTime(sec: number): string {
+  if (!Number.isFinite(sec) || sec < 0) return "0:00";
+  const m = Math.floor(sec / 60);
+  const s = Math.floor(sec % 60);
+  return `${m}:${s.toString().padStart(2, "0")}`;
+}
 
 const CATEGORIES: Array<{ key: keyof PeerReview; label: string }> = [
   { key: "timing_score", label: "Timing" },
@@ -309,6 +317,41 @@ function ReviewCard({
           );
         })}
       </div>
+
+      {/* Timestamped pins from the reviewer (#127). Rendered as a
+          compact list of time + note pairs — the most useful thing
+          humans add over the AI score. */}
+      {review.per_moment_notes && review.per_moment_notes.length > 0 && (
+        <div className="space-y-1.5">
+          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <Pin className="h-3 w-3" />
+            <span className="uppercase tracking-wide font-medium">
+              Pinned moments
+            </span>
+            <span className="tabular-nums">
+              ({review.per_moment_notes.length})
+            </span>
+          </div>
+          <div className="space-y-1">
+            {review.per_moment_notes
+              .slice()
+              .sort((a, b) => a.timestamp_sec - b.timestamp_sec)
+              .map((p, i) => (
+                <div
+                  key={`pin-${i}-${p.timestamp_sec}`}
+                  className="flex items-start gap-2 rounded-md border border-border/60 bg-muted/20 p-2 text-sm"
+                >
+                  <span className="font-mono tabular-nums text-primary shrink-0">
+                    {formatPinTime(p.timestamp_sec)}
+                  </span>
+                  <p className="flex-1 min-w-0 text-muted-foreground whitespace-pre-wrap break-words">
+                    {p.note}
+                  </p>
+                </div>
+              ))}
+          </div>
+        </div>
+      )}
 
       {review.overall_notes && (
         <p className="text-sm whitespace-pre-wrap text-muted-foreground">
