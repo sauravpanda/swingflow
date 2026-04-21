@@ -481,6 +481,129 @@ triple on 7-8. F rotates around L through 3-6.
   Locking cue: L visibly moves to F's original slot end (not just F
   traveling). Both partners travel in this pattern.
 
+=== ADVANCED FIGURES & CATCHES (typically 8-count; Intermediate+) ===
+
+These are named shapes that show up in Int/Adv/AllStar/Champ
+routines. They carry a specific named cue and are scored as
+higher-difficulty execution than a plain whip or side pass when
+the couple keeps timing and partnership.
+
+- **Hip catch** — 8-count rotational pattern where, on the back half,
+  L's HAND/ARM catches F's HIP (not her back, not her waist — the
+  hip bone / upper outer thigh) and uses that catch to redirect her
+  momentum.
+  Beat map:
+  · 1-2 — whip-style entry, L preps rotation
+  · 3&4 — F begins rotating around L
+  · 5 — L's leading hand locates F's far hip and CATCHES there
+  · &6 — Hip catch drives the redirect (like slingshot, but the
+    point of contact is hip, not torso)
+  · 7-8 — Anchor
+  Locking cue: clear hand-on-hip contact at beat 5 with visible
+  redirect force. Hand on waist or back alone is NOT a hip catch.
+
+- **Pretzel** — the partners' arms end up crossed / braided in a
+  pretzel shape during the pattern. Typically built on a whip or
+  side-pass skeleton with an added arm weave on 3-5.
+  Beat map:
+  · 1-2 — side-pass-or-whip entry with one hand connection
+  · 3 — L threads his leading hand under / over F's arm to create
+    the weave
+  · &4 — arms lock into the pretzel shape (both partners' hands
+    visible crossed)
+  · 5-6 — maintains pretzel shape while F rotates/passes
+  · 7-8 — Anchor; unravel usually deferred to the NEXT pattern
+  Locking cue: a visible X / knotted arm shape lasting ≥2 beats.
+  If the arms are just briefly tangled for a single beat during a
+  hand change, it's not a pretzel.
+
+- **Catapult** — L uses a compressed-spring arm to launch F across
+  the slot with visible acceleration. Distinct from slingshot
+  because the drive is ARM extension, not torso rotation.
+  Beat map:
+  · 1-2 — approach with active compression between partners
+  · 3 — L loads the spring (his arm bends, F's weight is caught)
+  · &4 — L releases the spring: arm extends, F accelerates outward
+  · 5-6 — F travels across the slot under the released momentum
+  · 7-8 — Anchor at the far end
+  Locking cue: visible arm load-and-release on 3-&4 (L's bicep/elbow
+  goes from folded to extended, not a torso rotation). If the drive
+  comes from the body, it's slingshot instead.
+
+- **Drape** — F drapes her torso / weight over L's arm or shoulder,
+  held for ≥1 beat (a visible suspended pose, not just a pass
+  through). Often done as a Presentation moment on a musical hit.
+  Beat map:
+  · 1-2 — entry from closed or cradled position
+  · 3 — F commits her weight onto L's supporting arm/shoulder
+  · &4-5 — Drape held; partnership suspended (musical "hit" window)
+  · 6 — L recovers F's weight back to frame
+  · 7-8 — Anchor
+  Locking cue: F's torso clearly supported by L, NOT standing on
+  her own center. Usually photographed with F's back arched or
+  head dropped back.
+
+- **Yo-yo** — F is sent OUT to the open end of the slot and then
+  immediately pulled BACK before the anchor, in the same pattern
+  window. Looks like one pattern with a built-in bounce.
+  Beat map:
+  · 1-2 — L sends F outbound (throwout-like energy)
+  · 3&4 — F reaches the open end
+  · 5-6 — L reels her back toward him before she anchors
+  · 7-8 — Anchor near L, not at the open end
+  Locking cue: F's slot position goes outbound then inbound within
+  the SAME 8-count window. If the outbound pattern anchors at the
+  open end and the return is a separate pattern, that's two patterns,
+  not a yo-yo.
+
+- **Duck / Duck-under** — one partner (usually L) DUCKS under their
+  own or the joined arms during a rotation. Common as a styling
+  moment added to a whip or side pass; score as a variant of the
+  base pattern with visual_cue "lead duck under joined arms on 3-4".
+  Use "duck under" as a standalone only when it dominates the
+  pattern (i.e. the only notable move in the 6-8 count window).
+
+- **Skaters** (a.k.a. *skater's position*) — both partners face the
+  SAME direction and move in the same direction, side by side like
+  speed skaters. Typically a held position that extends for multiple
+  counts; commonly part of a shadow whip exit or a styling moment.
+  Beat map (as a standalone 8-count):
+  · 1-2 — L leads F to turn so both face the same way, one hand held
+    at waist level
+  · 3-4 — skater's travel: both partners step/glide in unison down
+    the slot
+  · 5-6 — styling / held shape with matching body lines
+  · 7-8 — F unwinds back to face L for the anchor
+  Locking cue: both partners moving forward in SAME direction,
+  side-by-side, for ≥3 beats. Distinct from tandem (tandem has F
+  in front of L, not next to him).
+
+- **Lunge** — one partner (usually F, sometimes both) drops into a
+  deep one-leg-extended position. Usually a MUSICAL HIT inside
+  another pattern, not a pattern on its own.
+  Beat map: wherever it lands in the host pattern, F's weight sinks
+  onto one bent knee with the other leg extended long, held ≥1 beat.
+  Locking cue: distinct visible low pose with straight trailing leg.
+  Emit as a variant on the host pattern (visual_cue: "lunge on beat
+  N"), not as a standalone "lunge" pattern — UNLESS the entire 6-8
+  count window is held in the lunge with no other movement.
+
+=== SYNCOPATION / STYLING MOMENTS (variants, not patterns) ===
+
+Emit these as VARIANTS on the surrounding pattern, not as their own
+pattern entries. They're too short to form an independent pattern.
+
+- **Hip bump / hip sway** — quick hip connection on a musical hit.
+  Variant: "with hip bump".
+- **Body roll** — isolated torso wave, commonly on an anchor.
+  Variant: "body roll styling".
+- **Shoulder shimmy** — paired shoulder isolation on a held beat.
+  Variant: "shoulder shimmy styling".
+- **Freeze / pause** — partnership freezes on a musical break.
+  Variant: "freeze on beat N".
+- **Kick ball change** — footwork substitution for a triple.
+  Variant: "kick ball change on N&(N+1)".
+
 === MODIFIERS (apply to any pattern as `variant`, not standalone) ===
 
 - **Inside turn / outside turn** — turn directions, not patterns.
@@ -765,9 +888,11 @@ throwout, starter step, push break, changing places, whip (and \
 variants: basket/cradle/cuddle, reverse, Texas Tommy, tandem, shadow, \
 continuous, with inside turn, with outside turn, with double turn, \
 with hand change behind the back, with hand change behind the head), \
-slingshot, barrel roll. Modifiers that apply as variants to any \
-pattern: inside turn, outside turn, rock-and-go, hand change, body \
-roll styling.
+slingshot, barrel roll, hip catch, pretzel, catapult, drape, yo-yo, \
+duck under, skaters, lunge. Modifiers / styling that apply as \
+variants to any pattern: inside turn, outside turn, rock-and-go, \
+hand change, body roll, hip bump, shoulder shimmy, freeze, kick \
+ball change.
 
 Respond in this exact JSON format. Fill `reasoning` BEFORE `score` in each category:
 {
