@@ -142,6 +142,83 @@ async def insert_usage_event(
         r.raise_for_status()
 
 
+async def claim_video_quota(user_id: str, limit: int) -> str | None:
+    """Atomically reserve a monthly video-quota slot. Returns the
+    usage_events.id of the reservation row, or None if the user is
+    already at or above limit. The RPC is serialized per-user via a
+    transaction-scope advisory lock, so concurrent requests from the
+    same user cannot both claim the last remaining slot (fixes #72).
+
+    Callers MUST either `finalize_video_quota` (on success) or
+    `release_video_quota` (on failure) the returned id — a dangling
+    reservation still counts toward monthly usage, which is the
+    intentional failure-mode: a partial failure costs the user one
+    slot rather than silently overspending quota.
+    """
+    async with httpx.AsyncClient(timeout=10) as client:
+        r = await client.post(
+            f"{settings.supabase_url}/rest/v1/rpc/claim_video_quota",
+            headers={**_headers(), "Prefer": "return=representation"},
+            json={"p_user": user_id, "p_limit": limit},
+        )
+        r.raise_for_status()
+        data = r.json()
+        # PostgREST may return the scalar directly or as a 1-element
+        # list depending on version. Accept both; treat null / None
+        # as over-limit.
+        if isinstance(data, list):
+            data = data[0] if data else None
+        if data in (None, "", False):
+            return None
+        return str(data)
+
+
+async def finalize_video_quota(
+    reservation_id: str,
+    duration_sec: int | None,
+    job_id: str | None = None,
+    usage: dict[str, Any] | None = None,
+) -> None:
+    """Fill in the post-Gemini details on a previously-reserved
+    usage_events row. Idempotent w.r.t. quota count — the row was
+    already inserted at claim time; this just enriches it.
+    """
+    model = usage.get("model") if usage else None
+    prompt_tokens = usage.get("prompt_tokens") if usage else None
+    response_tokens = usage.get("response_tokens") if usage else None
+    cost_usd_micros = usage.get("cost_usd_micros") if usage else None
+    async with httpx.AsyncClient(timeout=10) as client:
+        r = await client.post(
+            f"{settings.supabase_url}/rest/v1/rpc/finalize_video_quota",
+            headers={**_headers(), "Prefer": "return=minimal"},
+            json={
+                "p_id": reservation_id,
+                "p_duration_sec": duration_sec,
+                "p_job_id": job_id,
+                "p_model": model,
+                "p_prompt_tokens": prompt_tokens,
+                "p_response_tokens": response_tokens,
+                "p_cost_usd_micros": cost_usd_micros,
+            },
+        )
+        r.raise_for_status()
+
+
+async def release_video_quota(reservation_id: str) -> None:
+    """Delete a reservation row so the user isn't charged for a
+    failed analysis. Best-effort: a failure here leaves the
+    reservation in place (user loses one slot), which is the safer
+    direction than accidentally un-charging on a flaky call.
+    """
+    async with httpx.AsyncClient(timeout=10) as client:
+        r = await client.post(
+            f"{settings.supabase_url}/rest/v1/rpc/release_video_quota",
+            headers={**_headers(), "Prefer": "return=minimal"},
+            json={"p_id": reservation_id},
+        )
+        r.raise_for_status()
+
+
 async def get_analysis_result(analysis_id: str) -> dict[str, Any] | None:
     """Service-role read of just the stored AI `result` blob for an
     analysis. Used when we need to freeze a snapshot of the AI output

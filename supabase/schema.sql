@@ -365,3 +365,103 @@ begin
   return coalesce(new_count, 0);
 end;
 $$;
+
+-- ────────────────────────────────────────────────────────────
+-- Atomic video-quota reservation (fixes #72)
+--
+-- The previous flow was check-then-charge: the route counted
+-- usage_events, ran Gemini, then inserted the usage row. Concurrent
+-- requests from the same user could both see "remaining >= 1" and
+-- both proceed, overspending quota. If the post-Gemini INSERT
+-- failed, the completed analysis was charged to no one.
+--
+-- Fix: reserve a quota slot atomically BEFORE Gemini runs. Returns
+-- the reservation id (the usage_events.id) or NULL when over limit.
+-- The caller finalizes on success (fills in duration/usage) or
+-- releases on failure (deletes the reservation).
+--
+-- Serialization is via a per-user transaction-scope advisory lock,
+-- so different users don't block each other but one user's
+-- concurrent requests wait in line. The lock auto-releases on
+-- COMMIT/ROLLBACK — no explicit unlock needed.
+-- ────────────────────────────────────────────────────────────
+
+create or replace function public.claim_video_quota(
+  p_user uuid,
+  p_limit integer
+)
+returns uuid
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_used integer;
+  v_id uuid;
+  v_month_start timestamptz;
+begin
+  -- Per-user xact lock. hashtextextended gives a well-distributed
+  -- bigint keyed on the user_id so two concurrent requests for the
+  -- same user serialize; two different users don't.
+  perform pg_advisory_xact_lock(hashtextextended(p_user::text, 0));
+
+  v_month_start := date_trunc('month', (now() at time zone 'UTC'));
+
+  select count(*) into v_used
+  from public.usage_events
+  where user_id = p_user
+    and kind = 'video'
+    and created_at >= v_month_start;
+
+  if v_used >= p_limit then
+    return null;
+  end if;
+
+  -- Insert a placeholder reservation row. It already counts toward
+  -- this month's usage, so a concurrent claim immediately after
+  -- sees the updated count. Duration/usage fields are filled by
+  -- finalize_video_quota when Gemini completes.
+  insert into public.usage_events (user_id, kind)
+  values (p_user, 'video')
+  returning id into v_id;
+
+  return v_id;
+end;
+$$;
+
+create or replace function public.finalize_video_quota(
+  p_id uuid,
+  p_duration_sec integer,
+  p_job_id text,
+  p_model text,
+  p_prompt_tokens integer,
+  p_response_tokens integer,
+  p_cost_usd_micros integer
+)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  update public.usage_events
+    set duration_sec    = p_duration_sec,
+        job_id          = p_job_id,
+        model           = p_model,
+        prompt_tokens   = p_prompt_tokens,
+        response_tokens = p_response_tokens,
+        cost_usd_micros = p_cost_usd_micros
+    where id = p_id;
+end;
+$$;
+
+create or replace function public.release_video_quota(p_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  delete from public.usage_events where id = p_id;
+end;
+$$;
