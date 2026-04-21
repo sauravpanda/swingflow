@@ -491,7 +491,8 @@ the couple keeps timing and partnership.
 - **Hip catch** — 8-count rotational pattern where, on the back half,
   L's HAND/ARM catches F's HIP (not her back, not her waist — the
   hip bone / upper outer thigh) and uses that catch to redirect her
-  momentum.
+  momentum. Documented by West Coast Swing Online as a workshop
+  (syncopated-timing) figure.
   Beat map:
   · 1-2 — whip-style entry, L preps rotation
   · 3&4 — F begins rotating around L
@@ -502,107 +503,237 @@ the couple keeps timing and partnership.
   Locking cue: clear hand-on-hip contact at beat 5 with visible
   redirect force. Hand on waist or back alone is NOT a hip catch.
 
-- **Pretzel** — the partners' arms end up crossed / braided in a
-  pretzel shape during the pattern. Typically built on a whip or
-  side-pass skeleton with an added arm weave on 3-5.
-  Beat map:
-  · 1-2 — side-pass-or-whip entry with one hand connection
-  · 3 — L threads his leading hand under / over F's arm to create
-    the weave
-  · &4 — arms lock into the pretzel shape (both partners' hands
-    visible crossed)
-  · 5-6 — maintains pretzel shape while F rotates/passes
-  · 7-8 — Anchor; unravel usually deferred to the NEXT pattern
-  Locking cue: a visible X / knotted arm shape lasting ≥2 beats.
-  If the arms are just briefly tangled for a single beat during a
-  hand change, it's not a pretzel.
+=== WHIP FAMILY — VARIANTS (continuing the 8-count whip family) ===
 
-- **Catapult** — L uses a compressed-spring arm to launch F across
-  the slot with visible acceleration. Distinct from slingshot
-  because the drive is ARM extension, not torso rotation.
-  Beat map:
-  · 1-2 — approach with active compression between partners
-  · 3 — L loads the spring (his arm bends, F's weight is caught)
-  · &4 — L releases the spring: arm extends, F accelerates outward
-  · 5-6 — F travels across the slot under the released momentum
-  · 7-8 — Anchor at the far end
-  Locking cue: visible arm load-and-release on 3-&4 (L's bicep/elbow
-  goes from folded to extended, not a torso rotation). If the drive
-  comes from the body, it's slingshot instead.
+All 8-count variants from UCWDC / DVIDA syllabus and Library of Dance
+catalog. Emit the specific variant name when the distinguishing feature
+is visible. Each entry gives the LOCKING CUE separating it from
+neighbors. Full beat maps for the most common are above (basic, basket,
+reverse, Texas Tommy, tandem, shadow, with hand change behind head/back,
+continuous, with inside/outside/double turn). The rest are one-liners —
+still use them by name when you see them.
 
-- **Drape** — F drapes her torso / weight over L's arm or shoulder,
-  held for ≥1 beat (a visible suspended pose, not just a pass
-  through). Often done as a Presentation moment on a musical hit.
-  Beat map:
-  · 1-2 — entry from closed or cradled position
-  · 3 — F commits her weight onto L's supporting arm/shoulder
-  · &4-5 — Drape held; partnership suspended (musical "hit" window)
-  · 6 — L recovers F's weight back to frame
-  · 7-8 — Anchor
-  Locking cue: F's torso clearly supported by L, NOT standing on
-  her own center. Usually photographed with F's back arched or
-  head dropped back.
+- **Closed whip** — whip executed in closed/ballroom frame the whole
+  way through. Cue: closed frame held through the rotation.
+- **Inside whip** — whip where F adds an inside turn DURING the
+  rotation (not just on 5-6). UCWDC Syllabus B.
+- **Cradle whip** — same family as basket/cuddle/locked; LoD's
+  preferred term. All four are the same figure.
+- **Tunnel whip** — both hands held up forming an arch; F passes
+  "through the tunnel" of joined hands.
+- **Dishrag whip** (inside-outside / outside-inside) — F is wrung
+  like a dishrag between paired hand connections; two combined turns
+  going opposite directions.
+- **Windows whip** (turn first / window first) — arms form a
+  "window" frame. Turn-first: F turns then enters the window.
+  Window-first: window framed before F rotates through it.
+- **Matador whip / Crossed-hand matador whip / Wrong-way crossed-hand
+  matador whip** — right-over-left cross, arms sweep like a matador
+  cape over F's path.
+- **Same side whip** — whip where F ends on the SAME side of L as
+  she started (no slot change). Cue: slot position unchanged.
+- **Hustle whip** — WCS whip shape with hustle-style (1-2-3&4)
+  timing grafted on.
+- **Carwash whip** — L's free arm sweeps over F's head like a
+  carwash brush as she rotates. Cue: visible free-arm overhead sweep.
+- **Pull-through whip** — F is pulled THROUGH L's arm tunnel rather
+  than around him. Cue: F passes under L's leading arm through the
+  middle of the slot.
+- **Decapitive whip / Decap whip** — L's leading arm sweeps over F's
+  head in a guillotine-like motion. Named for the "decapitation" look;
+  no actual contact.
+- **Behind-the-back whip** — hand change happens behind L's OWN back
+  mid-pattern. Distinct from basket (behind F's back).
+- **Over-the-head whip** — hand passes over a head (L's or F's) at
+  the apex of rotation (~5-6).
+- **Outside walking whip** — L walks on F's outside line through the
+  whip. UCWDC Syllabus C — requires 8-count timing.
+- **Underarm whip** (and variants: outside turn, inside turn, double
+  outside turn, Texas Tommy) — whip executed as an underarm-pass
+  shape extended to 8 counts. F travels under L's raised arm through
+  the middle.
+- **Half whip & throwout** — two-count whip that cuts into a throwout
+  on 5-6. Used to change slot ends mid-phrase. UCWDC Syllabus B.
+- **Whip with single / double outside spin** — whip + 1 or 2 F
+  outside turns on 5-6. UCWDC Syllabus B (single), Syllabus C (double).
+- **Whip with free spin / double free spin** — whip + 1 or 2 F free
+  spins (connection released) on 5-6.
+- **Whip w/ behind the back hand change** — L transfers F's hand
+  behind HIS OWN back mid-rotation. UCWDC Syllabus D.
+- **Whip w/ Texas Tommy** — whip that incorporates a Texas Tommy
+  wrap on the back half.
+- **Reverse whip variants** — reverse with outside turn, double
+  outside turn, cross-step dip, reverse cradle whip, reverse shadow
+  whip, reverse cradle and release. All share the reversed-rotation
+  entry; the suffix names the embellishment.
+- **Lead's cradle whip** / **Lead's cradle catch and release** /
+  **Lead's reverse cradle whip** — mirrored cradle family where L
+  (not F) ends up in the cradle position. LoD 8-count.
+- **Extended whip** — whip extended beyond 8 counts via slow pivots
+  5-10, typically triple-out on 11-&-12. LoD.
 
-- **Yo-yo** — F is sent OUT to the open end of the slot and then
-  immediately pulled BACK before the anchor, in the same pattern
-  window. Looks like one pattern with a built-in bounce.
-  Beat map:
-  · 1-2 — L sends F outbound (throwout-like energy)
-  · 3&4 — F reaches the open end
-  · 5-6 — L reels her back toward him before she anchors
-  · 7-8 — Anchor near L, not at the open end
-  Locking cue: F's slot position goes outbound then inbound within
-  the SAME 8-count window. If the outbound pattern anchors at the
-  open end and the return is a separate pattern, that's two patterns,
-  not a yo-yo.
+=== AROUND THE WORLD FAMILY (8-count) ===
 
-- **Duck / Duck-under** — one partner (usually L) DUCKS under their
-  own or the joined arms during a rotation. Common as a styling
-  moment added to a whip or side pass; score as a variant of the
-  base pattern with visual_cue "lead duck under joined arms on 3-4".
-  Use "duck under" as a standalone only when it dominates the
-  pattern (i.e. the only notable move in the 6-8 count window).
+LoD family. F rotates 360°+ around L's axis as she travels. The
+specific turn combination names the figure. Locking cue: F's body
+clearly travels in a CIRCLE around L, not just across the slot.
 
-- **Skaters** (a.k.a. *skater's position*) — both partners face the
-  SAME direction and move in the same direction, side by side like
-  speed skaters. Typically a held position that extends for multiple
-  counts; commonly part of a shadow whip exit or a styling moment.
-  Beat map (as a standalone 8-count):
-  · 1-2 — L leads F to turn so both face the same way, one hand held
-    at waist level
-  · 3-4 — skater's travel: both partners step/glide in unison down
-    the slot
-  · 5-6 — styling / held shape with matching body lines
-  · 7-8 — F unwinds back to face L for the anchor
-  Locking cue: both partners moving forward in SAME direction,
-  side-by-side, for ≥3 beats. Distinct from tandem (tandem has F
-  in front of L, not next to him).
+- **Outside-inside around the world** — outside turn, then inside.
+- **Inside-outside around the world** — inside turn, then outside.
+- **Double outside turn around the world** — two outside turns.
+- **Double inside turn around the world** — two inside turns.
 
-- **Lunge** — one partner (usually F, sometimes both) drops into a
-  deep one-leg-extended position. Usually a MUSICAL HIT inside
-  another pattern, not a pattern on its own.
-  Beat map: wherever it lands in the host pattern, F's weight sinks
-  onto one bent knee with the other leg extended long, held ≥1 beat.
-  Locking cue: distinct visible low pose with straight trailing leg.
-  Emit as a variant on the host pattern (visual_cue: "lunge on beat
-  N"), not as a standalone "lunge" pattern — UNLESS the entire 6-8
-  count window is held in the lunge with no other movement.
+=== CATCH AND RELEASE FAMILY (8-count) ===
+
+LoD family. L catches F's momentum and then RELEASES into a spin or
+turn on 5-6. Distinct from free spin because the catch happens first,
+then the release.
+
+- **Catch and release** (basic)
+- **Catch and release, inside turn / outside turn / cross-step dip**
+- **Catch and release, hand change behind the back whip** — release
+  routes into a behind-the-back whip
+- **Reverse catch and release** — mirrored entry; variants: inside
+  turn, outside turn, free spin, Texas Tommy
+
+=== OTHER NAMED 8-COUNT FIGURES ===
+
+- **Throwout** — from closed/cuddled/sweetheart position, L sends F
+  out to the open end of the slot. ENTRY FROM CLOSED HOLD is the
+  locking cue. (NOT "throwaway" — that's ballroom.)
+- **Slingshot** — TORSO-driven redirect across the slot (full beat
+  map above).
+- **Hip catch** — hand-on-hip redirect (full beat map above).
+- **Barrel roll** — L guides F in a horizontal wrapping motion; free
+  arm circles over F's head like rolling a barrel forward.
+- **Changing places / Change of places** — both partners swap slot
+  ends (full beat map above).
+- **Arm bar** — L's arm acts as a bar against F's back/side guiding
+  the rotation. UCWDC Syllabus C.
+- **Single-double** — whip-family pattern where F executes a single
+  then a double turn (or vice versa). UCWDC Syllabus D.
+- **Wrap in - Wrap out** — F wraps into a sweetheart/cradle position
+  on the first half, unwraps out on the second. UCWDC Syllabus C.
+  May use the first 6 counts only.
+- **Wrapping side pass** — side pass that ENDS in a wrapped (cradle
+  / hammerlock) position. UCWDC Syllabus D.
+- **Rolling off the back pass** — F rolls across L's back during
+  the pass. UCWDC Syllabus D.
+- **6-count elbow catch** — L catches F's momentum on her elbow at
+  beat 5; 6-count window.
+- **Bowtie** — F's arms sweep into a bowtie shape during the
+  pattern. WCS Online Beg/Int.
+- **Fold / Shootout** — L folds F inward then shoots her back out;
+  a compression-release pattern.
+- **Fold from handshake hold** — same, entered from handshake.
+- **Roll in - Roll out** (R-to-L hand, from handshake, with extra
+  walks) — F rolls inward to near-wrap then rolls back out. Family
+  with multiple hand-connection variants.
+
+=== 6-COUNT PATTERNS — additional canonical figures ===
+
+Beyond the core sugar push / side passes / tuck / free spin already
+beat-mapped above:
+
+- **Cutoff** — a side pass where L cuts off F's travel mid-pattern,
+  redirecting her back toward the original slot end. UCWDC Syllabus A,
+  DVIDA Bronze figure 8.
+- **Cut off right side pass** — same concept, explicitly on a right
+  side pass entry.
+- **Left spinning side pass** — left side pass with a continuous F
+  spin through the travel. UCWDC Syllabus A, DVIDA Bronze figure 13.
+- **Under arm pass** (= Right Side Pass with inside turn) — UCWDC
+  Syllabus A labels this as its own figure; others treat as a
+  variant of right side pass. Prefer "right side pass with inside
+  turn" unless the F explicitly turns under the raised arm without
+  slot travel.
+- **Inside turn** (standalone 6-count) — simple F inside turn from
+  open/handshake position, 6-count timing. Distinct from "whip with
+  inside turn" (8-count + whip shape).
+- **Outside roll** — rolling F around an outside axis, 6-count.
+- **Right side pass with man's turn** — L (not F) takes the turn.
+- **Left side pass with man's turn** — same on left.
+- **Right-to-right left side pass** — left side pass with right-to-
+  right hand connection (both dancers' right hands). LoD.
+- **Sugar push syncopation** — sugar push with timing syncopation
+  (rock-and-go, anchor variation, etc.).
+- **Rock and go** — 6-count syncopation replacing the anchor with a
+  rock-step and immediate resume. Often a variant on any base
+  pattern; can also be a standalone 6-count.
+- **Tuck from closed position** — tuck turn entered from closed hold.
+- **Tuck turn with two hands** — two-handed tuck entry.
+- **Man's fly by** — L passes F in the slot on an offbeat rhythm.
+
+=== POSITIONS / HOLDS (not patterns — use for entry/exit context) ===
+
+These are HOLDS or SHAPES, not patterns of their own. When a pattern
+ENTERS from or EXITS into one of these, note it in the variant /
+visual_cue field (e.g. "throwout from sweetheart") rather than
+emitting the position as a pattern.
+
+- **Closed position** — ballroom-style frame: L's right hand on F's
+  shoulder blade, F's left on L's right bicep.
+- **Open / handshake hold** — the default WCS connection (L's left
+  in a handshake with F's right).
+- **Right-to-right** — both dancers using their right hand (locks
+  certain variants like R-to-R side pass).
+- **Left-to-left** — both using left hand.
+- **Sweetheart / cuddle / cradle position** — F in front of L, both
+  facing the same direction, L's arms crossed over F's chest (or one
+  arm over her shoulder). The "basket" in basket whip is this shape.
+- **Hammerlock position** — F's arm folded behind her back; L holds
+  F's hand at her own lower back. Common tuck exit.
+- **Shadow position** — F directly in front of L, both facing the
+  same direction, standing vertically (not side-by-side). Source of
+  the shadow whip.
+- **Skater's position** — both face the same direction, side-by-side,
+  both hands joined at waist level. Styling position, not a pattern.
 
 === SYNCOPATION / STYLING MOMENTS (variants, not patterns) ===
 
 Emit these as VARIANTS on the surrounding pattern, not as their own
-pattern entries. They're too short to form an independent pattern.
+pattern entries. Too short to form an independent pattern.
 
-- **Hip bump / hip sway** — quick hip connection on a musical hit.
-  Variant: "with hip bump".
-- **Body roll** — isolated torso wave, commonly on an anchor.
-  Variant: "body roll styling".
-- **Shoulder shimmy** — paired shoulder isolation on a held beat.
-  Variant: "shoulder shimmy styling".
-- **Freeze / pause** — partnership freezes on a musical break.
-  Variant: "freeze on beat N".
-- **Kick ball change** — footwork substitution for a triple.
-  Variant: "kick ball change on N&(N+1)".
+- **Anchor variations** (floated anchor, over-rotated anchor, stylized
+  anchor) — variant: "stylized anchor" or describe in visual_cue.
+- **Duck / duck under** — leader's duck, follower's duck, 3-ducks.
+  One partner ducks under joined arms. Variant: "with lead's duck".
+  WCS Online catalogs this as a styling action inside patterns,
+  never a standalone pattern.
+- **Lunge** — deep one-leg-extended pose. Variant: "lunge on beat N".
+  Only a standalone pattern when the whole 6-8 count window holds
+  the lunge with no other movement (rare).
+- **Drape** — F suspended across L's arm/shoulder for ≥1 beat.
+  Variant: "drape on the hit". Not a standalone pattern in WCS.
+- **Dip** (basic dip, cross-step dip, sit drop, pendulum drop, rag
+  doll dip) — F's weight dropped into L's support. Usually a
+  Presentation hit at phrase end.
+- **Hip bump / hip sway** — variant: "with hip bump".
+- **Body roll** — isolated torso wave. Variant: "body roll styling".
+- **Shoulder shimmy** — variant: "shoulder shimmy styling".
+- **Freeze / pause** — variant: "freeze on beat N".
+- **Kick ball change** — variant: "kick ball change on N&(N+1)".
+- **Ronde / ronde to ride** — F's leg sweeps in a wide arc. Variant:
+  "ronde on beat N".
+- **Pirouette / fouette** — multi-rotation spin variants.
+- **Illusion turn** — F's body folds forward during rotation creating
+  an "illusion" pose.
+
+=== NOT CANONICAL WCS (do NOT emit as patterns) ===
+
+Common partner-dance terms that are NOT part of the WSDC / UCWDC /
+Library of Dance catalog. If you see these shapes, pick the closest
+canonical WCS pattern and note the styling in visual_cue.
+
+- **Pretzel** — East Coast Swing / country dance figure. In WCS the
+  braided-arm look is expressed as a hand change or hammerlock exit
+  inside another pattern.
+- **Catapult** — informal teaching term, not in the canonical
+  catalog. The arm-spring launch reads as slingshot or throwout
+  depending on the drive source.
+- **Yo-yo** — regional/informal. Send-and-return within one window
+  is emitted as the base pattern (whip / side pass) with a
+  "with pullback" or "with runaround" visual_cue.
 
 === MODIFIERS (apply to any pattern as `variant`, not standalone) ===
 
@@ -882,17 +1013,29 @@ always mean you collapsed repeats. Expect 15–25 pattern windows per \
 90 seconds of ACTUAL DANCING (dance_end_sec − dance_start_sec), NOT \
 per 90 seconds of total video length. A 2-minute clip with a 30s \
 walk-on only has ~90s of dancing and should have ~15-25 patterns, \
-not 30+. Common WCS patterns: sugar push, sugar tuck, left side \
-pass, right side pass (= underarm turn), tuck turn, free spin, \
-throwout, starter step, push break, changing places, whip (and \
-variants: basket/cradle/cuddle, reverse, Texas Tommy, tandem, shadow, \
-continuous, with inside turn, with outside turn, with double turn, \
-with hand change behind the back, with hand change behind the head), \
-slingshot, barrel roll, hip catch, pretzel, catapult, drape, yo-yo, \
-duck under, skaters, lunge. Modifiers / styling that apply as \
-variants to any pattern: inside turn, outside turn, rock-and-go, \
-hand change, body roll, hip bump, shoulder shimmy, freeze, kick \
-ball change.
+not 30+. Canonical WCS patterns (WSDC / UCWDC / Library of Dance): \
+6-count — sugar push (= push break), sugar tuck, left side pass, \
+right side pass, under arm pass, tuck turn, free spin, starter step, \
+cutoff, left spinning side pass, inside turn, outside roll, rock \
+and go, 6-count elbow catch, bowtie, fold (+ from handshake), roll \
+in–roll out, right-to-right left side pass. 8-count — basic whip, \
+basket/cradle/cuddle/locked whip, closed whip, inside whip, reverse \
+whip, Texas Tommy / Apache whip, tandem whip, shadow / Titanic \
+whip, tunnel whip, dishrag whip, windows whip, matador whip, same \
+side whip, hustle whip, carwash whip, pull-through whip, decapitive \
+whip, behind-the-back whip, over-the-head whip, outside walking \
+whip, underarm whip, half whip & throwout, whip w/ inside / outside \
+/ free spin / double outside / double inside / double free spin / \
+Texas Tommy / hand change behind head / hand change behind back, \
+extended whip, continuous whip, catch and release (+ reverse + \
+variants), lead's cradle whip (+ variants), around-the-world \
+(inside/outside/double-inside/double-outside), throwout, slingshot, \
+hip catch, barrel roll, changing places, arm bar, single-double, \
+wrap in–wrap out, wrapping side pass, rolling off the back pass. \
+Styling variants (NOT standalone patterns): rock-and-go, hand \
+change, body roll, hip bump, shoulder shimmy, freeze, kick ball \
+change, duck, lunge, drape, dip, ronde, pirouette, fouette, illusion \
+turn. NOT canonical (do not emit): pretzel, catapult, yo-yo.
 
 Respond in this exact JSON format. Fill `reasoning` BEFORE `score` in each category:
 {
