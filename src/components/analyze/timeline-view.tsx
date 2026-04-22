@@ -434,6 +434,7 @@ export function TimelineView({
         offBeats={offBeats}
         effectiveDuration={effectiveDuration}
         currentTime={currentTime}
+        playbackRate={playbackRate}
         onSeek={seek}
       />
 
@@ -1015,12 +1016,14 @@ function BeatPanel({
   offBeats,
   effectiveDuration,
   currentTime,
+  playbackRate,
   onSeek,
 }: {
   grid: VideoScoreResult["beat_grid"] | null | undefined;
   offBeats: Array<{ t: number; description?: string; beat_count?: string }>;
   effectiveDuration: number;
   currentTime: number;
+  playbackRate: number;
   onSeek: (t: number) => void;
 }) {
   // Empty state — beat detection didn't run or failed. Render a clear
@@ -1047,6 +1050,7 @@ function BeatPanel({
       offBeats={offBeats}
       effectiveDuration={effectiveDuration}
       currentTime={currentTime}
+      playbackRate={playbackRate}
       onSeek={onSeek}
     />
   );
@@ -1057,12 +1061,14 @@ function BeatStrip({
   offBeats,
   effectiveDuration,
   currentTime,
+  playbackRate,
   onSeek,
 }: {
   grid: NonNullable<VideoScoreResult["beat_grid"]>;
   offBeats: Array<{ t: number; description?: string; beat_count?: string }>;
   effectiveDuration: number;
   currentTime: number;
+  playbackRate: number;
   onSeek: (t: number) => void;
 }) {
   const beats = grid.beats ?? [];
@@ -1120,8 +1126,25 @@ function BeatStrip({
     <div className="space-y-1.5">
       <div className="flex items-center justify-between text-xs text-muted-foreground">
         <span className="font-medium uppercase tracking-wide">Beat map</span>
-        <span className="text-[10px] tabular-nums">
-          {grid.bpm.toFixed(0)} BPM
+        <span
+          className="text-[10px] tabular-nums"
+          title={
+            playbackRate !== 1
+              ? `Song is ${grid.bpm.toFixed(0)} BPM at 1x; you're practicing at ${playbackRate}x → ${(grid.bpm * playbackRate).toFixed(0)} BPM effective`
+              : undefined
+          }
+        >
+          {playbackRate === 1 ? (
+            <>{grid.bpm.toFixed(0)} BPM</>
+          ) : (
+            <>
+              {(grid.bpm * playbackRate).toFixed(0)} BPM
+              <span className="text-muted-foreground/60">
+                {" "}
+                (song {grid.bpm.toFixed(0)} @ {playbackRate}x)
+              </span>
+            </>
+          )}
           {grid.source ? ` · ${grid.source}` : ""}
           {" · "}
           {downbeats.length} bars
