@@ -857,6 +857,38 @@ changes you see on video, not from audio beat timestamps.
   the video tells you where the dancing is. They're close but
   not identical.
 
+**RECOGNITION-VS-START RULE (critical — common bug).** You often
+identify a pattern mid-way through — at beat 5-6 of a whip when the
+rotation is finally visible, or at beat 3&4 of a tuck when the turn
+commits. DO NOT set start_time to the recognition moment. The
+pattern BEGAN earlier — at the WALKS that led into it (beat 1-2 for
+a 6-count, beat 1-2-3 for an 8-count). Every pattern has walks
+first; the moment you realize "this is a whip" you must rewind and
+find where the walks started.
+
+**Look-backwards checklist — apply for every pattern:**
+1. Identify what you're seeing (the distinguishing beat — rotation,
+   tuck, compression, etc.).
+2. Count backwards to where the walks started. Sugar push / side
+   pass / tuck / free spin / sugar tuck / throwout / starter step =
+   6-count, ~2 walks before the defining beat. Whip family /
+   slingshot / hip catch / barrel roll / catch-and-release /
+   around-the-world / changing places = 8-count, ~3 walks.
+3. start_time goes at the first walk, NOT at the defining beat.
+
+**Duration sanity check.** At typical WCS tempos (90-130 BPM) a
+6-count is 2.8-4.0s and an 8-count is 3.7-5.3s. If an emitted whip
+window is shorter than ~3s, or a sugar push shorter than ~2.5s, you
+clipped the entry — rewind start_time to include the entry walks.
+
+**Previous-pattern boundary check.** After moving a new pattern's
+start_time backwards, verify the previous pattern's end_time is
+still valid. If your new start_time overlaps the previous pattern,
+it's because the previous pattern's end_time was set to "when I
+started seeing the next one" — which is the same bug in reverse.
+Shorten the previous end_time so the two patterns abut without
+overlap. Contiguous non-overlapping coverage is the goal.
+
 If two patterns look like they overlap, the boundary goes at the
 VISIBLE start of the new pattern's walk (beat 1 weight change),
 not at the audio downbeat.
