@@ -889,6 +889,21 @@ started seeing the next one" — which is the same bug in reverse.
 Shorten the previous end_time so the two patterns abut without
 overlap. Contiguous non-overlapping coverage is the goal.
 
+**Leading-pattern check (FIRST pattern in the dance window).** The
+recognition-vs-start rule applies to the very first pattern too.
+If your first pattern's start_time equals dance_start_sec but its
+duration is shorter than the count would predict (a 6-count under
+2.5s or an 8-count under 3.0s), you set start_time to the moment
+you first recognized the pattern, not where it began. The fix is
+to push start_time EARLIER, even before dance_start_sec if needed
+— and revise dance_start_sec down to match. The dancers must have
+started those entry walks somewhere; find them in the frames
+before dance_start_sec. If you genuinely can't see entry walks
+(e.g. mid-song cut), then either the pattern is shorter than a
+full 6/8-count (label it as a partial — the windows-cut-short
+variant) or this is a pre-dance fragment that shouldn't be a
+pattern at all (drop it).
+
 If two patterns look like they overlap, the boundary goes at the
 VISIBLE start of the new pattern's walk (beat 1 weight change),
 not at the audio downbeat.
@@ -1117,6 +1132,7 @@ Respond in this exact JSON format. Fill `reasoning` BEFORE `score` in each categ
     {
       "name": "<pattern family — e.g. sugar push, left side pass, whip, tuck turn>",
       "variant": "<specific sub-type — e.g. 'basket', 'reverse', 'apache', 'with inside turn', 'with outside turn', 'sugar tuck'. Use 'basic' ONLY when you've verified NO variant features are present. If you see any distinguishing feature (turn under arm, hand-behind-back, reversed rotation, cradling arm, sugar tuck compression, release-spin), commit to that variant — do NOT fall back to 'basic'. `null` is last resort for genuinely unreadable variants (bad angle, obscured dancers).>",
+      "count": <REQUIRED — 6 or 8. The WCS count structure of the pattern. Sugar push, sugar tuck, side passes, tuck turn, free spin, throwout, starter step, push break, cutoff, inside turn, outside roll, rock and go, 6-count elbow catch, bowtie, fold = 6. Whip family (basic, basket, reverse, Texas Tommy, tandem, shadow, etc.), slingshot, hip catch, barrel roll, changing places, around the world, catch and release, wrap in/out, wrapping side pass = 8. NEVER null.>,
       "start_time": <seconds from video start, float>,
       "end_time": <seconds from video start, float>,
       "quality": "<strong|solid|needs_work|weak>",
