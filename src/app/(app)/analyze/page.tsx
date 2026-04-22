@@ -290,43 +290,9 @@ export default function AnalyzePage() {
         </p>
       </div>
 
-      {/* Quota card — purely informational. Free for everyone; the
-          counter just helps users pace their 10/month allowance. */}
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base">Monthly usage</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-2">
-          {quotaLoading ? (
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              Loading…
-            </div>
-          ) : quotaError ? (
-            <p className="text-sm text-destructive">{quotaError}</p>
-          ) : quota ? (
-            <>
-              <div className="flex items-center justify-between text-sm">
-                <span>
-                  {quota.used} of {quota.limit} videos used
-                </span>
-                <span className="text-muted-foreground">
-                  up to {Math.round(quota.max_seconds / 60)} min each
-                </span>
-              </div>
-              <Progress
-                value={Math.min(100, (quota.used / quota.limit) * 100)}
-                className="h-2"
-              />
-              {isPaywalled && state.status !== "success" && (
-                <p className="text-xs text-muted-foreground">
-                  Your allowance resets on the 1st of next month.
-                </p>
-              )}
-            </>
-          ) : null}
-        </CardContent>
-      </Card>
+      {/* Monthly usage card moved to /settings — analyze page is
+          about picking a clip, not staring at a quota bar. The paywall
+          banner still renders below when the user runs out. */}
 
       {/* How scoring works — quietly collapsed by default so it
           doesn't dominate the page, but always accessible for users
