@@ -1147,10 +1147,19 @@ Respond in this exact JSON format. Fill `reasoning` BEFORE `score` in each categ
 Constraints on musical_moments:
 - This field is independent of patterns. It's your audio-first analysis: listen to the song and identify moments where the music DEMANDS a response — a horn stab, a bass drop, the top of a chorus, a vocal break, a rhythmic hit. Then judge whether the couple caught it.
 - "Caught" means their movement aligned with the musical moment: an anchor that settles on the break, a freeze that matches a stop, a body roll that hits with the horn, a head snap on the accent. "Missed" means they kept dancing past it as if it weren't there.
-- Target: 4-12 moments per 90s of dancing, focused on the most salient events. Do NOT enumerate every beat. Pick the musical peaks that a dancer should be responding to.
-- Prefer moments that are unambiguous — a clear stop, a clear hit, a clear phrase top — over vague "build" moments.
+
+- **DEMANDS-A-RESPONSE TEST.** Before listing any moment, ask: "Would a reasonable WCS instructor, watching this clip with sound on, say this music had a clear event the couple should have interpreted?" If the answer is "not really — it's a groove" or "the music kept going", DON'T list it. Phrase tops, tempo shifts, and chord changes on their own are NOT enough — they need to be accompanied by a specific audible event (horn stab, drum fill, stop, bass drop, vocal break, rhythmic hit).
+- Do NOT list "phrase top" or "tempo shift" or "phrase boundary" as musical moments unless there is ALSO a specific audible hit at that moment. A phrase boundary in continuous dance music is not something a Novice-level dancer needs to catch.
+- **PER-LEVEL CALIBRATION.** Calibrate which moments to list based on the dancer's observed_level:
+  · Newcomer / Novice → list 0-3 moments per 90s of dancing. ONLY list unambiguous hits (stops, drops, horn stabs that stop the music briefly). These are the ones even a learner should catch. Staying on beat through a phrase boundary is NOT missing a moment — leave it off the list entirely.
+  · Intermediate → list 2-6 moments per 90s. Include the clear hits AND medium-salience events (strong breaks, phrase tops WITH an audible hit, vocal stabs). For moments where the couple stayed on beat with no drop of energy but didn't specifically interpret, skew toward caught=true (they're level-appropriate).
+  · Advanced / All-Star / Champion → list 4-12 moments per 90s. Now phrase tops, builds, and subtle micro-musicality are fair game — these dancers are expected to interpret broader musical structure, not just hits.
+
+- **PREFER CAUGHT=TRUE AT LOW LEVELS WHEN AMBIGUOUS.** If it's a Newcomer/Novice couple and the music has a subtle event and they just kept the pattern clean through it, mark caught=true. "They stayed in the dance through the moment" is the bar at that level — save caught=false for clear failures (e.g. the music stops and they keep moving, or there's a horn stab and they walk through it with no response).
+- Target density after filtering: 0-12 moments total for a 90s dance, with the low end for Newcomer/Novice and the high end for Advanced+. A Novice-level 90s dance with 3 moments all marked missed should make you suspicious — recheck whether those were truly demanding moments or whether you're scoring the dancer at a higher tier than observed.
+- Prefer moments that are unambiguous — a clear stop, a clear hit, a clear phrase top WITH an audible hit — over vague "build" moments.
 - Each timestamp_sec is a single moment in time (the moment of the musical event), not a range.
-- If the music is too continuous to pick standout moments (pure groove, no hits), return an empty array rather than inventing filler.
+- If the music is too continuous to pick standout moments (pure groove, no hits), return an empty array rather than inventing filler. An empty array is the CORRECT answer for many Novice-level clips where the song is a continuous groove.
 
 Constraints on follower_initiative:
 - Capture moments where the FOLLOWER authored something — not just executed what was led. Modern WCS follows co-create: they hijack anchors, add syncopations, style through bass walks, interpret the music on their own. This field surfaces those moments.
