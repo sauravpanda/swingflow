@@ -887,6 +887,93 @@ def _fmt_timestamp(sec: float) -> str:
     return f"{m}:{s:02d}"
 
 
+def _strengths_from_summary(
+    pattern_summary: list[dict[str, Any]] | None,
+    *,
+    max_items: int = 3,
+) -> list[str]:
+    """Synthesize Strengths entries from pattern_summary when the
+    model's own highlights came back too thin.
+
+    Picks patterns with quality in {"solid", "excellent"} that have
+    actual notes attached, then renders one line per pattern. Grounded
+    by construction — each line names a specific pattern family the
+    dancer demonstrated, with the model's own observation about it.
+    """
+    if not pattern_summary:
+        return []
+    out: list[str] = []
+    for p in pattern_summary:
+        if len(out) >= max_items:
+            break
+        quality = (p.get("quality") or "").lower()
+        if quality not in ("solid", "excellent"):
+            continue
+        notes = (p.get("notes") or "").strip()
+        if not notes:
+            continue
+        name = (p.get("name") or "").strip()
+        if not name:
+            continue
+        cnt = p.get("count")
+        label = f"{name.capitalize()} (×{cnt})" if cnt else name.capitalize()
+        out.append(f"{label}: {notes[:300]}")
+    return out
+
+
+def _improvements_from_summary(
+    pattern_summary: list[dict[str, Any]] | None,
+    *,
+    max_items: int = 3,
+) -> list[str]:
+    """Synthesize Improvements entries from pattern_summary's
+    coaching_tip field when the model's own improvements came back
+    too thin. The per-pattern tips are already grounded — they were
+    written for a specific pattern occurrence and survived the
+    pattern-summary aggregation, so they pass the "anchored to the
+    video" bar that the prompt's de-horoscope rule requires.
+    """
+    if not pattern_summary:
+        return []
+    out: list[str] = []
+    for p in pattern_summary:
+        if len(out) >= max_items:
+            break
+        tip = (p.get("coaching_tip") or "").strip()
+        if not tip:
+            continue
+        # Skip tips that match the stock-coaching filter — even a
+        # pattern-anchored tip phrased as "engage your core" reads as
+        # horoscope to the user.
+        if _is_stock_coaching(tip):
+            continue
+        name = (p.get("name") or "").strip()
+        if not name:
+            continue
+        cnt = p.get("count")
+        label = f"{name.capitalize()} (×{cnt})" if cnt else name.capitalize()
+        out.append(f"{label}: {tip[:300]}")
+    return out
+
+
+def _merge_unique(primary: list[str], fallback: list[str]) -> list[str]:
+    """Append fallback items that aren't already present in primary,
+    capped at 3 total. Comparison is case-insensitive on the trimmed
+    text so "Sugar push: foo" and "sugar push: foo " don't both ship.
+    """
+    seen = {p.strip().lower() for p in primary}
+    out = list(primary)
+    for f in fallback:
+        if len(out) >= 3:
+            break
+        key = f.strip().lower()
+        if key in seen:
+            continue
+        out.append(f)
+        seen.add(key)
+    return out
+
+
 def _sanitize_coaching_list(
     raw: Any,
     *,
@@ -1045,6 +1132,22 @@ def _shape_response(
         dance_end_sec=dance_end_sec,
     )
     pattern_summary = _summarize_patterns(patterns_identified)
+
+    # Fallback: when the de-horoscope filter strips everything, the user
+    # gets blank Strengths / Areas-for-Improvement panels even though
+    # the per-pattern coaching tips are already grounded by construction
+    # (each tip is tied to a specific pattern type the dancer actually
+    # did). Harvest from pattern_summary so the panels stay useful
+    # instead of empty. Only fires when the model's own grounded list
+    # came back too thin to be worth showing.
+    if len(strengths) < 2:
+        strengths = _merge_unique(
+            strengths, _strengths_from_summary(pattern_summary)
+        )
+    if len(improvements) < 2:
+        improvements = _merge_unique(
+            improvements, _improvements_from_summary(pattern_summary)
+        )
     # Top-level flag so the frontend can render a "pattern
     # identification was low confidence on this analysis" banner
     # without having to re-derive it from the timeline. Set when
