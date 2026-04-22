@@ -465,3 +465,80 @@ begin
   delete from public.usage_events where id = p_id;
 end;
 $$;
+
+-- ────────────────────────────────────────────────────────────
+-- Pattern labels (#142) — user-authored ground truth
+--
+-- Lets users correct the AI's pattern identifications via the /label
+-- tab. Each row is one time-ranged pattern assignment on an analysis
+-- the user owns. Exported as JSON for the grading harness (#139) and
+-- eventually for fine-tuning a better model.
+--
+-- RLS is strict: a user can only read/write labels on analyses they
+-- own. We don't check video_analyses.user_id in RLS (that'd require a
+-- join); instead we trust the pattern_labels.user_id column and let
+-- the insert-time check (matching auth.uid()) pin ownership.
+-- ────────────────────────────────────────────────────────────
+
+create table if not exists public.pattern_labels (
+  id uuid primary key default gen_random_uuid(),
+  analysis_id uuid not null references public.video_analyses(id) on delete cascade,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  start_time numeric(8,3) not null,
+  end_time numeric(8,3) not null,
+  name text not null,
+  variant text,
+  count int,
+  confidence numeric(3,2),
+  -- source: 'user' (from scratch), 'ai_accepted' (user clicked accept
+  -- on an AI block, no edits), 'ai_edited' (user started from an AI
+  -- block and changed something). Distinguishes labels that represent
+  -- fresh user judgment from ones that are AI inheritance.
+  source text not null default 'user' check (source in ('user','ai_accepted','ai_edited')),
+  notes text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  constraint pattern_labels_time_order check (end_time > start_time)
+);
+
+create index if not exists pattern_labels_analysis_idx
+  on public.pattern_labels(analysis_id, start_time);
+
+create index if not exists pattern_labels_user_idx
+  on public.pattern_labels(user_id);
+
+alter table public.pattern_labels enable row level security;
+
+drop policy if exists pattern_labels_select_own on public.pattern_labels;
+create policy pattern_labels_select_own on public.pattern_labels
+  for select using (auth.uid() = user_id);
+
+drop policy if exists pattern_labels_insert_own on public.pattern_labels;
+create policy pattern_labels_insert_own on public.pattern_labels
+  for insert with check (auth.uid() = user_id);
+
+drop policy if exists pattern_labels_update_own on public.pattern_labels;
+create policy pattern_labels_update_own on public.pattern_labels
+  for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+drop policy if exists pattern_labels_delete_own on public.pattern_labels;
+create policy pattern_labels_delete_own on public.pattern_labels
+  for delete using (auth.uid() = user_id);
+
+grant select, insert, update, delete on public.pattern_labels to authenticated;
+
+-- Keep updated_at fresh automatically.
+create or replace function public.pattern_labels_touch_updated_at()
+returns trigger
+language plpgsql
+as $$
+begin
+  new.updated_at = now();
+  return new;
+end;
+$$;
+
+drop trigger if exists pattern_labels_touch_updated_at on public.pattern_labels;
+create trigger pattern_labels_touch_updated_at
+  before update on public.pattern_labels
+  for each row execute function public.pattern_labels_touch_updated_at();

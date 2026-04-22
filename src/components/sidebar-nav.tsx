@@ -9,6 +9,7 @@ import {
   Video,
   Settings,
   MessageSquare,
+  Tags,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -17,6 +18,7 @@ const navItems = [
   { href: "/rhythm", label: "Rhythm", icon: Music },
   { href: "/analyze", label: "Analyze", icon: Video },
   { href: "/practice", label: "Practice", icon: Timer },
+  { href: "/label", label: "Label", icon: Tags },
   { href: "/feedback", label: "Feedback", icon: MessageSquare },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
