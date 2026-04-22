@@ -1083,15 +1083,13 @@ function BeatStrip({
     [downbeats]
   );
 
-  // Phrase markers — every 8 counts of music. A WCS phrase is 8 beats
-  // starting on a downbeat. Step through downbeats and mark every 8th
-  // so the user can see where the "1" of each phrase lands.
+  // Phrase markers — WCS musical phrases are 32 beats = 8 bars of 4.
+  // Most swing music is in 4 (one downbeat per 4 beats), so a phrase
+  // spans 8 downbeats. Step through downbeats and mark every 8th so
+  // the user can see where the "1" of each phrase lands.
   const phraseMarkers = useMemo(() => {
     if (downbeats.length < 2) return [];
-    // Infer beats-per-downbeat from the beat:downbeat ratio. WCS and
-    // most swing music is in 4 — one downbeat per 4 beats. Two
-    // downbeats therefore span one bar; 8 beats = 2 bars = 1 phrase.
-    const barsPerPhrase = 2;
+    const barsPerPhrase = 8;
     const out: number[] = [];
     for (let i = 0; i < downbeats.length; i += barsPerPhrase) {
       const d = downbeats[i];
