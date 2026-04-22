@@ -9,7 +9,7 @@
 // below so the user can see the blocks visually but editing happens
 // in the table to keep form focus stable.
 
-import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import {
@@ -49,8 +49,10 @@ import {
   AlertCircle,
   Tags,
   Sparkles,
+  Play,
 } from "lucide-react";
 import { useAnalysisHistory } from "@/hooks/use-analysis-history";
+import { BeatPanel } from "@/components/analyze/beat-panel";
 import {
   usePatternLabels,
   type PatternLabel,
@@ -89,8 +91,48 @@ function LabelEditorInner() {
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [videoError, setVideoError] = useState<string | null>(null);
   const [currentTime, setCurrentTime] = useState(0);
+  const [videoDuration, setVideoDuration] = useState(0);
   const [editing, setEditing] = useState<EditingState | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+
+  // Seek the video when the user clicks a position on the beat map.
+  const seekVideo = useCallback((t: number) => {
+    const v = videoRef.current;
+    if (!v) return;
+    v.currentTime = Math.max(0, t);
+  }, []);
+
+  // Play just one segment of the video (e.g. the range of a single
+  // AI-predicted pattern) so the user can see it isolated while
+  // deciding how to label it. Scheduled pause on the next tick so we
+  // don't fight React's render cycle; a single-fire "pause when we
+  // pass end_time" is attached via ontimeupdate.
+  const [segmentEnd, setSegmentEnd] = useState<number | null>(null);
+  const playSegment = useCallback(
+    (start: number, end: number) => {
+      const v = videoRef.current;
+      if (!v) return;
+      v.currentTime = Math.max(0, start);
+      setSegmentEnd(end);
+      // Defer play one tick so currentTime takes effect. Catches the
+      // rare autoplay-blocked error so we don't crash on strict
+      // browsers.
+      v.play().catch(() => {});
+    },
+    []
+  );
+  // Auto-pause when we reach the segment's end time. One-shot — the
+  // useEffect clears segmentEnd after firing.
+  useEffect(() => {
+    if (segmentEnd == null) return;
+    const v = videoRef.current;
+    if (!v) return;
+    if (currentTime >= segmentEnd - 0.05) {
+      v.pause();
+      setSegmentEnd(null);
+    }
+  }, [currentTime, segmentEnd]);
 
   const record = useMemo(
     () =>
@@ -125,6 +167,41 @@ function LabelEditorInner() {
       (p) => (p.start_time ?? 0) >= 0
     );
   }, [record]);
+
+  // Off-beat moments from the AI's timing analysis, parsed to numeric
+  // seconds for the BeatPanel's red markers.
+  const offBeats = useMemo(() => {
+    const raw = record?.result?.categories?.timing?.off_beat_moments ?? [];
+    const out: Array<{ t: number; description?: string; beat_count?: string }> = [];
+    for (const m of raw) {
+      const ts = m.timestamp_approx?.trim();
+      if (!ts) continue;
+      // "0:23" / "0:23.5" / "23s" / "23.5"
+      let n: number | null = null;
+      if (ts.includes(":")) {
+        const parts = ts.split(":").map((p) => parseFloat(p));
+        if (parts.every((p) => Number.isFinite(p))) {
+          n =
+            parts.length === 2
+              ? parts[0] * 60 + parts[1]
+              : parts[0] * 3600 + parts[1] * 60 + parts[2];
+        }
+      } else {
+        const x = parseFloat(ts.replace(/s$/, ""));
+        n = Number.isFinite(x) ? x : null;
+      }
+      if (n == null) continue;
+      out.push({ t: n, description: m.description, beat_count: m.beat_count });
+    }
+    return out;
+  }, [record]);
+
+  const effectiveDuration =
+    videoDuration > 0
+      ? videoDuration
+      : record?.duration && record.duration > 0
+        ? record.duration
+        : 0;
 
   // Match AI patterns to existing labels — if the user has already
   // accepted/edited an AI block, we know not to show it as pending.
@@ -330,12 +407,18 @@ function LabelEditorInner() {
         <Card>
           <CardContent className="p-0 overflow-hidden">
             <video
+              ref={videoRef}
               src={videoUrl}
               controls
               playsInline
               className="w-full bg-black max-h-[60vh]"
               onTimeUpdate={(e) =>
                 setCurrentTime((e.target as HTMLVideoElement).currentTime)
+              }
+              onLoadedMetadata={(e) =>
+                setVideoDuration(
+                  (e.target as HTMLVideoElement).duration || 0
+                )
               }
             />
           </CardContent>
@@ -349,6 +432,24 @@ function LabelEditorInner() {
         </Card>
       ) : (
         <p className="text-sm text-muted-foreground">Loading video…</p>
+      )}
+
+      {/* Beat map — easier to see if a labeled window aligns with
+          the music's beat / phrase structure. Click to seek the video
+          to that spot. */}
+      {effectiveDuration > 0 && (
+        <Card>
+          <CardContent className="py-3">
+            <BeatPanel
+              grid={record.result?.beat_grid}
+              offBeats={offBeats}
+              effectiveDuration={effectiveDuration}
+              currentTime={currentTime}
+              playbackRate={1}
+              onSeek={seekVideo}
+            />
+          </CardContent>
+        </Card>
       )}
 
       {/* AI suggestions — pending blocks the user hasn't accepted/edited yet. */}
@@ -366,14 +467,20 @@ function LabelEditorInner() {
               const e = (p.end_time ?? p.start_time ?? 0).toFixed(2);
               const isAccepted = acceptedWindows.has(`${s}-${e}`);
               if (isAccepted) return null;
+              const startSec = p.start_time ?? 0;
+              const endSec = p.end_time ?? startSec;
               return (
                 <div
                   key={idx}
-                  className="flex items-center gap-2 flex-wrap p-2 rounded-md border border-border/60 bg-muted/10"
+                  className="flex items-center gap-2 flex-wrap p-2 rounded-md border border-border/60 bg-muted/10 hover:bg-muted/20 transition-colors cursor-pointer"
+                  onClick={() => playSegment(startSec, endSec)}
+                  role="button"
+                  tabIndex={0}
+                  title="Click to play just this segment"
                 >
+                  <Play className="h-3 w-3 text-muted-foreground shrink-0" />
                   <span className="font-mono text-xs tabular-nums text-muted-foreground w-24 shrink-0">
-                    {formatTime(p.start_time ?? 0)}–
-                    {formatTime(p.end_time ?? p.start_time ?? 0)}
+                    {formatTime(startSec)}–{formatTime(endSec)}
                   </span>
                   <span className="text-sm truncate flex-1 min-w-[120px]">
                     <span className="font-medium">{p.name}</span>
@@ -384,7 +491,10 @@ function LabelEditorInner() {
                       </span>
                     )}
                   </span>
-                  <div className="flex items-center gap-1.5 shrink-0">
+                  <div
+                    className="flex items-center gap-1.5 shrink-0"
+                    onClick={(e) => e.stopPropagation()}
+                  >
                     <Button
                       size="sm"
                       variant="outline"
@@ -434,8 +544,13 @@ function LabelEditorInner() {
             labels.map((l) => (
               <div
                 key={l.id}
-                className="flex items-center gap-2 flex-wrap p-2 rounded-md border border-border/60"
+                className="flex items-center gap-2 flex-wrap p-2 rounded-md border border-border/60 hover:bg-muted/10 transition-colors cursor-pointer"
+                onClick={() => playSegment(l.start_time, l.end_time)}
+                role="button"
+                tabIndex={0}
+                title="Click to play just this segment"
               >
+                <Play className="h-3 w-3 text-muted-foreground shrink-0" />
                 <span className="font-mono text-xs tabular-nums text-muted-foreground w-24 shrink-0">
                   {formatTime(l.start_time)}–{formatTime(l.end_time)}
                 </span>
@@ -470,7 +585,10 @@ function LabelEditorInner() {
                       ? "ai ✓"
                       : "ai ✎"}
                 </Badge>
-                <div className="flex items-center gap-1.5 shrink-0">
+                <div
+                  className="flex items-center gap-1.5 shrink-0"
+                  onClick={(e) => e.stopPropagation()}
+                >
                   <Button
                     size="sm"
                     variant="ghost"
