@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Info, Trash2 } from "lucide-react";
+import { MonthlyUsageCard } from "@/components/settings/monthly-usage-card";
 
 export default function SettingsPage() {
   const handleClearData = () => {
@@ -23,6 +24,8 @@ export default function SettingsPage() {
         <h1 className="text-2xl font-bold">Settings</h1>
         <p className="text-muted-foreground">App preferences</p>
       </div>
+
+      <MonthlyUsageCard />
 
       <Card>
         <CardHeader>

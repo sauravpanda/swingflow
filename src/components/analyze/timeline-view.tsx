@@ -422,6 +422,21 @@ export function TimelineView({
         />
       )}
 
+      {/* Beat map — rendered as its own separate graph ABOVE the
+          pattern timeline so users can visually track the rhythm
+          independently of pattern blocks. Shows detected beats,
+          downbeats, phrase markers, and AI-flagged off-beat moments.
+          BeatPanel renders a clear empty state when beat_grid is
+          missing (silent-fallback or old analyses) rather than
+          hiding the whole section. */}
+      <BeatPanel
+        grid={result.beat_grid}
+        offBeats={offBeats}
+        effectiveDuration={effectiveDuration}
+        currentTime={currentTime}
+        onSeek={seek}
+      />
+
       {/* Pattern timeline = the scrubber (single source of truth) */}
       <div className="space-y-1.5">
         <div className="flex items-center justify-between text-xs text-muted-foreground gap-2">
@@ -663,19 +678,7 @@ export function TimelineView({
           })()}
         </div>
 
-        {/* Beat-map strip — renders the detected beat grid underneath
-            the pattern timeline so users practicing at slow speed can
-            visually track boom-tick-boom-tick against what they hear.
-            Hidden when beat detection failed (silent-fallback path). */}
-        {result.beat_grid &&
-          (result.beat_grid.beats?.length ?? 0) > 0 && (
-            <BeatStrip
-              grid={result.beat_grid}
-              effectiveDuration={effectiveDuration}
-              currentTime={currentTime}
-              onSeek={seek}
-            />
-          )}
+        {/* Beat map moved above the pattern timeline — see BeatPanel. */}
 
         {/* Legend */}
         <div className="flex flex-wrap items-center gap-3 text-[10px] text-muted-foreground pt-1">
@@ -1007,13 +1010,57 @@ function SpeedSelector({
   );
 }
 
+function BeatPanel({
+  grid,
+  offBeats,
+  effectiveDuration,
+  currentTime,
+  onSeek,
+}: {
+  grid: VideoScoreResult["beat_grid"] | null | undefined;
+  offBeats: Array<{ t: number; description?: string; beat_count?: string }>;
+  effectiveDuration: number;
+  currentTime: number;
+  onSeek: (t: number) => void;
+}) {
+  // Empty state — beat detection didn't run or failed. Render a clear
+  // placeholder instead of silently hiding the strip so the user can
+  // tell this is a missing signal vs. a UI bug.
+  const hasBeats = grid && (grid.beats?.length ?? 0) > 0;
+  if (!hasBeats) {
+    return (
+      <div className="space-y-1.5">
+        <div className="flex items-center justify-between text-xs text-muted-foreground">
+          <span className="font-medium uppercase tracking-wide">Beat map</span>
+          <span className="text-[10px]">not available</span>
+        </div>
+        <div className="h-7 rounded-md bg-muted/20 border border-dashed border-border flex items-center justify-center text-[11px] text-muted-foreground px-3">
+          Beat detection wasn&rsquo;t available for this analysis — re-analyze
+          to generate a beat grid.
+        </div>
+      </div>
+    );
+  }
+  return (
+    <BeatStrip
+      grid={grid}
+      offBeats={offBeats}
+      effectiveDuration={effectiveDuration}
+      currentTime={currentTime}
+      onSeek={onSeek}
+    />
+  );
+}
+
 function BeatStrip({
   grid,
+  offBeats,
   effectiveDuration,
   currentTime,
   onSeek,
 }: {
   grid: NonNullable<VideoScoreResult["beat_grid"]>;
+  offBeats: Array<{ t: number; description?: string; beat_count?: string }>;
   effectiveDuration: number;
   currentTime: number;
   onSeek: (t: number) => void;
@@ -1070,7 +1117,7 @@ function BeatStrip({
   }, [visibleBeats, downbeatSet]);
 
   return (
-    <div className="space-y-1.5 pt-1">
+    <div className="space-y-1.5">
       <div className="flex items-center justify-between text-xs text-muted-foreground">
         <span className="font-medium uppercase tracking-wide">Beat map</span>
         <span className="text-[10px] tabular-nums">
@@ -1082,11 +1129,11 @@ function BeatStrip({
       </div>
       <div
         ref={barRef}
-        className="relative h-7 rounded-md bg-muted/30 border border-border overflow-hidden cursor-pointer"
+        className="relative h-8 rounded-md bg-muted/30 border border-border overflow-hidden cursor-pointer"
         onClick={scrub}
         role="img"
         aria-label={`Beat map — ${downbeats.length} bars at ${grid.bpm.toFixed(0)} BPM`}
-        title="Click to seek. Tall ticks = downbeats (boom). Short = offbeats (tick)."
+        title="Click to seek. Tall ticks = downbeats (boom). Short = offbeats (tick). Red dots = AI-flagged off-beat."
       >
         {/* Beat ticks */}
         {renderedBeats.map((b, i) => {
@@ -1114,6 +1161,19 @@ function BeatStrip({
             title={`Phrase ${i + 1} at ${formatTime(t)}`}
           />
         ))}
+        {/* Off-beat markers — red dots from AI timing analysis. */}
+        {offBeats.map((m, i) => (
+          <div
+            key={`ob-${i}`}
+            className="absolute top-0 h-2 w-2 -translate-x-1/2 rounded-full bg-rose-500 shadow-[0_0_0_1px_rgba(0,0,0,0.5)] pointer-events-auto"
+            style={{ left: `${(m.t / effectiveDuration) * 100}%` }}
+            title={
+              m.description
+                ? `Off-beat at ${m.beat_count ?? formatTime(m.t)}: ${m.description}`
+                : `Off-beat at ${formatTime(m.t)}`
+            }
+          />
+        ))}
         {/* Playhead */}
         <div
           className="absolute top-0 bottom-0 w-[2px] bg-foreground pointer-events-none"
@@ -1135,6 +1195,12 @@ function BeatStrip({
           <span className="flex items-center gap-1.5">
             <span className="inline-block h-3 w-[2px] bg-amber-400/60" />
             phrase (every 8)
+          </span>
+        )}
+        {offBeats.length > 0 && (
+          <span className="flex items-center gap-1.5">
+            <span className="inline-block h-2 w-2 rounded-full bg-rose-500" />
+            off-beat ({offBeats.length})
           </span>
         )}
       </div>
