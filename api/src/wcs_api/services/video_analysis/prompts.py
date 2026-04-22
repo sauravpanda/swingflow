@@ -770,6 +770,24 @@ ANTI-DEFAULT RULES (user feedback shows this tool over-uses "basic"):
   itself is clear but the variant is genuinely unreadable (bad camera
   angle, dancers obscured). If you use null, confidence must be <0.7.
 
+ANTI-NULL RULE (recent regression, real example: 33 patterns
+identified, 33 variants returned as null — that is a model bug, not a
+clean clip):
+- If you can confidently name the family (`name` is set, confidence
+  ≥0.7), you MUST commit to a variant. Either pick the specific
+  variant you saw, or "basic" if you watched the full pattern and saw
+  no distinguishing features.
+- Returning `variant: null` while also reporting `confidence ≥ 0.7`
+  is contradictory — if you could see the pattern clearly enough to
+  call its family with high confidence, you saw enough to know whether
+  it had variant features or executed plain. Pick "basic" or pick the
+  variant; do not abstain.
+- An entire dance returning all-null variants is almost never correct.
+  Real WCS dances mix basic patterns with at least a few variants
+  (inside-turn passes, sugar tucks, reverse whips, basket whips). If
+  your draft has zero variants in 20+ patterns, re-watch — you are
+  almost certainly missing them.
+
 Example: a clear basket whip → `{name: "whip", variant: "basket",
 visual_cue: "follower's hand held behind back from 3-5"}`. A plain
 whip with no added features → `{name: "whip", variant: "basic"}`.
