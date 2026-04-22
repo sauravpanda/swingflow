@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { TrendingUp, Trash2, ExternalLink } from "lucide-react";
+import { TrendingUp, ExternalLink } from "lucide-react";
 import type { ChartMetric, ChartRecord } from "@/hooks/use-analysis-history";
 
 const METRIC_TABS: Array<{ key: ChartMetric; label: string }> = [
@@ -43,7 +43,6 @@ type Point = {
   // rather than `created_at` — useful for the hover tooltip so
   // viewers understand why a clip sits where it does.
   from_event_date: boolean;
-  deleted: boolean;
 };
 
 type MonthBucket = {
@@ -114,7 +113,6 @@ function buildBuckets(
       competition_level: r.competition_level,
       tags: r.tags,
       from_event_date: fromEvent,
-      deleted: Boolean(r.deleted_at),
     });
   }
   if (points.length === 0) return [];
@@ -256,7 +254,6 @@ export function ScoreTrendChart({
   const scores = allPoints.map((p) => p.score);
   const bestScore = Math.max(...scores);
   const avgAll = scores.reduce((a, b) => a + b, 0) / scores.length;
-  const deletedCount = allPoints.filter((p) => p.deleted).length;
 
   return (
     <Card>
@@ -269,12 +266,6 @@ export function ScoreTrendChart({
           <span className="text-xs font-normal text-muted-foreground tabular-nums">
             {monthsWithData} month{monthsWithData === 1 ? "" : "s"} · avg{" "}
             {avgAll.toFixed(1)} · best {bestScore.toFixed(1)}
-            {deletedCount > 0 && (
-              <span className="ml-2 inline-flex items-center gap-1">
-                <Trash2 className="h-3 w-3" />
-                {deletedCount} deleted
-              </span>
-            )}
           </span>
         </CardTitle>
         <div className="flex flex-wrap gap-1">
@@ -325,12 +316,6 @@ export function ScoreTrendChart({
                 · {hovered.score.toFixed(1)}
               </span>
             </div>
-            {hovered.deleted && (
-              <span className="text-[10px] text-muted-foreground mt-0.5 flex items-center gap-1">
-                <Trash2 className="h-3 w-3" />
-                Deleted from your list — kept for trend history
-              </span>
-            )}
           </button>
         )}
       </CardContent>
@@ -486,9 +471,8 @@ function TrendSVG({
           );
         })}
 
-        {/* Individual analysis dots. Soft-deleted rows render as
-            hollow outlines so the user can tell them apart from
-            active analyses at a glance. */}
+        {/* Individual analysis dots. Deleted rows are filtered out
+            upstream in useAnalysisHistory so they never reach here. */}
         {buckets.flatMap((b, i) =>
           b.points.map((p, pi) => {
             const jitter =
@@ -505,11 +489,10 @@ function TrendSVG({
                 cx={cx}
                 cy={cy}
                 r={isActive ? 5 : 3.5}
-                fill={p.deleted ? "transparent" : color}
-                stroke={p.deleted ? color : "white"}
-                strokeOpacity={p.deleted ? 0.9 : 0.2}
-                strokeWidth={p.deleted ? 1.5 : 1}
-                strokeDasharray={p.deleted ? "2 1.5" : undefined}
+                fill={color}
+                stroke="white"
+                strokeOpacity={0.2}
+                strokeWidth={1}
                 className="cursor-pointer transition-all"
                 onMouseEnter={() => setHovered(p)}
                 onMouseLeave={() => setHovered(null)}
@@ -533,8 +516,7 @@ function TrendSVG({
                     p.date.toLocaleDateString("en-US", {
                       month: "short",
                       day: "numeric",
-                    }) +
-                    (p.deleted ? " (deleted)" : "")}
+                    })}
                 </title>
               </circle>
             );
