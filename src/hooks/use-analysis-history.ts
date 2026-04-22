@@ -92,15 +92,17 @@ export function useAnalysisHistory() {
       .order("created_at", { ascending: false })
       .limit(200);
 
-    // Chart records — includes soft-deleted rows so the user can see
-    // their historical progress even after cleanup. Projects only
-    // what the chart needs (score, tags, event metadata) so we can
-    // pull more rows without the cost of full result JSON each.
+    // Chart records — filtered to non-deleted rows only. If the user
+    // deleted an analysis, they don't want that data point lingering
+    // on their progress chart ("it doesn't make sense"). Projects
+    // only what the chart needs (score, tags, event metadata) so we
+    // can pull more rows without the cost of full result JSON each.
     const chartPromise = sb
       .from("video_analyses")
       .select(
         "id, filename, created_at, event_date, deleted_at, event_name, stage, competition_level, tags, result"
       )
+      .is("deleted_at", null)
       .order("created_at", { ascending: true })
       .limit(1000);
 
