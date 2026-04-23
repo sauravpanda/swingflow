@@ -135,3 +135,18 @@ export function variantsFor(familyId: string): PatternVariant[] {
     (v) => v.families.includes("*") || v.families.includes(familyId)
   );
 }
+
+/** Sentinel value the family Select uses to switch into free-text mode.
+ *  Never written to pattern_labels.name — the editor swaps it out for
+ *  whatever the user types. */
+export const CUSTOM_FAMILY_SENTINEL = "__custom__";
+
+/** Counts available in the editor. 6 and 8 cover the canonical WCS
+ *  patterns; 10 / 12 / 16 are for conjoined / extended patterns
+ *  (e.g. a sugar push joined with a tuck and a free spin makes a
+ *  multi-phrase block the user wants to label as one unit). */
+export const PATTERN_COUNTS: number[] = [6, 8, 10, 12, 16];
+
+export function isKnownFamily(name: string): boolean {
+  return PATTERN_FAMILIES.some((f) => f.id === name);
+}
