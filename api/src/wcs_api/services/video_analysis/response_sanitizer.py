@@ -403,11 +403,19 @@ def _summarize_patterns(
         # the UI can render them with a "low confidence" marker) but
         # don't contribute to "7 underarm turns" aggregates the user
         # would otherwise read as a definitive tally.
+        #
+        # Threshold is 0.25, not 0.5: post-#147 the model started
+        # hedging confidence to 0.2-0.3 across the board (see
+        # 483af468 / de04ef4a). At 0.5 cutoff that wiped out
+        # pattern_summary entirely on those analyses, which in turn
+        # starved the strengths/improvements fallback in #148. Better
+        # to show a slightly noisier summary than a totally empty
+        # coaching panel.
         try:
             confidence = float(p.get("confidence", _CONFIDENCE_UNSET))
         except (TypeError, ValueError):
             confidence = _CONFIDENCE_UNSET
-        if confidence < 0.5:
+        if confidence < 0.25:
             continue
         # Key on (family + variant) so "basket whip" and "reverse whip"
         # count as distinct patterns even though they share the "whip"
