@@ -227,19 +227,21 @@ def analyze_video_path(
             state_name = uploaded.state.name if uploaded.state else "UNKNOWN"
             raise VideoAnalysisError(f"Gemini file upload state: {state_name}")
 
-        # Wrap the uploaded video with an explicit fps=4 sampling
-        # hint. Default Gemini sampling is ~1 FPS; at 2 FPS the model
-        # was catching syncopation but routinely confusing rotational
-        # patterns (free spin, catch-and-release, basket whip) with
-        # travelling ones (left/right side pass) — at 2 FPS a 360°
-        # spin lasting ~1 second only shows up in 2 frames, not enough
-        # to read the rotation count vs. a partner pass-through. At
-        # 4 FPS those same spins get 4 frames, enough to lock in
-        # "follower spun in place" vs. "follower travelled past lead".
-        # Video token cost ~2x relative to fps=2 (~4x relative to
-        # default), but our clips are short so the absolute cost stays
-        # bounded.
-        video_part = _video_part_with_fps(uploaded, fps=4.0)
+        # Wrap the uploaded video with an explicit fps=2 sampling hint.
+        # Default Gemini sampling is ~1 FPS; doubling it catches the
+        # "&" counts between beats (kick-ball-changes, quick anchor
+        # settles) that 1 FPS routinely misses. Video token cost ~2x,
+        # still bounded because we only upload short clips.
+        #
+        # NOTE: We tried fps=4 in #151 to give the model more frames
+        # to distinguish rotational patterns (free spin) from
+        # travelling ones (side pass), but on the verification re-run
+        # the model didn't identify any new free spins or non-basic
+        # variants — pattern variety actually went down slightly. The
+        # fps lever isn't the bottleneck for that recognition; it's
+        # the model's defaulting behavior. Reverted to fps=2 to save
+        # the 2x video token cost.
+        video_part = _video_part_with_fps(uploaded, fps=2.0)
 
         prompt = GEMINI_VIDEO_PROMPT
 

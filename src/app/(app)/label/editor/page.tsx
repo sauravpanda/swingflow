@@ -61,6 +61,9 @@ import {
 } from "@/hooks/use-pattern-labels";
 import {
   PATTERN_FAMILIES,
+  PATTERN_COUNTS,
+  CUSTOM_FAMILY_SENTINEL,
+  isKnownFamily,
   normalizePatternName,
   variantsFor,
   type PatternFamily,
@@ -672,7 +675,20 @@ function EditLabelDialog({
   const canSave =
     state.name.trim().length > 0 && state.end_time > state.start_time;
 
+  // True when the editor is in custom-pattern mode: either the user
+  // just picked "Other" (state.name === "") or the existing label was
+  // saved with a non-canonical name we don't recognize. Custom mode
+  // hides the variant dropdown (variants are family-scoped and don't
+  // make sense for ad-hoc labels) and shows a free-text input.
+  const isCustom = !isKnownFamily(state.name);
+
   const handleFamilyChange = (id: string) => {
+    if (id === CUSTOM_FAMILY_SENTINEL) {
+      // Drop into custom mode with a fresh empty name. The text input
+      // below will collect what the user actually wants to call it.
+      onChange({ ...state, name: "", variant: "" });
+      return;
+    }
     const fam = PATTERN_FAMILIES.find((f) => f.id === id);
     onChange({
       ...state,
@@ -731,7 +747,10 @@ function EditLabelDialog({
 
           <div className="space-y-1.5">
             <Label>Pattern family</Label>
-            <Select value={state.name} onValueChange={handleFamilyChange}>
+            <Select
+              value={isCustom ? CUSTOM_FAMILY_SENTINEL : state.name}
+              onValueChange={handleFamilyChange}
+            >
               <SelectTrigger>
                 <SelectValue placeholder="Pick a pattern" />
               </SelectTrigger>
@@ -748,11 +767,36 @@ function EditLabelDialog({
                     ))}
                   </SelectGroup>
                 ))}
+                <SelectGroup>
+                  <SelectLabel className="text-[10px] uppercase tracking-wide">
+                    custom
+                  </SelectLabel>
+                  <SelectItem value={CUSTOM_FAMILY_SENTINEL}>
+                    Other (type your own)
+                  </SelectItem>
+                </SelectGroup>
               </SelectContent>
             </Select>
           </div>
 
-          {availableVariants.length > 1 && (
+          {isCustom && (
+            <div className="space-y-1.5">
+              <Label htmlFor="custom-name">Pattern name</Label>
+              <Input
+                id="custom-name"
+                value={state.name}
+                onChange={(e) => onChange({ ...state, name: e.target.value })}
+                placeholder="e.g. sugar push + tuck combo"
+                maxLength={120}
+                autoFocus
+              />
+              <p className="text-[11px] text-muted-foreground">
+                Use this for conjoined patterns or moves not in the dropdown.
+              </p>
+            </div>
+          )}
+
+          {!isCustom && availableVariants.length > 1 && (
             <div className="space-y-1.5">
               <Label>Variant</Label>
               <Select
@@ -782,11 +826,15 @@ function EditLabelDialog({
               }
             >
               <SelectTrigger>
-                <SelectValue placeholder="6 or 8" />
+                <SelectValue placeholder="6, 8, or longer" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="6">6-count</SelectItem>
-                <SelectItem value="8">8-count</SelectItem>
+                {PATTERN_COUNTS.map((n) => (
+                  <SelectItem key={n} value={String(n)}>
+                    {n}-count
+                    {n > 8 ? " (conjoined)" : ""}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
