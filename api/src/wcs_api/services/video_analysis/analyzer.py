@@ -257,6 +257,7 @@ def analyze_video_path(
             beat_context,
             first_downbeat_sec,
             beat_grid,
+            beat_grid_error,
         ) = _extract_beat_context(video_path)
         if beat_context:
             prompt = f"{beat_context}\n\n{prompt}"
@@ -505,6 +506,7 @@ def analyze_video_path(
         dance_start_sec=dance_start_sec,
         dance_end_sec=dance_end_sec,
         beat_grid=beat_grid,
+        beat_grid_error=beat_grid_error,
         user_song_style=user_song_style,
     )
 

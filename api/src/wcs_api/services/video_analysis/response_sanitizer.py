@@ -1091,6 +1091,7 @@ def _shape_response(
     dance_start_sec: float | None = None,
     dance_end_sec: float | None = None,
     beat_grid: dict[str, Any] | None = None,
+    beat_grid_error: str | None = None,
     user_song_style: str | None = None,
 ) -> dict[str, Any]:
     """Map Gemini's rich response into the API's return shape.
@@ -1240,6 +1241,7 @@ def _shape_response(
         "dance_start_sec": dance_start_sec,
         "dance_end_sec": dance_end_sec,
         "beat_grid": beat_grid,
+        "beat_grid_error": beat_grid_error,
         "strengths": strengths,
         "improvements": improvements,
         "lead": parsed.get("lead"),
