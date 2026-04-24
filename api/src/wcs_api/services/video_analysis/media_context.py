@@ -120,7 +120,7 @@ def _detect_motion_floor(video_path: str) -> float | None:
 
 def _extract_beat_context(
     video_path: str,
-) -> tuple[str | None, float | None, dict[str, Any] | None]:
+) -> tuple[str | None, float | None, dict[str, Any] | None, str | None]:
     """Pull audio out of the video, run beat tracking (Beat This!
     preferred, librosa fallback), and return a prompt-ready string
     plus the first detected downbeat (seconds) plus a compact
@@ -141,8 +141,11 @@ def _extract_beat_context(
     pulse matches what they hear — a fast diagnostic when the
     pattern timing feels off.
 
-    Silent-fail on any error — this is a best-effort enrichment,
-    not a blocker on the analysis itself.
+    Returns a 4-tuple `(prompt, first_downbeat, beat_grid, error)`.
+    On success, `error` is None. On failure, the first three are None
+    and `error` is a short tag (e.g. `"track_returned_none"`,
+    `"ffmpeg_failed"`, `"exception:ImportError"`) the caller persists
+    so we can grep failing analyses without log diving.
     """
     try:
         from ..beat_tracker import (
@@ -153,26 +156,53 @@ def _extract_beat_context(
 
         wav_path = tempfile.NamedTemporaryFile(delete=False, suffix=".wav").name
         try:
-            subprocess.run(
-                [
-                    "ffmpeg",
-                    "-y",
-                    "-i",
+            try:
+                subprocess.run(
+                    [
+                        "ffmpeg",
+                        "-y",
+                        "-i",
+                        video_path,
+                        "-vn",
+                        "-ac",
+                        "1",
+                        "-ar",
+                        "22050",
+                        wav_path,
+                    ],
+                    capture_output=True,
+                    check=True,
+                    timeout=60,
+                )
+            except subprocess.CalledProcessError as exc:
+                logger.error(
+                    "video_analysis.beat_context_ffmpeg_failed video=%s rc=%s stderr=%r",
                     video_path,
-                    "-vn",
-                    "-ac",
-                    "1",
-                    "-ar",
-                    "22050",
-                    wav_path,
-                ],
-                capture_output=True,
-                check=True,
-                timeout=60,
-            )
+                    exc.returncode,
+                    (exc.stderr or b"")[:500],
+                )
+                return None, None, None, "ffmpeg_failed"
+            except subprocess.TimeoutExpired:
+                logger.error(
+                    "video_analysis.beat_context_ffmpeg_timeout video=%s",
+                    video_path,
+                )
+                return None, None, None, "ffmpeg_timeout"
             result = track_beats(wav_path)
-            if result is None or len(result.beats) < 4:
-                return None, None, None
+            if result is None:
+                logger.error(
+                    "video_analysis.beat_context_track_failed video=%s "
+                    "(both Beat This! and librosa returned None — see prior warnings)",
+                    video_path,
+                )
+                return None, None, None, "track_returned_none"
+            if len(result.beats) < 4:
+                logger.error(
+                    "video_analysis.beat_context_too_few_beats video=%s n_beats=%d",
+                    video_path,
+                    len(result.beats),
+                )
+                return None, None, None, "too_few_beats"
             bpm = result.bpm
             # Swing-ratio heuristic: tells us whether eighth notes are
             # swung (blues, shuffle) or straight (contemporary, pop).
@@ -349,7 +379,7 @@ def _extract_beat_context(
                 "swing_ratio": swing_ratio,
                 "detected_style": detected_style,
             }
-            return prompt_text, first_downbeat_sec, beat_grid
+            return prompt_text, first_downbeat_sec, beat_grid, None
         finally:
             try:
                 os.unlink(wav_path)
@@ -358,15 +388,16 @@ def _extract_beat_context(
     except Exception as exc:  # noqa: BLE001
         # Silent failure here cascades into an empty `beat_grid` and a
         # missing `first_downbeat_sec` floor on the analyzer, which
-        # then lets pre-dance hallucinations through. Log loud enough
-        # that Railway logs show why the beat context is absent when
-        # a real analysis ships with beat_grid={}.
-        logger.warning(
+        # then lets pre-dance hallucinations through. Log at error so
+        # Railway log queries surface it by default, and return the
+        # exception class as the persisted reason so we can grep
+        # video_analyses.result->>beat_grid_error in Supabase.
+        logger.error(
             "video_analysis.beat_context_failed video=%s error=%r",
             video_path,
             exc,
         )
-        return None, None, None
+        return None, None, None, f"exception:{type(exc).__name__}"
 
 
 # ─────────────────────────────────────────────────────────────────────
