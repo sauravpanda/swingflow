@@ -439,10 +439,16 @@ def analyze_video_path(
                 dance_end_sec=dance_end_sec,
             )
             try:
+                # Preserve the full original prompt context on retry:
+                # user metadata, beat context, motion-floor note, and
+                # the dedicated pattern pre-pass timeline. Retrying
+                # with only the correction prompt was effectively
+                # asking Gemini to "fix" a grounded response after
+                # stripping away the grounding that produced it.
                 retry_raw, retry_usage = _call_gemini(
                     client,
                     settings.gemini_model,
-                    contents=[video_part, retry_prompt],
+                    contents=[video_part, prompt, retry_prompt],
                     seed=seed,
                 )
                 total_prompt_tokens += int(retry_usage.get("prompt_tokens", 0))

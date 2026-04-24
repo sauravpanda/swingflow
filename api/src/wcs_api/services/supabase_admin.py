@@ -6,6 +6,7 @@ trusted server-side code (webhooks, quota enforcement, etc.).
 
 from __future__ import annotations
 
+import uuid
 from typing import Any
 
 import httpx
@@ -239,6 +240,70 @@ async def get_analysis_result(analysis_id: str) -> dict[str, Any] | None:
             return None
         result = rows[0].get("result")
         return result if isinstance(result, dict) else None
+
+
+async def get_analysis_eval_row(analysis_ref: str) -> dict[str, Any] | None:
+    """Lookup an analysis for offline eval work.
+
+    Accepts either the row UUID or the original filename / clip id.
+    Returns the stored result blob plus basic identifiers so CLI
+    tooling can print clear output.
+    """
+    select = "id,filename,result,created_at"
+    # video_analyses.id is a uuid column — PostgREST returns 400 if we
+    # filter it with a non-UUID string, which would shadow the filename
+    # fallback the CLI relies on for clip-name refs like IMG_9577.
+    try:
+        uuid.UUID(str(analysis_ref))
+        is_uuid = True
+    except ValueError:
+        is_uuid = False
+    async with httpx.AsyncClient(timeout=10) as client:
+        if is_uuid:
+            r = await client.get(
+                _rest("video_analyses"),
+                headers=_headers(),
+                params={
+                    "select": select,
+                    "id": f"eq.{analysis_ref}",
+                },
+            )
+            r.raise_for_status()
+            rows = r.json()
+            if rows:
+                return rows[0]
+
+        r = await client.get(
+            _rest("video_analyses"),
+            headers=_headers(),
+            params={
+                "select": select,
+                "filename": f"eq.{analysis_ref}",
+            },
+        )
+        r.raise_for_status()
+        rows = r.json()
+        return rows[0] if rows else None
+
+
+async def get_pattern_labels(analysis_id: str) -> list[dict[str, Any]]:
+    """Service-role read of user-authored labels for one analysis."""
+    async with httpx.AsyncClient(timeout=10) as client:
+        r = await client.get(
+            _rest("pattern_labels"),
+            headers=_headers(),
+            params={
+                "analysis_id": f"eq.{analysis_id}",
+                "select": (
+                    "id,analysis_id,start_time,end_time,name,variant,"
+                    "count,source,notes,updated_at"
+                ),
+                "order": "start_time.asc",
+            },
+        )
+        r.raise_for_status()
+        rows = r.json()
+        return rows if isinstance(rows, list) else []
 
 
 async def get_analysis_minimal(
