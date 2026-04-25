@@ -8,132 +8,15 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { ChevronDown, ChevronRight, Grip } from "lucide-react";
+import { ChevronDown, ChevronRight, Grip, ArrowRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { AnalysisRecord } from "@/hooks/use-analysis-history";
-
-type Occurrence = {
-  analysisId: string;
-  createdAt: string;
-  startTime: number | null;
-  endTime: number | null;
-  quality: string | null;
-  timing: string | null;
-  filename: string | null;
-};
-
-type PatternAgg = {
-  name: string;
-  count: number;
-  strong: number;
-  solid: number;
-  needsWork: number;
-  weak: number;
-  onBeat: number;
-  slightlyOff: number;
-  offBeat: number;
-  occurrences: Occurrence[];
-};
-
-function normalizeName(raw: string): string {
-  // Collapse whitespace + lowercase so "Sugar Push" and "sugar  push"
-  // aggregate together. We don't touch variant/sub-type here — the
-  // family-level roll-up is what the user wants on the dashboard.
-  return raw.trim().toLowerCase().replace(/\s+/g, " ");
-}
-
-function titleCase(s: string): string {
-  return s
-    .split(" ")
-    .filter(Boolean)
-    .map((w) => w[0].toUpperCase() + w.slice(1))
-    .join(" ");
-}
-
-function aggregate(records: AnalysisRecord[]): PatternAgg[] {
-  const byName = new Map<string, PatternAgg>();
-  for (const r of records) {
-    // Skip low-confidence analyses so noisy model output doesn't
-    // pollute the pattern stats. Once timeline_locked lands server-
-    // side this can switch to that flag (see #109 scope notes).
-    if (r.result?.overall?.confidence === "low") continue;
-    const patterns = r.result?.patterns_identified ?? [];
-    for (const p of patterns) {
-      if (!p?.name) continue;
-      const key = normalizeName(p.name);
-      if (!key) continue;
-      const existing =
-        byName.get(key) ??
-        ({
-          name: key,
-          count: 0,
-          strong: 0,
-          solid: 0,
-          needsWork: 0,
-          weak: 0,
-          onBeat: 0,
-          slightlyOff: 0,
-          offBeat: 0,
-          occurrences: [],
-        } satisfies PatternAgg);
-      existing.count += 1;
-      switch (p.quality) {
-        case "strong":
-          existing.strong += 1;
-          break;
-        case "solid":
-          existing.solid += 1;
-          break;
-        case "needs_work":
-          existing.needsWork += 1;
-          break;
-        case "weak":
-          existing.weak += 1;
-          break;
-      }
-      switch (p.timing) {
-        case "on_beat":
-          existing.onBeat += 1;
-          break;
-        case "slightly_off":
-          existing.slightlyOff += 1;
-          break;
-        case "off_beat":
-          existing.offBeat += 1;
-          break;
-      }
-      existing.occurrences.push({
-        analysisId: r.id,
-        createdAt: r.created_at,
-        startTime: typeof p.start_time === "number" ? p.start_time : null,
-        endTime: typeof p.end_time === "number" ? p.end_time : null,
-        quality: p.quality ?? null,
-        timing: p.timing ?? null,
-        filename: r.filename,
-      });
-      byName.set(key, existing);
-    }
-  }
-  // Sort by count desc, then name for determinism.
-  return Array.from(byName.values()).sort(
-    (a, b) => b.count - a.count || a.name.localeCompare(b.name)
-  );
-}
-
-function formatTime(sec: number): string {
-  if (!Number.isFinite(sec) || sec < 0) return "0:00";
-  const m = Math.floor(sec / 60);
-  const s = Math.floor(sec % 60);
-  return `${m}:${s.toString().padStart(2, "0")}`;
-}
-
-function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
-}
+import {
+  aggregatePatterns,
+  formatPatternDate,
+  formatPatternTime,
+  titleCasePattern,
+} from "@/lib/pattern-aggregation";
 
 export function PatternStatsCard({
   records,
@@ -143,7 +26,7 @@ export function PatternStatsCard({
   loading: boolean;
 }) {
   const [expanded, setExpanded] = useState<string | null>(null);
-  const aggs = useMemo(() => aggregate(records), [records]);
+  const aggs = useMemo(() => aggregatePatterns(records), [records]);
   // Cap the panel so the dashboard stays scannable. Anything past
   // the top 8 is long-tail and better viewed via /analyze → filter.
   const TOP_N = 8;
@@ -205,7 +88,7 @@ export function PatternStatsCard({
                       <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                     )}
                     <span className="font-medium flex-1 min-w-0 truncate">
-                      {titleCase(agg.name)}
+                      {titleCasePattern(agg.name)}
                     </span>
                     <span className="tabular-nums text-muted-foreground text-xs shrink-0">
                       ×{agg.count}
@@ -307,11 +190,11 @@ export function PatternStatsCard({
                                 )}
                               />
                               <span className="text-muted-foreground shrink-0 tabular-nums">
-                                {formatDate(occ.createdAt)}
+                                {formatPatternDate(occ.createdAt)}
                               </span>
                               {occ.startTime != null && (
                                 <span className="text-muted-foreground tabular-nums shrink-0">
-                                  {formatTime(occ.startTime)}
+                                  {formatPatternTime(occ.startTime)}
                                 </span>
                               )}
                               <span className="text-foreground truncate flex-1 min-w-0">
@@ -330,10 +213,16 @@ export function PatternStatsCard({
                 </div>
               );
             })}
-            {aggs.length > TOP_N && (
-              <p className="text-[11px] text-muted-foreground text-center pt-1">
-                Showing top {TOP_N} of {aggs.length} patterns.
-              </p>
+            {aggs.length > 0 && (
+              <Link
+                href="/dashboard/patterns"
+                className="flex items-center justify-center gap-1 text-[11px] text-muted-foreground hover:text-foreground transition-colors pt-1"
+              >
+                {aggs.length > TOP_N
+                  ? `View all ${aggs.length} patterns with filters`
+                  : "Open full pattern history"}
+                <ArrowRight className="h-3 w-3" />
+              </Link>
             )}
           </div>
         )}
