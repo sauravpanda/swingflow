@@ -29,6 +29,10 @@ type TimelineViewProps = {
   // on the shared view (no stable per-user id) so anonymous visitors
   // can't fiddle with the timeline. See #70.
   analysisId?: string;
+  // Initial seek target (seconds) honored once on mount. Used by
+  // the cross-analysis Patterns view (#138) to deep-link straight
+  // to a specific occurrence's start_time.
+  initialSeekSec?: number;
 };
 
 const QUALITY_COLOR: Record<string, string> = {
@@ -73,6 +77,7 @@ export function TimelineView({
   duration,
   videoSrc,
   analysisId,
+  initialSeekSec,
 }: TimelineViewProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [currentTime, setCurrentTime] = useState(0);
@@ -211,6 +216,24 @@ export function TimelineView({
   useEffect(() => {
     setVideoDuration(0);
   }, [videoSrc]);
+
+  // Honor the deep-link seek (`?t=...` from the cross-analysis
+  // Patterns view, #138) once per (video, target) pair. The
+  // `seek()` helper handles the not-yet-loaded case via a
+  // loadedmetadata listener, so we don't have to wait here.
+  const initialSeekKey = `${videoSrc ?? ""}|${initialSeekSec ?? ""}`;
+  const seekedForKeyRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (initialSeekSec == null || !Number.isFinite(initialSeekSec)) return;
+    if (!videoSrc) return;
+    if (seekedForKeyRef.current === initialSeekKey) return;
+    seekedForKeyRef.current = initialSeekKey;
+    seek(initialSeekSec);
+    // `seek` is referenced via closure and its identity changes per
+    // render; we intentionally only re-run when the deep-link key
+    // (videoSrc + target) changes, not on unrelated re-renders.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialSeekKey]);
 
   const seek = (t: number) => {
     const clamped = Math.max(0, Math.min(t, effectiveDuration));

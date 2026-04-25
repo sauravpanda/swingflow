@@ -166,7 +166,15 @@ export default function CrossAnalysisPatternsPage() {
   }, [filtered, sortMode]);
 
   const totalOccurrences = aggs.reduce((s, a) => s + a.count, 0);
-  const totalAnalyses = filtered.length;
+  // Count unique analyses that actually CONTRIBUTED a pattern, not
+  // every record that passed the filters. Matches the dashboard
+  // snapshot card's denominator so the two views stay consistent for
+  // users who eyeball both ("7 analyses" can't say 10 here and 7
+  // there for the same data).
+  const contributingAnalyses = new Set(
+    aggs.flatMap((a) => a.occurrences.map((o) => o.analysisId))
+  ).size;
+  const matchedClips = filtered.length;
 
   return (
     <div className="space-y-4 sm:space-y-6 max-w-5xl mx-auto">
@@ -249,7 +257,7 @@ export default function CrossAnalysisPatternsPage() {
         <span className="text-sm text-muted-foreground tabular-nums">
           {history.loading
             ? "Loading…"
-            : `${totalOccurrences} occurrences · ${aggs.length} patterns · ${totalAnalyses} analyses`}
+            : `${totalOccurrences} occurrences · ${aggs.length} patterns · ${contributingAnalyses} of ${matchedClips} clips`}
         </span>
         <div className="flex items-center gap-2">
           <span className="text-xs text-muted-foreground">Sort by</span>
@@ -277,7 +285,7 @@ export default function CrossAnalysisPatternsPage() {
         <Card>
           <CardContent className="py-10 text-center text-sm text-muted-foreground">
             No patterns matched these filters.{" "}
-            {totalAnalyses === 0 && allRecords.length > 0 && (
+            {matchedClips === 0 && allRecords.length > 0 && (
               <>Loosen the date/event/stage selection above.</>
             )}
             {allRecords.length === 0 && (
@@ -464,7 +472,11 @@ function PatternRow({
               .map((occ, i) => (
                 <Link
                   key={`${occ.analysisId}-${i}`}
-                  href={`/analysis?id=${encodeURIComponent(occ.analysisId)}`}
+                  href={
+                    occ.startTime != null
+                      ? `/analysis?id=${encodeURIComponent(occ.analysisId)}&t=${Math.floor(occ.startTime)}`
+                      : `/analysis?id=${encodeURIComponent(occ.analysisId)}`
+                  }
                   className="flex items-center gap-2 rounded px-1.5 py-1 hover:bg-muted/30 transition-colors"
                 >
                   <span

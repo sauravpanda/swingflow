@@ -49,6 +49,16 @@ function AnalysisPageInner() {
   const params = useSearchParams();
   const router = useRouter();
   const id = params.get("id");
+  // Optional deep-link timestamp (#138) — the cross-analysis Patterns
+  // view links here with `&t=<seconds>` so the video starts paused at
+  // the occurrence's start. We pass it down once; the timeline ignores
+  // changes to a value it has already honored for the current src.
+  const seekParam = params.get("t");
+  const initialSeekSec = (() => {
+    if (seekParam == null) return undefined;
+    const n = Number(seekParam);
+    return Number.isFinite(n) && n >= 0 ? n : undefined;
+  })();
 
   const history = useAnalysisHistory();
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
@@ -499,6 +509,7 @@ function AnalysisPageInner() {
         duration={record.duration ?? 0}
         videoSrc={videoUrl}
         analysisId={record.id}
+        initialSeekSec={initialSeekSec}
       />
 
       {/* Score + sub-scores + patterns + strengths + improvements */}
