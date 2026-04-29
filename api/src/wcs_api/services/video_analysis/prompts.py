@@ -4,6 +4,22 @@ from typing import Any
 
 from .response_sanitizer import _sanitize_user_field
 
+# ─── Style: role-neutral language only ───────────────────────────────
+# WCS roles (Lead, Follow) are not gender-bound. A user complained
+# after seeing the analyzer output gendered prose for a female-lead
+# clip. Keep all prompt text role-neutral:
+#   - Use `L` / `F` for the dancers, possessive `L's` / `F's`.
+#   - Use "the lead" / "the follow" when prose flow needs it.
+#   - Use `they` / `their` only when the role is genuinely ambiguous
+#     in context.
+#   - Never use he / she / him / her / his / hers / man's / woman's /
+#     ladies / gentlemen — anywhere in this file or the strings the
+#     model sees. Pattern names like "lead's turn" replace older
+#     "man's turn" terminology.
+# Same rule applies to coaching strings the model emits in the JSON
+# output (description, observed_cue, notes); the schema examples
+# below already model the convention.
+
 
 # Song-style labels we recognize from user-supplied tags. Keys are the
 # lowercased tokens we match against; values are the canonical label
@@ -130,7 +146,7 @@ are clean. So: score Novice Presentation in the 3–5 range even for flat \
 performances; only elevate toward 5–6 when partnership conversation and \
 micro-musicality (body pulse matching groove, small accents hit) are visibly \
 present. Common kills: train-wreck partnering, dropped triples under \
-pressure, disconnected hijacks (follower dropping the connection to do her \
+pressure, disconnected hijacks (follower dropping the connection to do their \
 own thing rather than authoring through it), attempting dips/syncopations \
 that fall apart.
 
@@ -260,14 +276,14 @@ a settled triple with weight back, marking end of pattern.
   · 2 — L steps back again, F steps forward again; compression builds
   · 3&4 — Triple: F compresses INTO L's hand pressure, light rebound
     in place. Hands stay in a V connection.
-  · 5-6 — Anchor: F triples BACKWARD to settle at her slot end.
+  · 5-6 — Anchor: F triples BACKWARD to settle at F's slot end.
   Locking cue: zero lateral slot travel and zero rotation; the F's
   feet return to roughly their starting position. If either appears,
   it's NOT a sugar push.
   Variants: *basic*, *with inside turn* (F adds inside turn on 3&4),
-  *with hand change* (L transfers F's hand to his other hand during
+  *with hand change* (L transfers F's hand to L's other hand during
   the compression), *with hand change behind the back* (L swaps hands
-  behind HIS back on the return), *body roll* (F adds a body roll
+  behind L's OWN back on the return), *body roll* (F adds a body roll
   styling on the anchor).
 
 - **Sugar tuck** — sugar-push shape PLUS a full follower tuck rotation
@@ -276,7 +292,7 @@ a settled triple with weight back, marking end of pattern.
   · 1-2 — same as sugar push (F walks in toward L)
   · 3&4 — Triple while F executes a full 360° tuck under L's raised
     left arm, caught on the close side
-  · 5-6 — Anchor back to her slot end
+  · 5-6 — Anchor back to F's slot end
   Locking cue: compression on 3 BEFORE the rotation; no slot travel.
 
 - **Left side pass** — F crosses the slot to L's LEFT side.
@@ -319,13 +335,13 @@ a settled triple with weight back, marking end of pattern.
   Variants: *basic* (1 full turn), *double tuck* (turn-and-a-half
   under the arm ending in a different position), *with hand change*.
 
-- **Free spin** — F spins on her OWN axis with connection RELEASED.
+- **Free spin** — F spins on F's OWN axis with connection RELEASED.
   Beat map:
   · 1-2 — L preps F for the spin (gentle stretch, often a palm-to-
     palm setup)
-  · 3 — L OPENS HIS HAND / releases connection; F initiates her
+  · 3 — L OPENS L's HAND / releases connection; F initiates F's
     own spin momentum
-  · &4 — F completes 360° (or more) on her own axis, no guide force
+  · &4 — F completes 360° (or more) on F's own axis, no guide force
   · 5-6 — L catches F's hand at the anchor; F settles
   Locking cue: visible release of connection at beat 3. If you can
   see L's hand open, drop away, or reduce to just fingertips with no
@@ -401,15 +417,15 @@ triple on 7-8. F rotates around L through 3-6.
 - **Texas Tommy** (a.k.a. *apache*) — whip variant where L's arm
   CRADLES F's head / shoulder / neck area during the rotation. Use
   "Texas Tommy" per Library of Dance and most WCS instructors.
-  Beat map: standard whip skeleton, but on beats 3-4 L wraps his
+  Beat map: standard whip skeleton, but on beats 3-4 L wraps L's
   leading arm behind F's head/shoulder, cradles through 5-6, releases
   at 7.
   Locking cue: arm clearly behind or around F's HEAD/SHOULDER (not
-  just her back — that's basket).
+  just F's back — that's basket).
 
 - **Tandem whip** — both partners face the SAME direction through
   the rotation, typically with F in front.
-  Beat map: on beat 2-3, L leads F to turn and face the same way he
+  Beat map: on beat 2-3, L leads F to turn and face the same way L
   does (both looking down the slot); partnership stays connected in
   a tandem/conga-line shape through 4-6; F unwinds on 7-8.
   Locking cue: both torsos facing the same direction for ≥2 beats.
@@ -420,18 +436,18 @@ triple on 7-8. F rotates around L through 3-6.
   pattern, both facing away from each other's slot end.
 
 - **Whip with hand change behind the head** — whip where L transfers
-  F's hand behind HIS OWN head (or F's head) during the rotation.
+  F's hand behind L's OWN head (or F's head) during the rotation.
   This is its own named variant because the head-height hand swap
   is visually distinct from basket (behind back) or hand-change
   (front-of-body swap).
   Beat map: standard whip through 1-4; on beat 5 L lifts the leading
-  hand up and passes it behind his own head (or F's head) to his
+  hand up and passes it behind L's own head (or F's head) to L's
   other hand; anchor with new hand on 7-8.
   Locking cue: hand visibly crosses behind a head (L's or F's) in
   the second half of the pattern.
 
 - **Whip with hand change behind the back** — same family as above
-  but the swap happens behind L's back instead of his head. Treat
+  but the swap happens behind L's back instead of L's head. Treat
   as a distinct variant only when clearly back-not-head.
 
 - **Continuous whip** (a.k.a. *rolling whip*) — multiple whip
@@ -464,7 +480,7 @@ triple on 7-8. F rotates around L through 3-6.
   Locking cue: L's torso rotation is the obvious driver — not hand
   pressure. F "bounces back" with body-driven energy.
 
-- **Barrel roll** — 8-count pattern where L guides F around him in
+- **Barrel roll** — 8-count pattern where L guides F around L in
   a horizontal wrapping motion (like rolling a barrel forward); less
   common in modern competition but still appears in showcases.
   Locking cue: L's leading hand circles over F's head in a barrel
@@ -489,8 +505,8 @@ higher-difficulty execution than a plain whip or side pass when
 the couple keeps timing and partnership.
 
 - **Hip catch** — 8-count rotational pattern where, on the back half,
-  L's HAND/ARM catches F's HIP (not her back, not her waist — the
-  hip bone / upper outer thigh) and uses that catch to redirect her
+  L's HAND/ARM catches F's HIP (not F's back, not F's waist — the
+  hip bone / upper outer thigh) and uses that catch to redirect F's
   momentum. Documented by West Coast Swing Online as a workshop
   (syncopated-timing) figure.
   Beat map:
@@ -531,13 +547,13 @@ still use them by name when you see them.
   matador whip** — right-over-left cross, arms sweep like a matador
   cape over F's path.
 - **Same side whip** — whip where F ends on the SAME side of L as
-  she started (no slot change). Cue: slot position unchanged.
+  F started (no slot change). Cue: slot position unchanged.
 - **Hustle whip** — WCS whip shape with hustle-style (1-2-3&4)
   timing grafted on.
 - **Carwash whip** — L's free arm sweeps over F's head like a
-  carwash brush as she rotates. Cue: visible free-arm overhead sweep.
+  carwash brush as F rotates. Cue: visible free-arm overhead sweep.
 - **Pull-through whip** — F is pulled THROUGH L's arm tunnel rather
-  than around him. Cue: F passes under L's leading arm through the
+  than around L. Cue: F passes under L's leading arm through the
   middle of the slot.
 - **Decapitive whip / Decap whip** — L's leading arm sweeps over F's
   head in a guillotine-like motion. Named for the "decapitation" look;
@@ -559,7 +575,7 @@ still use them by name when you see them.
 - **Whip with free spin / double free spin** — whip + 1 or 2 F free
   spins (connection released) on 5-6.
 - **Whip w/ behind the back hand change** — L transfers F's hand
-  behind HIS OWN back mid-rotation. UCWDC Syllabus D.
+  behind L's OWN back mid-rotation. UCWDC Syllabus D.
 - **Whip w/ Texas Tommy** — whip that incorporates a Texas Tommy
   wrap on the back half.
 - **Reverse whip variants** — reverse with outside turn, double
@@ -574,7 +590,7 @@ still use them by name when you see them.
 
 === AROUND THE WORLD FAMILY (8-count) ===
 
-LoD family. F rotates 360°+ around L's axis as she travels. The
+LoD family. F rotates 360°+ around L's axis while traveling. The
 specific turn combination names the figure. Locking cue: F's body
 clearly travels in a CIRCLE around L, not just across the slot.
 
@@ -619,11 +635,11 @@ then the release.
   / hammerlock) position. UCWDC Syllabus D.
 - **Rolling off the back pass** — F rolls across L's back during
   the pass. UCWDC Syllabus D.
-- **6-count elbow catch** — L catches F's momentum on her elbow at
+- **6-count elbow catch** — L catches F's momentum on F's elbow at
   beat 5; 6-count window.
 - **Bowtie** — F's arms sweep into a bowtie shape during the
   pattern. WCS Online Beg/Int.
-- **Fold / Shootout** — L folds F inward then shoots her back out;
+- **Fold / Shootout** — L folds F inward then shoots F back out;
   a compression-release pattern.
 - **Fold from handshake hold** — same, entered from handshake.
 - **Roll in - Roll out** (R-to-L hand, from handshake, with extra
@@ -636,7 +652,7 @@ Beyond the core sugar push / side passes / tuck / free spin already
 beat-mapped above:
 
 - **Cutoff** — a side pass where L cuts off F's travel mid-pattern,
-  redirecting her back toward the original slot end. UCWDC Syllabus A,
+  redirecting F back toward the original slot end. UCWDC Syllabus A,
   DVIDA Bronze figure 8.
 - **Cut off right side pass** — same concept, explicitly on a right
   side pass entry.
@@ -645,14 +661,14 @@ beat-mapped above:
 - **Under arm pass** (= Right Side Pass with inside turn) — UCWDC
   Syllabus A labels this as its own figure; others treat as a
   variant of right side pass. Prefer "right side pass with inside
-  turn" unless the F explicitly turns under the raised arm without
+  turn" unless F explicitly turns under the raised arm without
   slot travel.
 - **Inside turn** (standalone 6-count) — simple F inside turn from
   open/handshake position, 6-count timing. Distinct from "whip with
   inside turn" (8-count + whip shape).
 - **Outside roll** — rolling F around an outside axis, 6-count.
-- **Right side pass with man's turn** — L (not F) takes the turn.
-- **Left side pass with man's turn** — same on left.
+- **Right side pass with lead's turn** — L (not F) takes the turn.
+- **Left side pass with lead's turn** — same on left.
 - **Right-to-right left side pass** — left side pass with right-to-
   right hand connection (both dancers' right hands). LoD.
 - **Sugar push syncopation** — sugar push with timing syncopation
@@ -662,7 +678,7 @@ beat-mapped above:
   pattern; can also be a standalone 6-count.
 - **Tuck from closed position** — tuck turn entered from closed hold.
 - **Tuck turn with two hands** — two-handed tuck entry.
-- **Man's fly by** — L passes F in the slot on an offbeat rhythm.
+- **Lead's fly by** — L passes F in the slot on an offbeat rhythm.
 
 === POSITIONS / HOLDS (not patterns — use for entry/exit context) ===
 
@@ -680,9 +696,9 @@ emitting the position as a pattern.
 - **Left-to-left** — both using left hand.
 - **Sweetheart / cuddle / cradle position** — F in front of L, both
   facing the same direction, L's arms crossed over F's chest (or one
-  arm over her shoulder). The "basket" in basket whip is this shape.
-- **Hammerlock position** — F's arm folded behind her back; L holds
-  F's hand at her own lower back. Common tuck exit.
+  arm over F's shoulder). The "basket" in basket whip is this shape.
+- **Hammerlock position** — F's arm folded behind F's back; L holds
+  F's hand at F's own lower back. Common tuck exit.
 - **Shadow position** — F directly in front of L, both facing the
   same direction, standing vertically (not side-by-side). Source of
   the shadow whip.
@@ -802,27 +818,27 @@ A whip where you see rotation but can't tell which specific kind →
 **RULE #1 — TRAVEL vs ROTATE-IN-PLACE.** This is the most common
 confusion and must be checked FIRST before any other classification:
 - Did the follower TRAVEL across the slot (end up several feet
-  from where she started)? → **side pass** (L or R based on where
-  she ends up). The telltale is lateral displacement.
+  from where they started)? → **side pass** (L or R based on where
+  they end up). The telltale is lateral displacement.
 - Did the follower stay in roughly the same slot position but
-  ROTATE on her own axis? → **tuck turn** (or free spin — see
+  ROTATE on F's own axis? → **tuck turn** (or free spin — see
   Rule #2). Slot position nearly unchanged between 1 and 6.
-- A side pass ALWAYS involves visible travel. If she rotates but
+- A side pass ALWAYS involves visible travel. If F rotates but
   doesn't travel, it is NOT a side pass — default to tuck turn.
 
 **RULE #2 — CONNECTION MAINTAINED vs RELEASED during rotation.**
 Check this BEFORE calling anything a side pass or whip:
 - Lead maintains full hand / arm connection through the rotation,
-  guiding her around → side pass (if she travels) or tuck turn
-  (if she stays in place) or whip (if ≥ 180° rotation + travel).
-- Lead RELEASES her hand mid-rotation, or reduces to a light
+  guiding F around → side pass (if F travels) or tuck turn
+  (if F stays in place) or whip (if ≥ 180° rotation + travel).
+- Lead RELEASES F's hand mid-rotation, or reduces to a light
   finger connection with no guiding force → **free spin**, even
-  when she ends up on his left side. DO NOT call it a left side
-  pass just because her final position is on his left. The
+  when F ends up on L's left side. DO NOT call it a left side
+  pass just because F's final position is on L's left. The
   release is the defining cue, not the end position.
 - Cue for release: you can visually see the lead's hand open or
   drop away during beats 3-4; follower's rotation momentum comes
-  from her own prep, not his guide.
+  from F's own prep, not L's guide.
 
 Then, for all other cases:
 - Rotational movement ≥ 180° by follower, partnership kept → whip
@@ -972,7 +988,7 @@ BEFORE committing to a value:**
 - Music at full volume but dancers haven't moved yet. Waiting.
 
 **EXAMPLES of legitimate dance_start_sec:**
-- Lead lifts his left foot, follower mirrors — weight transfers
+- Lead lifts the left foot, follower mirrors — weight transfers
   onto the heel → this is beat 1 of an entry pattern.
 - First clean triple-step visible (3 weight changes in rapid
   succession) → dance has started.
@@ -1177,7 +1193,7 @@ Respond in this exact JSON format. Fill `reasoning` BEFORE `score` in each categ
     {
       "timestamp_sec": <seconds from video start, float>,
       "kind": "<one of: hijack | syncopation | styling | interpretation | musical_hit>",
-      "description": "<short phrase describing the follower-authored moment — something she added, redirected, or interpreted beyond what was strictly led. e.g. 'follower hijacks the anchor into a body roll', 'extra spin added on 5-6', 'shoulder isolation during the bass walk'>",
+      "description": "<short phrase describing the follower-authored moment — something they added, redirected, or interpreted beyond what was strictly led. e.g. 'follower hijacks the anchor into a body roll', 'extra spin added on 5-6', 'shoulder isolation during the bass walk'>",
       "quality": "<strong|solid|needs_work — how well did it land musically and with the connection?>"
     }
   ],
@@ -1191,7 +1207,7 @@ Respond in this exact JSON format. Fill `reasoning` BEFORE `score` in each categ
   "improvements": [
     {
       "timestamp_sec": <seconds from video start, float — the moment you observed this>,
-      "observed_cue": "<SHORT phrase describing the specific visual evidence — what you actually saw at this moment. e.g. 'anchor at 0:34 drops from 3rd foot position to feet together', 'arm pull on the whip entry at 1:12 pulls follower off her line'. NOT a generic coaching platitude — the specific moment-anchored thing you saw that gave rise to this suggestion.>",
+      "observed_cue": "<SHORT phrase describing the specific visual evidence — what you actually saw at this moment. e.g. 'anchor at 0:34 drops from 3rd foot position to feet together', 'arm pull on the whip entry at 1:12 pulls follower off the slot line'. NOT a generic coaching platitude — the specific moment-anchored thing you saw that gave rise to this suggestion.>",
       "text": "<one-sentence, actionable improvement written to the dancer. Must reference the observed_cue so the dancer can verify it on their video. DO NOT write generic coaching ('roll through your feet', 'stack your posture', 'introduce pattern variety', 'initiate from your core', 'elastic stretch at the anchor') unless you have a specific moment where that problem is visible — if you can't anchor it to a timestamp with an observed_cue, leave it out entirely.>"
     }
   ],
@@ -1234,7 +1250,7 @@ Constraints on musical_moments:
 Constraints on follower_initiative:
 - Capture moments where the FOLLOWER authored something — not just executed what was led. Modern WCS follows co-create: they hijack anchors, add syncopations, style through bass walks, interpret the music on their own. This field surfaces those moments.
 - Do NOT list moments that are just clean pattern execution. "Follower completed the sugar push" is not initiative.
-- Do list: body isolations she added, extra turns she styled in, hits she caught that the lead didn't cue, hijacks where she redirected energy, moments where she settled into an anchor with her own musicality.
+- Do list: body isolations the follower added, extra turns the follower styled in, hits the follower caught that the lead didn't cue, hijacks where the follower redirected energy, moments where the follower settled into an anchor with their own musicality.
 - If there's no follower initiative visible (e.g. the follower is executing strictly on the lead's cues), return an empty array. Do NOT invent initiative to be generous.
 - If there's no clearly identified follower (solo work, role-switch, same-role dancing), return an empty array.
 - Target: 0-6 entries per 90s of dancing. Quality over quantity.
