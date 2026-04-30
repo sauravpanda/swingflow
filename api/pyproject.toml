@@ -20,6 +20,19 @@ dependencies = [
   "torch>=2.0",
 ]
 
+[dependency-groups]
+dev = [
+  "pytest>=8.3",
+  "pytest-asyncio>=0.24",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+# Stop on the first 5 failures so a broken fixture doesn't drown the
+# real signal in 100s of cascading errors.
+addopts = "--maxfail=5 -q"
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
