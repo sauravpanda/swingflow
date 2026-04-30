@@ -195,9 +195,18 @@ export function ScoreTrendChart({
 }) {
   const router = useRouter();
   const [metric, setMetric] = useState<ChartMetric>("overall");
+  // Drop soft-deleted + low-confidence rows from the trend (#104).
+  // Soft-deleted: matches what TrendCallouts already does — the user
+  // intentionally removed those from their list and shouldn't see
+  // them on the chart either. Low-confidence: the model itself
+  // signaled it wasn't sure, so including would jitter the line.
+  const trendRecords = useMemo(
+    () => records.filter((r) => !r.deleted_at && !r.timeline_locked),
+    [records]
+  );
   const buckets = useMemo(
-    () => buildBuckets(records, metric),
-    [records, metric]
+    () => buildBuckets(trendRecords, metric),
+    [trendRecords, metric]
   );
   const [hovered, setHovered] = useState<Point | null>(null);
 
