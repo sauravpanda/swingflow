@@ -24,9 +24,11 @@ const METRIC_ORDER: Array<{ key: ChartMetric; label: string }> = [
 const MIN_POINTS_FOR_TREND = 3;
 
 // Magnitude (in 0-10 score units) below which we render a flat
-// indicator instead of up/down. Half a point of category drift over
-// a few sessions reads as noise to the dancer.
-const FLAT_DELTA_THRESHOLD = 0.5;
+// indicator instead of up/down. Matches MEANINGFUL_DELTA in
+// trend-callouts.tsx so an arrow on a sparkline can never disagree
+// with "Your timing jumped X → Y" copy on the same data — both are
+// computed from the same scores with the same threshold.
+const FLAT_DELTA_THRESHOLD = 0.3;
 
 const SVG_W = 96;
 const SVG_H = 28;
