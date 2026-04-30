@@ -49,15 +49,28 @@ export async function analyzeMusic(file: File): Promise<MusicAnalysisResult> {
 }
 
 async function postJson<T>(path: string, body: unknown): Promise<T> {
+  return requestJson<T>("POST", path, body);
+}
+
+async function requestJson<T>(
+  method: "GET" | "POST" | "DELETE",
+  path: string,
+  body?: unknown
+): Promise<T> {
   if (!API_URL) throw new Error("NEXT_PUBLIC_WCS_API_URL is not set");
   const token = await getAccessToken();
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${token}`,
+  };
+  let serialized: BodyInit | undefined;
+  if (body !== undefined) {
+    headers["Content-Type"] = "application/json";
+    serialized = JSON.stringify(body);
+  }
   const res = await fetch(`${API_URL}${path}`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(body),
+    method,
+    headers,
+    body: serialized,
   });
   if (!res.ok) {
     let detail = res.statusText;
@@ -70,6 +83,38 @@ async function postJson<T>(path: string, body: unknown): Promise<T> {
     throw new Error(`Request to ${path} failed (${res.status}): ${detail}`);
   }
   return (await res.json()) as T;
+}
+
+// ───────────────────────────────────────────────────────────────────
+// /analyses — authenticated writes against video_analyses (#75).
+// The frontend used to mutate `deleted_at` and `share_token` directly
+// from the browser; these now go through the backend so RLS can be
+// tightened to read-only without breaking delete + share flows.
+
+export async function deleteAnalysis(analysisId: string): Promise<void> {
+  await requestJson<{ ok: boolean }>(
+    "DELETE",
+    `/analyses/${encodeURIComponent(analysisId)}`
+  );
+}
+
+export async function enableAnalysisShare(
+  analysisId: string
+): Promise<string> {
+  const r = await requestJson<{ share_token: string }>(
+    "POST",
+    `/analyses/${encodeURIComponent(analysisId)}/share`
+  );
+  return r.share_token;
+}
+
+export async function disableAnalysisShare(
+  analysisId: string
+): Promise<void> {
+  await requestJson<{ ok: boolean }>(
+    "DELETE",
+    `/analyses/${encodeURIComponent(analysisId)}/share`
+  );
 }
 
 // ───────────────────────────────────────────────────────────────────

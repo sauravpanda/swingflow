@@ -3,7 +3,12 @@
 import { useCallback, useEffect, useState } from "react";
 import { getSupabase, isSupabaseConfigured } from "@/lib/supabase";
 import { useUser } from "@/hooks/use-user";
-import type { VideoScoreResult } from "@/lib/wcs-api";
+import {
+  deleteAnalysis,
+  disableAnalysisShare,
+  enableAnalysisShare,
+  type VideoScoreResult,
+} from "@/lib/wcs-api";
 
 export type AnalysisRecord = {
   id: string;
@@ -153,30 +158,16 @@ export function useAnalysisHistory() {
 
   const remove = useCallback(
     async (id: string) => {
-      if (!isSupabaseConfigured) return;
-      const sb = getSupabase();
       // Soft-delete: the row stays in the DB so the score trend
       // chart can still plot it as history, but it disappears from
-      // the analyze-page list. User-intent here is "clean up my
-      // list", not "erase all evidence this ever happened".
-      //
-      // We also null share_token so any public link the user
-      // previously generated stops working — deleting should revoke
-      // sharing. Backend /shared/{token} also filters deleted rows
-      // as defense in depth.
-      //
+      // the analyze-page list. The backend also revokes any
+      // share_token on the same call — deleting should kill sharing.
       // Await the response and bail on error so we don't lie to the
-      // user: if the DB write fails, the row is still visible and
-      // the share link is still live — mutating local state would
-      // make it look like the delete succeeded.
+      // user: if the write fails, the row is still visible and the
+      // share link is still live — mutating local state would make
+      // it look like the delete succeeded.
+      await deleteAnalysis(id);
       const now = new Date().toISOString();
-      const { error } = await sb
-        .from("video_analyses")
-        .update({ deleted_at: now, share_token: null })
-        .eq("id", id);
-      if (error) {
-        throw new Error(`Failed to delete analysis: ${error.message}`);
-      }
       setRecords((rs) => rs.filter((r) => r.id !== id));
       setChartRecords((rs) =>
         rs.map((r) =>
@@ -189,14 +180,7 @@ export function useAnalysisHistory() {
 
   /** Generate (or regenerate) a share_token on a row. Returns the token. */
   const enableSharing = useCallback(async (id: string): Promise<string> => {
-    if (!isSupabaseConfigured) throw new Error("Supabase not configured");
-    const sb = getSupabase();
-    const token = crypto.randomUUID().replace(/-/g, "");
-    const { error } = await sb
-      .from("video_analyses")
-      .update({ share_token: token })
-      .eq("id", id);
-    if (error) throw new Error(error.message);
+    const token = await enableAnalysisShare(id);
     setRecords((rs) =>
       rs.map((r) => (r.id === id ? { ...r, share_token: token } : r))
     );
@@ -205,9 +189,7 @@ export function useAnalysisHistory() {
 
   /** Revoke sharing by nulling the token. Any existing links stop working. */
   const disableSharing = useCallback(async (id: string): Promise<void> => {
-    if (!isSupabaseConfigured) return;
-    const sb = getSupabase();
-    await sb.from("video_analyses").update({ share_token: null }).eq("id", id);
+    await disableAnalysisShare(id);
     setRecords((rs) =>
       rs.map((r) => (r.id === id ? { ...r, share_token: null } : r))
     );

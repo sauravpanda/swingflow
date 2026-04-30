@@ -1,7 +1,15 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from .routes import health, music, peer_reviews, shared, uploads, video
+from .routes import (
+    analyses,
+    health,
+    music,
+    peer_reviews,
+    shared,
+    uploads,
+    video,
+)
 from .settings import settings
 
 app = FastAPI(title="wcs-api", version="0.1.0")
@@ -10,7 +18,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.allowed_origins_list,
     allow_credentials=True,
-    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
     # X-Swingflow-View is sent by fetchSharedAnalysis so the backend
     # knows it's a real frontend load (not a Slackbot unfurl). Custom
     # request headers require explicit CORS allow-list entries or the
@@ -24,3 +32,4 @@ app.include_router(video.router)
 app.include_router(uploads.router)
 app.include_router(shared.router)
 app.include_router(peer_reviews.router)
+app.include_router(analyses.router)
