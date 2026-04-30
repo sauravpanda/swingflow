@@ -1,0 +1,46 @@
+name: API tests
+
+on:
+  pull_request:
+    paths:
+      - "api/**"
+      - ".github/workflows/api-tests.yml"
+  push:
+    branches: [main]
+    paths:
+      - "api/**"
+      - ".github/workflows/api-tests.yml"
+
+# Cancel an in-flight run when a new commit lands on the same PR /
+# branch — saves CI minutes when iterating.
+concurrency:
+  group: api-tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: api
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          # Cache the resolver + virtualenv between runs. The default
+          # cache scope keys on the lockfile so a dep bump invalidates
+          # cleanly.
+          enable-cache: true
+          cache-dependency-glob: "api/uv.lock"
+
+      - name: Install dev deps
+        # `uv sync --dev --no-install-project` skips compiling the
+        # `wcs-api` wheel itself — we don't need the package installed,
+        # only its dependencies. The conftest adds api/src to sys.path
+        # so test imports work without an editable install.
+        run: uv sync --dev --no-install-project
+
+      - name: Run pytest
+        run: uv run pytest tests/
