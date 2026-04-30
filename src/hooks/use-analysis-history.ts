@@ -67,6 +67,12 @@ export type ChartRecord = {
   event_date: string | null;
   deleted_at: string | null;
   created_at: string;
+  // Server-side flag set when the response sanitizer dropped low-
+  // confidence patterns from the timeline. Such analyses are kept
+  // in the table for the user's own record but should NOT skew the
+  // progress trend chart (#104) — they're noise the model itself
+  // is unsure about.
+  timeline_locked: boolean;
 };
 
 export function useAnalysisHistory() {
@@ -130,6 +136,9 @@ export function useAnalysisHistory() {
       result: VideoScoreResult | null;
     }): ChartRecord => {
       const cats = r.result?.categories;
+      const result = r.result as
+        | (VideoScoreResult & { timeline_locked?: boolean })
+        | null;
       return {
         id: r.id,
         filename: r.filename,
@@ -145,6 +154,7 @@ export function useAnalysisHistory() {
         event_date: r.event_date,
         deleted_at: r.deleted_at,
         created_at: r.created_at,
+        timeline_locked: result?.timeline_locked === true,
       };
     });
     setChartRecords(chartData);

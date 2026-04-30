@@ -195,9 +195,16 @@ export function ScoreTrendChart({
 }) {
   const router = useRouter();
   const [metric, setMetric] = useState<ChartMetric>("overall");
+  // Drop low-confidence rows from the trend (#104). The model itself
+  // signaled it wasn't sure; including them would jitter the line and
+  // bias whatever direction the noise happens to point.
+  const trendRecords = useMemo(
+    () => records.filter((r) => !r.timeline_locked),
+    [records]
+  );
   const buckets = useMemo(
-    () => buildBuckets(records, metric),
-    [records, metric]
+    () => buildBuckets(trendRecords, metric),
+    [trendRecords, metric]
   );
   const [hovered, setHovered] = useState<Point | null>(null);
 

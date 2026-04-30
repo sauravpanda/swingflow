@@ -68,6 +68,10 @@ function computeCallouts(records: ChartRecord[]): Callout[] {
   // first so first-3 / last-3 splits make chronological sense.
   const recent = records
     .filter((r) => !r.deleted_at)
+    // Drop low-confidence rows (#104) — same rationale as the trend
+    // chart: if the model itself flagged the timeline as locked, we
+    // don't want it powering "Your timing jumped 7.2 → 8.1" copy.
+    .filter((r) => !r.timeline_locked)
     .filter((r) => now - new Date(r.created_at).getTime() <= windowMs)
     .sort((a, b) => a.created_at.localeCompare(b.created_at));
 

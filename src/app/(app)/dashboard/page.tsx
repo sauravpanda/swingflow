@@ -9,6 +9,7 @@ import { useAppStore } from "@/components/store-provider";
 import { useAnalysisHistory } from "@/hooks/use-analysis-history";
 import { ScoreTrendChart } from "@/components/analyze/score-trend";
 import { TrendCallouts } from "@/components/analyze/trend-callouts";
+import { CategorySparklines } from "@/components/analyze/category-sparklines";
 import { PatternStatsCard } from "@/components/analyze/pattern-stats-card";
 import {
   Video,
@@ -171,6 +172,11 @@ export default function DashboardPage() {
           the score trend"). `use-analysis-history` already fetches
           them in chartRecords for this purpose. */}
       <TrendCallouts records={history.chartRecords} />
+
+      <CategorySparklines
+        records={history.chartRecords}
+        loading={history.loading}
+      />
 
       <ScoreTrendChart
         records={history.chartRecords}
