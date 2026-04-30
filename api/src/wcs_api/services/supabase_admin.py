@@ -396,6 +396,77 @@ async def clear_video_analysis_object_key(
         r.raise_for_status()
 
 
+async def soft_delete_analysis(
+    analysis_id: str, user_id: str
+) -> bool:
+    """Soft-delete one of the user's analyses + revoke any share token.
+
+    Scoped via `user_id=eq.{user_id}` so a request for someone else's
+    row matches zero records and the function returns False. Caller
+    should map False to a 404 (don't leak existence by returning 403).
+    Pairs with /analyses DELETE in the new analyses router (#75) — the
+    front-end no longer holds Supabase service-role authority for this
+    write.
+    """
+    now = _now_iso()
+    async with httpx.AsyncClient(timeout=10) as client:
+        r = await client.patch(
+            _rest(
+                f"video_analyses?id=eq.{analysis_id}"
+                f"&user_id=eq.{user_id}"
+            ),
+            headers={**_headers(), "Prefer": "return=representation"},
+            json={"deleted_at": now, "share_token": None},
+        )
+        r.raise_for_status()
+        rows = r.json()
+        return bool(rows)
+
+
+async def set_analysis_share_token(
+    analysis_id: str, user_id: str, token: str
+) -> bool:
+    """Set / rotate share_token on one of the user's analyses.
+    Returns False (caller → 404) when the row isn't owned by user_id.
+    """
+    async with httpx.AsyncClient(timeout=10) as client:
+        r = await client.patch(
+            _rest(
+                f"video_analyses?id=eq.{analysis_id}"
+                f"&user_id=eq.{user_id}"
+            ),
+            headers={**_headers(), "Prefer": "return=representation"},
+            json={"share_token": token},
+        )
+        r.raise_for_status()
+        rows = r.json()
+        return bool(rows)
+
+
+async def clear_analysis_share_token(
+    analysis_id: str, user_id: str
+) -> bool:
+    """Revoke share_token on one of the user's analyses."""
+    async with httpx.AsyncClient(timeout=10) as client:
+        r = await client.patch(
+            _rest(
+                f"video_analyses?id=eq.{analysis_id}"
+                f"&user_id=eq.{user_id}"
+            ),
+            headers={**_headers(), "Prefer": "return=representation"},
+            json={"share_token": None},
+        )
+        r.raise_for_status()
+        rows = r.json()
+        return bool(rows)
+
+
+def _now_iso() -> str:
+    from datetime import datetime, timezone
+
+    return datetime.now(timezone.utc).isoformat()
+
+
 async def count_usage_events_since(
     user_id: str,
     kind: str,
