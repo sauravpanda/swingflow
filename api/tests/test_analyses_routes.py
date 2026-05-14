@@ -1,10 +1,14 @@
-"""Coverage for the /analyses delete + share endpoints (#75 / #158).
+"""Coverage for the /analyses delete + share endpoints (#75 / #158)
+and the comment-first peer-review submission guard.
 
-These routes wrap service-role updates that the front-end used to do
-directly. The thing worth proving:
+The thing worth proving for /analyses:
   - 200 + state change when the row is owned by the caller
   - 404 (NOT 403) when it isn't, so we don't leak existence
   - share enable returns the same hex shape the front-end used to mint
+
+For peer-reviews: the comment-first guard rejects empty submissions
+(no notes, no pins, no scores) so we don't accept 7/7/7/7-no-notes
+drive-by reviews into training data.
 """
 
 from __future__ import annotations

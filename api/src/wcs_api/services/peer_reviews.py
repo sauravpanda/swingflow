@@ -22,13 +22,21 @@ async def insert_request(
     analysis_id: str,
     token: str,
     requester_user_id: str,
+    requester_prompt: str | None = None,
+    focus_categories: list[str] | None = None,
 ) -> None:
-    """Mint a new pending review request."""
+    """Mint a new pending review request. `requester_prompt` and
+    `focus_categories` are the comment-first brief — both optional
+    so old callers stay valid."""
     record: dict[str, Any] = {
         "analysis_id": analysis_id,
         "token": token,
         "requester_user_id": requester_user_id,
     }
+    if requester_prompt:
+        record["requester_prompt"] = requester_prompt
+    if focus_categories:
+        record["focus_categories"] = focus_categories
     async with httpx.AsyncClient(timeout=10) as client:
         r = await client.post(
             _rest("peer_reviews"),
@@ -56,10 +64,10 @@ async def submit(
     token: str,
     reviewer_name: str,
     reviewer_role: str,
-    timing_score: float,
-    technique_score: float,
-    teamwork_score: float,
-    presentation_score: float,
+    timing_score: float | None,
+    technique_score: float | None,
+    teamwork_score: float | None,
+    presentation_score: float | None,
     overall_notes: str | None,
     per_moment_notes: list[dict[str, Any]],
     training_consent: bool,
@@ -76,13 +84,17 @@ async def submit(
     `consent_given_at` when the reviewer opted in to training use.
     """
     now = _dt.datetime.now(_dt.timezone.utc).isoformat()
+
+    def _round_or_null(s: float | None) -> float | None:
+        return round(float(s), 1) if s is not None else None
+
     update: dict[str, Any] = {
         "reviewer_name": reviewer_name[:80],
         "reviewer_role": reviewer_role,
-        "timing_score": round(float(timing_score), 1),
-        "technique_score": round(float(technique_score), 1),
-        "teamwork_score": round(float(teamwork_score), 1),
-        "presentation_score": round(float(presentation_score), 1),
+        "timing_score": _round_or_null(timing_score),
+        "technique_score": _round_or_null(technique_score),
+        "teamwork_score": _round_or_null(teamwork_score),
+        "presentation_score": _round_or_null(presentation_score),
         "overall_notes": overall_notes,
         "per_moment_notes": per_moment_notes,
         "training_consent": bool(training_consent),

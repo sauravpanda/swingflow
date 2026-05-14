@@ -66,10 +66,15 @@ function PeerReviewInner() {
   const [reviewerName, setReviewerName] = useState("");
   const [reviewerRole, setReviewerRole] =
     useState<PeerReviewerRole>("dancer");
-  const [timing, setTiming] = useState<number>(7);
-  const [technique, setTechnique] = useState<number>(7);
-  const [teamwork, setTeamwork] = useState<number>(7);
-  const [presentation, setPresentation] = useState<number>(7);
+  // Scores deliberately start UNSET (null). Anchoring at "7" produced
+  // "drive-by 7/7/7/7" submissions where the reviewer never moved the
+  // sliders and left no notes — bad data we then averaged against the
+  // AI score. Comment-first: the reviewer has to actively decide to
+  // rate a category, or skip it.
+  const [timing, setTiming] = useState<number | null>(null);
+  const [technique, setTechnique] = useState<number | null>(null);
+  const [teamwork, setTeamwork] = useState<number | null>(null);
+  const [presentation, setPresentation] = useState<number | null>(null);
   const [notes, setNotes] = useState("");
   // Opt-in to use this review to improve the AI. Default false;
   // stays off unless the reviewer actively checks the box.
@@ -109,14 +114,29 @@ function PeerReviewInner() {
     };
   }, [token]);
 
+  // Comment-first: a name + literally nothing else used to be a valid
+  // submission. Now require at least one signal — a written note, a
+  // pin with text, or at least one rated category.
+  const hasSignal = useMemo(() => {
+    const hasOverall = notes.trim().length > 0;
+    const hasPin = pins.some((p) => p.note.trim().length > 0);
+    const hasScore =
+      timing != null ||
+      technique != null ||
+      teamwork != null ||
+      presentation != null;
+    return hasOverall || hasPin || hasScore;
+  }, [notes, pins, timing, technique, teamwork, presentation]);
+
   const canSubmit = useMemo(() => {
     return (
       !!ctx &&
       !ctx.already_submitted &&
       reviewerName.trim().length > 0 &&
+      hasSignal &&
       !submitting
     );
-  }, [ctx, reviewerName, submitting]);
+  }, [ctx, reviewerName, hasSignal, submitting]);
 
   const handleSubmit = async () => {
     if (!token || !canSubmit) return;
@@ -209,13 +229,38 @@ function PeerReviewInner() {
           <h1 className="text-2xl font-bold">Peer review</h1>
           <p className="text-sm text-muted-foreground">
             A dancer has asked for your feedback on this clip. Watch the
-            video, then score them on the four WSDC categories (timing,
-            technique, teamwork, presentation). Your scores and notes
-            will be shared only with the dancer.
+            video and leave at least one comment, pinned moment, or
+            category rating. Your feedback goes only to the dancer.
           </p>
         </header>
 
         <ContextCard ctx={ctx} />
+
+        {(ctx.requester_prompt || (ctx.focus_categories?.length ?? 0) > 0) && (
+          <Card className="border-primary/30 bg-primary/5">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm">
+                What the dancer wants feedback on
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2 text-sm">
+              {ctx.requester_prompt && (
+                <p className="whitespace-pre-wrap text-foreground">
+                  {ctx.requester_prompt}
+                </p>
+              )}
+              {ctx.focus_categories && ctx.focus_categories.length > 0 && (
+                <div className="flex flex-wrap gap-1.5">
+                  {ctx.focus_categories.map((c) => (
+                    <Badge key={c} variant="secondary" className="capitalize">
+                      {c}
+                    </Badge>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
 
         <Card>
           <CardContent className="p-0 overflow-hidden">
@@ -423,7 +468,16 @@ function PeerReviewInner() {
 
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle className="text-base">Your scores (1–10)</CardTitle>
+            <CardTitle className="text-base">
+              Your scores{" "}
+              <span className="text-xs font-normal text-muted-foreground">
+                (1–10, optional)
+              </span>
+            </CardTitle>
+            <p className="text-xs text-muted-foreground">
+              Each category is unrated until you click <em>Rate</em>. Skip
+              what you don&rsquo;t feel qualified to call.
+            </p>
           </CardHeader>
           <CardContent className="space-y-5">
             <ScoreRow
@@ -500,21 +554,29 @@ function PeerReviewInner() {
           <p className="text-sm text-destructive">{error}</p>
         )}
 
-        <Button
-          onClick={handleSubmit}
-          disabled={!canSubmit}
-          className="w-full"
-          size="lg"
-        >
-          {submitting ? (
-            <>
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              Submitting…
-            </>
-          ) : (
-            "Submit review"
+        <div className="space-y-2">
+          <Button
+            onClick={handleSubmit}
+            disabled={!canSubmit}
+            className="w-full"
+            size="lg"
+          >
+            {submitting ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Submitting…
+              </>
+            ) : (
+              "Submit review"
+            )}
+          </Button>
+          {!hasSignal && reviewerName.trim().length > 0 && (
+            <p className="text-xs text-muted-foreground text-center">
+              Leave at least one note, pin a moment, or rate a category
+              to submit.
+            </p>
           )}
-        </Button>
+        </div>
       </div>
     </div>
   );
@@ -566,25 +628,43 @@ function ScoreRow({
 }: {
   label: string;
   help: string;
-  value: number;
-  onChange: (v: number) => void;
+  value: number | null;
+  onChange: (v: number | null) => void;
 }) {
+  const SCORE_MID = 7;
+  const isSet = value != null;
   return (
     <div className="space-y-1.5">
-      <div className="flex items-baseline justify-between">
+      <div className="flex items-baseline justify-between gap-2">
         <Label>{label}</Label>
-        <span className="text-sm font-mono tabular-nums font-semibold">
-          {value.toFixed(1)}
-        </span>
+        <div className="flex items-center gap-2">
+          <span
+            className={
+              "text-sm font-mono tabular-nums font-semibold " +
+              (isSet ? "" : "text-muted-foreground")
+            }
+          >
+            {isSet ? value!.toFixed(1) : "—"}
+          </span>
+          <button
+            type="button"
+            onClick={() => onChange(isSet ? null : SCORE_MID)}
+            className="text-[11px] text-muted-foreground hover:text-foreground underline-offset-2 hover:underline"
+            aria-label={isSet ? `Skip rating ${label}` : `Rate ${label}`}
+          >
+            {isSet ? "Skip" : "Rate"}
+          </button>
+        </div>
       </div>
       <input
         type="range"
         min={1}
         max={10}
         step={0.1}
-        value={value}
+        value={value ?? SCORE_MID}
+        disabled={!isSet}
         onChange={(e) => onChange(parseFloat(e.target.value))}
-        className="w-full accent-primary"
+        className="w-full accent-primary disabled:opacity-40 disabled:cursor-not-allowed"
       />
       <p className="text-xs text-muted-foreground">{help}</p>
     </div>

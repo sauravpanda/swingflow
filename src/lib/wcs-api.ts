@@ -598,8 +598,18 @@ export type PeerReviewList = {
   submitted: PeerReview[];
 };
 
+export type ReviewBrief = {
+  // Free-text "what do you want feedback on?". Optional — old
+  // request-flow without a brief still works server-side.
+  requester_prompt?: string | null;
+  // Subset of WSDC categories the requester wants the reviewer to
+  // focus on. UI renders them as badges above the video.
+  focus_categories?: Array<"timing" | "technique" | "teamwork" | "presentation">;
+};
+
 export async function requestPeerReview(
-  analysisId: string
+  analysisId: string,
+  brief: ReviewBrief = {}
 ): Promise<{ token: string; url: string }> {
   if (!API_URL) throw new Error("NEXT_PUBLIC_WCS_API_URL is not set");
   const token = await getAccessToken();
@@ -610,7 +620,14 @@ export async function requestPeerReview(
       "Content-Type": "application/json",
       Authorization: `Bearer ${token}`,
     },
-    body: JSON.stringify({ analysis_id: analysisId }),
+    body: JSON.stringify({
+      analysis_id: analysisId,
+      requester_prompt: brief.requester_prompt ?? null,
+      focus_categories:
+        brief.focus_categories && brief.focus_categories.length > 0
+          ? brief.focus_categories
+          : null,
+    }),
   });
   if (!res.ok) {
     let detail = res.statusText;
@@ -679,6 +696,11 @@ export type PublicReviewContext = {
     stage: string | null;
     dancer_description: string | null;
   };
+  // Comment-first additions: brief from the requester. Reviewer
+  // sees these above the video so feedback can be targeted instead
+  // of "score me on everything."
+  requester_prompt: string | null;
+  focus_categories: string[] | null;
 };
 
 export async function fetchPublicReview(
@@ -706,10 +728,14 @@ export async function submitPublicReview(
   body: {
     reviewer_name: string;
     reviewer_role: PeerReviewerRole;
-    timing_score: number;
-    technique_score: number;
-    teamwork_score: number;
-    presentation_score: number;
+    // Scores are now optional. The backend requires the submission
+    // to carry SOMETHING — notes, pins, or at least one score — but
+    // a reviewer leaving 5 useful timestamped comments without
+    // committing to numbers is a valid submission.
+    timing_score: number | null;
+    technique_score: number | null;
+    teamwork_score: number | null;
+    presentation_score: number | null;
     overall_notes?: string | null;
     per_moment_notes?: Array<{ timestamp_sec: number; note: string }>;
     // Opt-in: true = SwingFlow may use this review to improve scoring
