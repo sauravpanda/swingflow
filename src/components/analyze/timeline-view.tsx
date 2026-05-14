@@ -33,6 +33,16 @@ type TimelineViewProps = {
   // the cross-analysis Patterns view (#138) to deep-link straight
   // to a specific occurrence's start_time.
   initialSeekSec?: number;
+  // Pins from submitted peer reviews. Rendered as a separate layer
+  // above the AI pattern blocks so the user can scrub directly to
+  // moments a human flagged. Click a marker → seek + show note.
+  reviewerPins?: Array<{
+    timestamp_sec: number;
+    note: string;
+    reviewer_name: string | null;
+    reviewer_role: string | null;
+    review_id: string;
+  }>;
 };
 
 const QUALITY_COLOR: Record<string, string> = {
@@ -78,6 +88,7 @@ export function TimelineView({
   videoSrc,
   analysisId,
   initialSeekSec,
+  reviewerPins,
 }: TimelineViewProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [currentTime, setCurrentTime] = useState(0);
@@ -639,6 +650,33 @@ export function TimelineView({
               title={`Off-beat at ${formatTime(m.t)}: ${m.description ?? ""}`}
             />
           ))}
+
+          {/* Reviewer pins — human-authored timestamped comments from
+              submitted peer reviews. Rendered ABOVE the timeline (top:
+              -3) as little pin dots so they don't fight the AI pattern
+              blocks for the same vertical real estate, but stay
+              visually associated with their timestamp. Click → seek. */}
+          {(reviewerPins ?? []).map((pin, i) => {
+            const pct = Math.max(
+              0,
+              Math.min(100, (pin.timestamp_sec / effectiveDuration) * 100)
+            );
+            const author = pin.reviewer_name || "Anonymous";
+            return (
+              <button
+                key={`pin-${pin.review_id}-${i}`}
+                type="button"
+                className="absolute -top-3 z-10 -translate-x-1/2 h-3 w-3 rounded-full border-2 border-background bg-emerald-400 shadow-sm hover:scale-125 transition-transform"
+                style={{ left: `${pct}%` }}
+                title={`${author}${pin.reviewer_role ? ` (${pin.reviewer_role})` : ""} @ ${formatTime(pin.timestamp_sec)}: ${pin.note}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  seek(pin.timestamp_sec);
+                }}
+                aria-label={`Jump to reviewer comment at ${formatTime(pin.timestamp_sec)}`}
+              />
+            );
+          })}
 
           {/* Playhead with floating time tag */}
           <div

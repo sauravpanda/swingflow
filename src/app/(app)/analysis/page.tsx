@@ -31,8 +31,19 @@ import {
   analyzeVideoFromKey,
   deleteUploadedVideo,
   getViewUrl,
+  listPeerReviews,
   type VideoScoreResult,
 } from "@/lib/wcs-api";
+
+// Reviewer pin as it gets surfaced to the timeline. Flat shape so
+// TimelineView can render markers without knowing about reviews.
+export type ReviewerPin = {
+  timestamp_sec: number;
+  note: string;
+  reviewer_name: string | null;
+  reviewer_role: string | null;
+  review_id: string;
+};
 import { Analytics } from "@/lib/analytics";
 
 function formatDateTime(iso: string): string {
@@ -74,6 +85,12 @@ function AnalysisPageInner() {
     null
   );
   const [shareCardOpen, setShareCardOpen] = useState(false);
+  // Reviewer pins surfaced from submitted peer reviews (#138 +
+  // peer-review-comment-first). Flattened across all submitted
+  // reviews so the timeline gets a single layer to render. Refetched
+  // when the user opens this analysis; we don't poll because new
+  // submissions land via a different (offline) channel anyway.
+  const [reviewerPins, setReviewerPins] = useState<ReviewerPin[]>([]);
 
   // Find the record from the history hook. history.records already
   // filters soft-deleted rows by default, so if the id is missing
@@ -81,6 +98,47 @@ function AnalysisPageInner() {
   const record: AnalysisRecord | undefined = id
     ? history.records.find((r) => r.id === id)
     : undefined;
+
+  useEffect(() => {
+    if (!id) {
+      setReviewerPins([]);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const data = await listPeerReviews(id);
+        if (cancelled) return;
+        const flat: ReviewerPin[] = [];
+        for (const r of data.submitted) {
+          const moments = Array.isArray(r.per_moment_notes)
+            ? r.per_moment_notes
+            : [];
+          for (const m of moments) {
+            const ts = Number(m?.timestamp_sec);
+            const note = String(m?.note ?? "").trim();
+            if (!Number.isFinite(ts) || !note) continue;
+            flat.push({
+              timestamp_sec: ts,
+              note,
+              reviewer_name: r.reviewer_name ?? null,
+              reviewer_role: r.reviewer_role ?? null,
+              review_id: r.id,
+            });
+          }
+        }
+        flat.sort((a, b) => a.timestamp_sec - b.timestamp_sec);
+        setReviewerPins(flat);
+      } catch {
+        // Silent: the embedded PeerReviewsSection has its own error
+        // surface for the same fetch failure; we don't double-toast.
+        if (!cancelled) setReviewerPins([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [id]);
 
   const currentResult = overrideResult ?? record?.result ?? null;
 
@@ -510,6 +568,7 @@ function AnalysisPageInner() {
         videoSrc={videoUrl}
         analysisId={record.id}
         initialSeekSec={initialSeekSec}
+        reviewerPins={reviewerPins}
       />
 
       {/* Score + sub-scores + patterns + strengths + improvements */}

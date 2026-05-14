@@ -13,10 +13,21 @@ import {
   listPeerReviews,
   requestPeerReview,
   type PeerReview,
+  type ReviewBrief,
 } from "@/lib/wcs-api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   Check,
   Copy,
@@ -26,6 +37,14 @@ import {
   UserPlus,
   X,
 } from "lucide-react";
+
+type FocusCategory = NonNullable<ReviewBrief["focus_categories"]>[number];
+const FOCUS_CATEGORIES: Array<{ key: FocusCategory; label: string }> = [
+  { key: "timing", label: "Timing" },
+  { key: "technique", label: "Technique" },
+  { key: "teamwork", label: "Teamwork" },
+  { key: "presentation", label: "Presentation" },
+];
 
 function formatPinTime(sec: number): string {
   if (!Number.isFinite(sec) || sec < 0) return "0:00";
@@ -48,6 +67,15 @@ export function PeerReviewsSection({ analysisId }: { analysisId: string }) {
   const [requesting, setRequesting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copiedToken, setCopiedToken] = useState<string | null>(null);
+  // Brief dialog state — comment-first flow. Sending an empty brief
+  // is still valid (the brief is optional server-side), but the
+  // dialog nudges the dancer to say what they actually want feedback
+  // on, which is the whole point.
+  const [briefOpen, setBriefOpen] = useState(false);
+  const [briefPrompt, setBriefPrompt] = useState("");
+  const [briefFocus, setBriefFocus] = useState<Set<FocusCategory>>(
+    () => new Set()
+  );
 
   const refresh = useCallback(async () => {
     try {
@@ -69,7 +97,11 @@ export function PeerReviewsSection({ analysisId }: { analysisId: string }) {
     setRequesting(true);
     setError(null);
     try {
-      const { url } = await requestPeerReview(analysisId);
+      const brief: ReviewBrief = {
+        requester_prompt: briefPrompt.trim() || null,
+        focus_categories: Array.from(briefFocus),
+      };
+      const { url } = await requestPeerReview(analysisId, brief);
       // Try to copy immediately so the user can paste into a DM /
       // message / email. Falls back to showing the URL in the row if
       // clipboard isn't available.
@@ -80,12 +112,24 @@ export function PeerReviewsSection({ analysisId }: { analysisId: string }) {
       } catch {
         // ignore — the link will be visible in the pending row
       }
+      setBriefOpen(false);
+      setBriefPrompt("");
+      setBriefFocus(new Set());
       await refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setRequesting(false);
     }
+  };
+
+  const toggleFocus = (c: FocusCategory) => {
+    setBriefFocus((prev) => {
+      const next = new Set(prev);
+      if (next.has(c)) next.delete(c);
+      else next.add(c);
+      return next;
+    });
   };
 
   const handleCopy = async (token: string) => {
@@ -157,14 +201,10 @@ export function PeerReviewsSection({ analysisId }: { analysisId: string }) {
           <Button
             size="sm"
             variant="outline"
-            onClick={handleRequest}
+            onClick={() => setBriefOpen(true)}
             disabled={requesting}
           >
-            {requesting ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />
-            ) : (
-              <UserPlus className="h-3.5 w-3.5 mr-1.5" />
-            )}
+            <UserPlus className="h-3.5 w-3.5 mr-1.5" />
             Ask someone
           </Button>
         </div>
@@ -260,6 +300,85 @@ export function PeerReviewsSection({ analysisId }: { analysisId: string }) {
           </div>
         )}
       </CardContent>
+
+      <Dialog
+        open={briefOpen}
+        onOpenChange={(open) => {
+          if (requesting) return;
+          setBriefOpen(open);
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Ask someone for feedback</DialogTitle>
+            <DialogDescription>
+              Tell the reviewer what to look at. A focused question gets a
+              focused answer — &ldquo;does my anchor settle on 5–6?&rdquo; beats
+              &ldquo;score me out of 10.&rdquo;
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="brief-prompt" className="text-sm">
+                What do you want feedback on?{" "}
+                <span className="text-muted-foreground font-normal">
+                  (optional)
+                </span>
+              </Label>
+              <textarea
+                id="brief-prompt"
+                value={briefPrompt}
+                onChange={(e) => setBriefPrompt(e.target.value)}
+                rows={3}
+                maxLength={2000}
+                placeholder="e.g. My anchors keep feeling rushed. Does my weight settle on 5-6, or am I leaving early?"
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-sm">
+                Focus areas{" "}
+                <span className="text-muted-foreground font-normal">
+                  (optional)
+                </span>
+              </Label>
+              <div className="grid grid-cols-2 gap-2">
+                {FOCUS_CATEGORIES.map((c) => (
+                  <label
+                    key={c.key}
+                    className="flex items-center gap-2 text-sm cursor-pointer rounded-md border border-border/60 px-2.5 py-1.5 hover:bg-muted/30"
+                  >
+                    <Checkbox
+                      checked={briefFocus.has(c.key)}
+                      onCheckedChange={() => toggleFocus(c.key)}
+                    />
+                    {c.label}
+                  </label>
+                ))}
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="ghost"
+              onClick={() => setBriefOpen(false)}
+              disabled={requesting}
+            >
+              Cancel
+            </Button>
+            <Button onClick={handleRequest} disabled={requesting}>
+              {requesting ? (
+                <>
+                  <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />
+                  Generating link…
+                </>
+              ) : (
+                "Generate review link"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 }

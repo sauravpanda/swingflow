@@ -31,8 +31,40 @@ router = APIRouter(prefix="/peer-reviews", tags=["peer-reviews"])
 # Requester (authenticated) endpoints
 # ─────────────────────────────────────────────────────────────────────
 
+_VALID_FOCUS_CATEGORIES = {
+    "timing",
+    "technique",
+    "teamwork",
+    "presentation",
+}
+
+
 class RequestBody(BaseModel):
     analysis_id: str = Field(..., min_length=1, max_length=64)
+    # Comment-first additions: the requester can tell the reviewer
+    # what to look at. Both optional — old clients keep working.
+    requester_prompt: str | None = Field(default=None, max_length=2000)
+    focus_categories: list[str] | None = Field(default=None)
+
+    @field_validator("focus_categories")
+    @classmethod
+    def _validate_focus(cls, v: list[str] | None) -> list[str] | None:
+        if not v:
+            return None
+        cleaned = [
+            c.strip().lower()
+            for c in v
+            if isinstance(c, str) and c.strip().lower() in _VALID_FOCUS_CATEGORIES
+        ]
+        # Dedup while preserving order so the UI badge order matches
+        # what the requester picked.
+        seen: set[str] = set()
+        out: list[str] = []
+        for c in cleaned:
+            if c not in seen:
+                seen.add(c)
+                out.append(c)
+        return out or None
 
 
 @router.post("/request")
@@ -58,6 +90,8 @@ async def request_review(
             analysis_id=body.analysis_id,
             token=token,
             requester_user_id=user["sub"],
+            requester_prompt=(body.requester_prompt or "").strip() or None,
+            focus_categories=body.focus_categories,
         )
     except httpx.HTTPStatusError as exc:
         raise HTTPException(
@@ -163,16 +197,24 @@ async def get_public_review(token: str) -> dict[str, Any]:
             "stage": analysis.get("stage"),
             "dancer_description": analysis.get("dancer_description"),
         },
+        # The dancer's brief — what they want feedback on. Shown above
+        # the video so the reviewer focuses there instead of guessing.
+        "requester_prompt": review.get("requester_prompt"),
+        "focus_categories": review.get("focus_categories"),
     }
 
 
 class SubmitBody(BaseModel):
     reviewer_name: str = Field(..., min_length=1, max_length=80)
     reviewer_role: str = Field(default="other", max_length=20)
-    timing_score: float = Field(..., ge=0.0, le=10.0)
-    technique_score: float = Field(..., ge=0.0, le=10.0)
-    teamwork_score: float = Field(..., ge=0.0, le=10.0)
-    presentation_score: float = Field(..., ge=0.0, le=10.0)
+    # Comment-first: scores are optional. A reviewer leaving useful
+    # timestamped notes without committing to numbers is more
+    # valuable than a 7/7/7/7-with-no-notes submission. We still
+    # accept and store scores when given.
+    timing_score: float | None = Field(default=None, ge=0.0, le=10.0)
+    technique_score: float | None = Field(default=None, ge=0.0, le=10.0)
+    teamwork_score: float | None = Field(default=None, ge=0.0, le=10.0)
+    presentation_score: float | None = Field(default=None, ge=0.0, le=10.0)
     overall_notes: str | None = Field(default=None, max_length=4000)
     per_moment_notes: list[dict[str, Any]] = Field(default_factory=list)
     # Opt-in to let SwingFlow use this review to improve the AI
@@ -208,6 +250,36 @@ class SubmitBody(BaseModel):
             cleaned.append({"timestamp_sec": round(ts, 2), "note": note})
         return cleaned
 
+    def require_at_least_one_signal(self) -> None:
+        """Comment-first guard: refuse submissions that carry no
+        actionable signal. The validator runs in the handler so we
+        can return a clean 400 instead of failing schema validation
+        on a synthetic "must have content" field.
+        """
+        has_overall = bool((self.overall_notes or "").strip())
+        has_pin = len(self.per_moment_notes) > 0
+        has_any_score = any(
+            s is not None
+            for s in (
+                self.timing_score,
+                self.technique_score,
+                self.teamwork_score,
+                self.presentation_score,
+            )
+        )
+        # A name-only submission with no notes, no pins, and no scores
+        # is the "drive-by 7/7/7/7" failure mode codex flagged. Block
+        # it. (Scores alone are acceptable so we don't regress users
+        # who do want to leave numbers.)
+        if not has_overall and not has_pin and not has_any_score:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "leave at least one comment, pin a timestamp, "
+                    "or rate a category before submitting"
+                ),
+            )
+
 
 @router.post("/public/{token}/submit")
 async def submit_public_review(
@@ -224,6 +296,9 @@ async def submit_public_review(
         raise HTTPException(status_code=404, detail="review not found")
     if review.get("submitted_at"):
         raise HTTPException(status_code=409, detail="review already submitted")
+
+    # Comment-first guard. Returns 400 if the form is empty.
+    body.require_at_least_one_signal()
 
     # Snapshot the AI result as it stands RIGHT NOW so the training
     # pair is frozen. Best-effort: if the analysis was deleted between

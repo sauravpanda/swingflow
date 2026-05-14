@@ -237,6 +237,12 @@ create table if not exists public.peer_reviews (
   -- and AI score could desync, ruining the training pair.
   ai_result_snapshot    jsonb,
 
+  -- Optional brief from the requester. Reviewers see this above the
+  -- video so they know what to look at instead of guessing at the
+  -- "score me on everything" form. Comment-first review (#112-adj).
+  requester_prompt      text,
+  focus_categories      text[],
+
   submitted_at          timestamptz,
   created_at            timestamptz not null default now()
 );
@@ -246,6 +252,13 @@ alter table public.peer_reviews
   add column if not exists training_consent   boolean not null default false,
   add column if not exists consent_given_at   timestamptz,
   add column if not exists ai_result_snapshot jsonb;
+
+-- Migration: add the requester's brief so reviewers know what the
+-- dancer wants feedback on. Idempotent so re-running this schema
+-- doesn't error on environments that already applied it.
+alter table public.peer_reviews
+  add column if not exists requester_prompt   text,
+  add column if not exists focus_categories   text[];
 
 create index if not exists peer_reviews_analysis_id_idx
   on public.peer_reviews(analysis_id);
