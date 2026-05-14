@@ -652,10 +652,11 @@ export function TimelineView({
           ))}
 
           {/* Reviewer pins — human-authored timestamped comments from
-              submitted peer reviews. Rendered ABOVE the timeline (top:
-              -3) as little pin dots so they don't fight the AI pattern
-              blocks for the same vertical real estate, but stay
-              visually associated with their timestamp. Click → seek. */}
+              submitted peer reviews. Rendered INSIDE the bar at the
+              top edge (the parent has overflow-hidden, so negative
+              top values would clip the pins out of view entirely).
+              z-10 keeps them above the pattern blocks they may
+              overlap. Click → seek. */}
           {(reviewerPins ?? []).map((pin, i) => {
             const pct = Math.max(
               0,
@@ -666,7 +667,7 @@ export function TimelineView({
               <button
                 key={`pin-${pin.review_id}-${i}`}
                 type="button"
-                className="absolute -top-3 z-10 -translate-x-1/2 h-3 w-3 rounded-full border-2 border-background bg-emerald-400 shadow-sm hover:scale-125 transition-transform"
+                className="absolute top-0.5 z-10 -translate-x-1/2 h-3 w-3 rounded-full border-2 border-background bg-emerald-400 shadow-sm hover:scale-125 transition-transform"
                 style={{ left: `${pct}%` }}
                 title={`${author}${pin.reviewer_role ? ` (${pin.reviewer_role})` : ""} @ ${formatTime(pin.timestamp_sec)}: ${pin.note}`}
                 onClick={(e) => {
