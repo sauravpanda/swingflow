@@ -60,6 +60,95 @@ const SKELETON_EDGES: Array<[number, number]> = [
 // alternate. Coaches can read "the cyan one" and "the magenta one".
 const POSE_COLORS = ["#5eead4", "#f0abfc"];
 
+// MediaPipe Pose landmark indices we care about for metrics. The
+// model returns 33 points total; these are the ones a coach uses to
+// eyeball stacking and weight transfer.
+const LM_NOSE = 0;
+const LM_SHOULDER_L = 11;
+const LM_SHOULDER_R = 12;
+const LM_HIP_L = 23;
+const LM_HIP_R = 24;
+const LM_ANKLE_L = 27;
+const LM_ANKLE_R = 28;
+// Confidence floor below which we treat a landmark as missing. Same
+// threshold used for the skeleton edges above so a dropped ankle
+// doesn't pull the metrics into nonsense.
+const VIS_FLOOR = 0.3;
+
+type Landmark = { x: number; y: number; z?: number; visibility?: number };
+
+type PoseMetrics = {
+  // The vertical line a stacked body should fall on, in normalized
+  // x-coordinates [0, 1]. Set to the supporting ankle when one foot
+  // bears the weight, midpoint of both ankles otherwise.
+  plumbX: number;
+  // y of the top of the body (head) and the floor (ankle) so the
+  // plumb line is drawn through the body and a touch beyond.
+  topY: number;
+  bottomY: number;
+  // Which side is currently bearing weight, or null when even / can't
+  // tell. Used to highlight the loaded ankle so a coach scrubbing
+  // through an anchor can see weight settle at a glance.
+  weightSide: "left" | "right" | null;
+};
+
+/** Derive coaching metrics from a single pose. Returns null when the
+ *  model didn't get enough of a body to compute anything useful — a
+ *  cropped clip or a dancer who walked out of frame. */
+function computeMetrics(person: Landmark[]): PoseMetrics | null {
+  const head = person[LM_NOSE];
+  const sL = person[LM_SHOULDER_L];
+  const sR = person[LM_SHOULDER_R];
+  const hL = person[LM_HIP_L];
+  const hR = person[LM_HIP_R];
+  const aL = person[LM_ANKLE_L];
+  const aR = person[LM_ANKLE_R];
+  if (!head || !sL || !sR || !hL || !hR || !aL || !aR) return null;
+  // Need both ankles confidently to talk about weight at all. Hips
+  // are non-negotiable for the plumb (everything keys off the hip
+  // midpoint).
+  if ((aL.visibility ?? 1) < VIS_FLOOR || (aR.visibility ?? 1) < VIS_FLOOR) {
+    return null;
+  }
+  if ((hL.visibility ?? 1) < VIS_FLOOR || (hR.visibility ?? 1) < VIS_FLOOR) {
+    return null;
+  }
+
+  const hipMidX = (hL.x + hR.x) / 2;
+  // Weight ratio: 0 = full left, 1 = full right. We project the hip
+  // midpoint horizontally and ask how far across the stance it sits.
+  // Anything outside [0, 1] means the dancer is leaning past the
+  // base of support, which is itself a useful signal — clamp + flag.
+  const ankleSpread = aR.x - aL.x;
+  // ankleSpread can be negative when the dancer's body is mirrored
+  // (filmed from behind) or the model swapped L/R. Take abs + remember
+  // which ankle is "near" for the weight call.
+  const span = Math.abs(ankleSpread) || 0.0001;
+  const leftX = Math.min(aL.x, aR.x);
+  const weightRatio = (hipMidX - leftX) / span;
+  // 35/65 is a deliberately wide deadband. WCS anchors hover near
+  // 50/50 with one foot just slightly more loaded; calling weight
+  // sides too eagerly turns the indicator into strobe.
+  let weightSide: "left" | "right" | null = null;
+  if (weightRatio < 0.35) {
+    weightSide = aL.x < aR.x ? "left" : "right";
+  } else if (weightRatio > 0.65) {
+    weightSide = aL.x < aR.x ? "right" : "left";
+  }
+
+  const plumbX =
+    weightSide === "left"
+      ? aL.x
+      : weightSide === "right"
+      ? aR.x
+      : (aL.x + aR.x) / 2;
+  // Extend the plumb a hair above the head + below the lower of the
+  // two ankles so the line clearly "passes through" the body.
+  const topY = Math.max(0, head.y - 0.04);
+  const bottomY = Math.min(1, Math.max(aL.y, aR.y) + 0.04);
+  return { plumbX, topY, bottomY, weightSide };
+}
+
 export type PoseOverlayHandle = {
   setEnabled: (next: boolean) => void;
   enabled: boolean;
@@ -207,6 +296,58 @@ export const PoseOverlay = forwardRef<PoseOverlayHandle, PoseOverlayProps>(
             ctx.beginPath();
             ctx.arc(p.x * w, p.y * h, r, 0, Math.PI * 2);
             ctx.fill();
+          }
+
+          // ─── Coaching metrics layer (PR 3b) ───
+          // Plumb line + loaded-foot highlight. The two things a
+          // coach reads at a glance: "is the body stacked over the
+          // supporting foot" and "which foot has the weight".
+          const metrics = computeMetrics(person);
+          if (metrics) {
+            // Plumb line — translucent, dashed, person's color. A
+            // well-stacked dancer has head, shoulders, and hips all
+            // intersecting this line; deviation reads visually
+            // without needing a numeric badge.
+            ctx.save();
+            ctx.strokeStyle = color;
+            ctx.globalAlpha = 0.55;
+            ctx.lineWidth = Math.max(1, Math.min(w, h) / 400);
+            ctx.setLineDash([6, 6]);
+            ctx.beginPath();
+            ctx.moveTo(metrics.plumbX * w, metrics.topY * h);
+            ctx.lineTo(metrics.plumbX * w, metrics.bottomY * h);
+            ctx.stroke();
+            ctx.restore();
+
+            // Loaded-foot highlight — only when we're confident
+            // enough to call a side. The loaded ankle is whichever
+            // one matches plumbX (computeMetrics already set plumbX
+            // to the spatially-loaded ankle, which handles cases
+            // where MediaPipe swapped L/R labels on a behind-camera
+            // shot). A filled ring + brighter inner dot reads as
+            // "this foot has weight" without adding text.
+            if (metrics.weightSide) {
+              const aL = person[LM_ANKLE_L];
+              const aR = person[LM_ANKLE_R];
+              const loaded =
+                Math.abs(aL.x - metrics.plumbX) <
+                Math.abs(aR.x - metrics.plumbX)
+                  ? aL
+                  : aR;
+              const ringR = Math.max(6, Math.min(w, h) / 90);
+              ctx.save();
+              ctx.strokeStyle = color;
+              ctx.lineWidth = Math.max(2, Math.min(w, h) / 250);
+              ctx.globalAlpha = 0.9;
+              ctx.beginPath();
+              ctx.arc(loaded.x * w, loaded.y * h, ringR, 0, Math.PI * 2);
+              ctx.stroke();
+              ctx.fillStyle = color;
+              ctx.beginPath();
+              ctx.arc(loaded.x * w, loaded.y * h, ringR / 2.5, 0, Math.PI * 2);
+              ctx.fill();
+              ctx.restore();
+            }
           }
         });
       };
