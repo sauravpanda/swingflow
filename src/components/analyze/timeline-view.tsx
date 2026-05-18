@@ -15,9 +15,14 @@ import {
   Repeat,
   ChevronFirst,
   ChevronLast,
+  PersonStanding,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useVideoBeatClick } from "@/hooks/use-video-beat-click";
+import {
+  PoseOverlay,
+  type PoseOverlayHandle,
+} from "@/components/analyze/pose-overlay";
 import type {
   MusicalMoment,
   VideoPatternIdentified,
@@ -183,6 +188,24 @@ export function TimelineView({
     vAny.mozPreservesPitch = true;
     vAny.webkitPreservesPitch = true;
   }, [videoSrc, playbackRate]);
+
+  // Pose overlay control. The overlay manages its own enable state +
+  // localStorage persistence; we hold a handle so the timeline's
+  // toggle button can flip it and re-render with the new state.
+  const poseRef = useRef<PoseOverlayHandle | null>(null);
+  // Mirror the enabled flag in component state so the toggle button
+  // re-renders when it flips. Initial value matches the same
+  // localStorage key the overlay uses so the button doesn't flash
+  // "off" for one render when the preference is on.
+  const [poseEnabled, setPoseEnabledMirror] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    return window.localStorage.getItem("swingflow:pose-overlay-enabled") === "true";
+  });
+  const togglePose = () => {
+    const next = !poseEnabled;
+    poseRef.current?.setEnabled(next);
+    setPoseEnabledMirror(next);
+  };
 
   // Audible beat click — Web Audio metronome that fires on each beat
   // extracted from the song (#168-pivot). The video player handles
@@ -554,14 +577,26 @@ export function TimelineView({
         // then the pattern timeline as the only scrubber. max-h caps
         // the video so portrait clips don't dominate the viewport.
         <div className="rounded-md bg-black overflow-hidden">
-          <video
-            ref={videoRef}
-            src={videoSrc}
-            preload="metadata"
-            playsInline
-            onClick={togglePlay}
-            className="w-full max-h-[60vh] sm:max-h-[520px] object-contain cursor-pointer"
-          />
+          <div className="relative">
+            <video
+              ref={videoRef}
+              src={videoSrc}
+              preload="metadata"
+              playsInline
+              onClick={togglePlay}
+              className="w-full max-h-[60vh] sm:max-h-[520px] object-contain cursor-pointer"
+            />
+            {/* Pose-skeleton overlay (#168-pivot PR 3). Rendered as
+                an absolute sibling of the video so the canvas
+                tracks the video's displayed size via inset-0. The
+                overlay does its own enable/disable via the handle
+                exposed below; nothing renders here when off. */}
+            <PoseOverlay
+              ref={poseRef}
+              videoRef={videoRef}
+              playing={playing}
+            />
+          </div>
           {/* Custom control row — play, restart, time, mute, fullscreen */}
           <div className="flex items-center gap-2 px-2 py-1.5 text-xs bg-black/80">
             <button
@@ -646,6 +681,32 @@ export function TimelineView({
                 <Repeat className="h-4 w-4" />
               </button>
               <SpeedSelector rate={playbackRate} onChange={applyRate} />
+              {/* Pose-skeleton overlay toggle. Hidden when there's
+                  no video src — toggle while video is missing would
+                  have nothing to draw on. Icon lights cyan when on. */}
+              <button
+                type="button"
+                onClick={togglePose}
+                className={cn(
+                  "p-1 rounded transition-colors",
+                  poseEnabled
+                    ? "text-cyan-300 hover:text-cyan-200"
+                    : "text-white/70 hover:text-white"
+                )}
+                aria-label={
+                  poseEnabled
+                    ? "Hide body skeleton overlay"
+                    : "Show body skeleton overlay"
+                }
+                aria-pressed={poseEnabled}
+                title={
+                  poseEnabled
+                    ? "Body skeleton on — tap to hide"
+                    : "Body skeleton off — tap to overlay pose detection on the video"
+                }
+              >
+                <PersonStanding className="h-4 w-4" />
+              </button>
               {result.beat_grid && (
                 <button
                   type="button"
