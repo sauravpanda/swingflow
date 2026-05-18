@@ -66,6 +66,8 @@ const POSE_COLORS = ["#5eead4", "#f0abfc"];
 const LM_NOSE = 0;
 const LM_SHOULDER_L = 11;
 const LM_SHOULDER_R = 12;
+const LM_WRIST_L = 15;
+const LM_WRIST_R = 16;
 const LM_HIP_L = 23;
 const LM_HIP_R = 24;
 const LM_ANKLE_L = 27;
@@ -91,6 +93,82 @@ type PoseMetrics = {
   // through an anchor can see weight settle at a glance.
   weightSide: "left" | "right" | null;
 };
+
+// Colors for the partnership-level overlays. Distinct from POSE_COLORS
+// so connection + slot read as "between the dancers" rather than
+// belonging to either skeleton.
+const CONNECTION_COLOR = "#fbbf24"; // amber — warm, contrasts with cyan/magenta
+const SLOT_COLOR = "#f5f5f4"; // stone — neutral, low-saturation
+
+/** Find the closest wrist pair across the two dancers' poses and
+ *  return it when they're plausibly in physical contact. Threshold
+ *  is scale-aware (a fraction of shoulder spread) so close-up shots
+ *  and wide-shots both work without a manual zoom-knob. */
+function findConnection(
+  a: Landmark[],
+  b: Landmark[]
+): { ax: number; ay: number; bx: number; by: number } | null {
+  const aWrists = [a[LM_WRIST_L], a[LM_WRIST_R]];
+  const bWrists = [b[LM_WRIST_L], b[LM_WRIST_R]];
+  const aSL = a[LM_SHOULDER_L];
+  const aSR = a[LM_SHOULDER_R];
+  if (!aSL || !aSR) return null;
+  // Scale: half the lead-dancer's shoulder width. Hands within this
+  // distance of each other are almost always in connection in WCS —
+  // the dance keeps a one-foot hand connection at minimum, not
+  // arm's-length separation.
+  const shoulderSpread = Math.hypot(aSL.x - aSR.x, aSL.y - aSR.y);
+  const threshold = shoulderSpread * 0.7;
+  let best: {
+    ax: number;
+    ay: number;
+    bx: number;
+    by: number;
+    d: number;
+  } | null = null;
+  for (const aw of aWrists) {
+    if (!aw || (aw.visibility ?? 1) < VIS_FLOOR) continue;
+    for (const bw of bWrists) {
+      if (!bw || (bw.visibility ?? 1) < VIS_FLOOR) continue;
+      const d = Math.hypot(aw.x - bw.x, aw.y - bw.y);
+      if (d > threshold) continue;
+      if (best && d >= best.d) continue;
+      best = { ax: aw.x, ay: aw.y, bx: bw.x, by: bw.y, d };
+    }
+  }
+  return best;
+}
+
+/** Slot axis derived from both dancers' foot midpoints in the current
+ *  frame. Per-frame (not time-averaged), so the line follows the
+ *  dancers — when both drift together, the slot drifts with them.
+ *  Catching a slot violation in one frame still works: one dancer
+ *  off the line is visible against the other dancer who's still on it.
+ *  Time-averaged slot is a follow-up.
+ */
+function computeSlot(
+  a: Landmark[],
+  b: Landmark[]
+): { ax: number; ay: number; bx: number; by: number } | null {
+  const aL = a[LM_ANKLE_L];
+  const aR = a[LM_ANKLE_R];
+  const bL = b[LM_ANKLE_L];
+  const bR = b[LM_ANKLE_R];
+  if (!aL || !aR || !bL || !bR) return null;
+  if (
+    (aL.visibility ?? 1) < VIS_FLOOR ||
+    (aR.visibility ?? 1) < VIS_FLOOR ||
+    (bL.visibility ?? 1) < VIS_FLOOR ||
+    (bR.visibility ?? 1) < VIS_FLOOR
+  ) {
+    return null;
+  }
+  const ax = (aL.x + aR.x) / 2;
+  const ay = (aL.y + aR.y) / 2;
+  const bx = (bL.x + bR.x) / 2;
+  const by = (bL.y + bR.y) / 2;
+  return { ax, ay, bx, by };
+}
 
 /** Derive coaching metrics from a single pose. Returns null when the
  *  model didn't get enough of a body to compute anything useful — a
@@ -350,6 +428,67 @@ export const PoseOverlay = forwardRef<PoseOverlayHandle, PoseOverlayProps>(
             }
           }
         });
+
+        // ─── Partnership-level overlays (PR 3c) ───
+        // Connection line + slot axis. Only when MediaPipe found two
+        // dancers; a solo clip just gets the skeletons + per-person
+        // metrics already drawn above.
+        if (result.landmarks.length >= 2) {
+          const a = result.landmarks[0];
+          const b = result.landmarks[1];
+
+          // Slot axis first (under the connection line so a tight
+          // overlap reads as "connection on top of slot").
+          const slot = computeSlot(a, b);
+          if (slot) {
+            // Extend the line a touch past each foot-midpoint so the
+            // slot reads as an axis rather than a line-segment-
+            // between-two-points. 0.25 = ~quarter of the segment
+            // length on each side, scale-invariant.
+            const dx = slot.bx - slot.ax;
+            const dy = slot.by - slot.ay;
+            const extX0 = slot.ax - dx * 0.25;
+            const extY0 = slot.ay - dy * 0.25;
+            const extX1 = slot.bx + dx * 0.25;
+            const extY1 = slot.by + dy * 0.25;
+            ctx.save();
+            ctx.strokeStyle = SLOT_COLOR;
+            ctx.globalAlpha = 0.35;
+            ctx.lineWidth = Math.max(1, Math.min(w, h) / 350);
+            ctx.setLineDash([10, 6]);
+            ctx.beginPath();
+            ctx.moveTo(extX0 * w, extY0 * h);
+            ctx.lineTo(extX1 * w, extY1 * h);
+            ctx.stroke();
+            ctx.restore();
+          }
+
+          // Connection line — drawn solid because connection IS the
+          // signal (the slot is geometry; the connection is the
+          // dance). Endpoints get small terminal dots so a brief
+          // single-frame detection reads as a real connection
+          // rather than a stroke artifact.
+          const conn = findConnection(a, b);
+          if (conn) {
+            ctx.save();
+            ctx.strokeStyle = CONNECTION_COLOR;
+            ctx.lineWidth = Math.max(2, Math.min(w, h) / 200);
+            ctx.lineCap = "round";
+            ctx.beginPath();
+            ctx.moveTo(conn.ax * w, conn.ay * h);
+            ctx.lineTo(conn.bx * w, conn.by * h);
+            ctx.stroke();
+            ctx.fillStyle = CONNECTION_COLOR;
+            const tr = Math.max(3, Math.min(w, h) / 200);
+            ctx.beginPath();
+            ctx.arc(conn.ax * w, conn.ay * h, tr, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(conn.bx * w, conn.by * h, tr, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+          }
+        }
       };
 
       const tick = () => {
