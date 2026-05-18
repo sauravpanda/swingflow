@@ -11,8 +11,10 @@ import {
   Gauge,
   Crosshair,
   RotateCcw,
+  Drum,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useVideoBeatClick } from "@/hooks/use-video-beat-click";
 import type {
   MusicalMoment,
   VideoPatternIdentified,
@@ -178,6 +180,20 @@ export function TimelineView({
     vAny.mozPreservesPitch = true;
     vAny.webkitPreservesPitch = true;
   }, [videoSrc, playbackRate]);
+
+  // Audible beat click — Web Audio metronome that fires on each beat
+  // extracted from the song (#168-pivot). The video player handles
+  // the song's own audio; this layers a separate "tick" on top that
+  // stays accurate when the video is slowed or sped up, because the
+  // scheduler reads playbackRate. Toggle is persisted in localStorage
+  // so a coach's preference sticks across clips.
+  const beatClick = useVideoBeatClick({
+    beats: result.beat_grid?.beats ?? null,
+    downbeats: result.beat_grid?.downbeats ?? null,
+    videoRef,
+    playing,
+  });
+
   // Detail shown below the bar. Manual intent (hover / tap-select)
   // wins. Otherwise track whatever pattern the video is currently
   // playing through so a user just pressing play watches the detail
@@ -417,6 +433,31 @@ export function TimelineView({
             )}
             <div className="ml-auto flex items-center gap-1">
               <SpeedSelector rate={playbackRate} onChange={applyRate} />
+              {result.beat_grid && (
+                <button
+                  type="button"
+                  onClick={() => beatClick.setEnabled(!beatClick.enabled)}
+                  className={cn(
+                    "p-1 rounded transition-colors",
+                    beatClick.enabled
+                      ? "text-emerald-400 hover:text-emerald-300"
+                      : "text-white/70 hover:text-white"
+                  )}
+                  aria-label={
+                    beatClick.enabled
+                      ? "Mute beat click"
+                      : "Play beat click on each detected beat"
+                  }
+                  aria-pressed={beatClick.enabled}
+                  title={
+                    beatClick.enabled
+                      ? "Beat click on — tap to mute"
+                      : "Beat click off — tap to hear a tick on every detected beat (downbeats louder)"
+                  }
+                >
+                  <Drum className="h-4 w-4" />
+                </button>
+              )}
               <button
                 type="button"
                 onClick={toggleMute}
