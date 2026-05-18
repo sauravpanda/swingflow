@@ -597,8 +597,12 @@ export function TimelineView({
               playing={playing}
             />
           </div>
-          {/* Custom control row — play, restart, time, mute, fullscreen */}
-          <div className="flex items-center gap-2 px-2 py-1.5 text-xs bg-black/80">
+          {/* Custom control row — play, restart, time, mute, fullscreen.
+              flex-wrap so the bar collapses to two rows on phones
+              (the coaching tools added in #172-#176 took the row past
+              its single-line budget at <500px). gap-y matches gap-x
+              so the wrapped row sits flush. */}
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 px-2 py-1.5 text-xs bg-black/80">
             <button
               type="button"
               onClick={togglePlay}

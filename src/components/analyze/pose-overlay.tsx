@@ -76,6 +76,12 @@ const LM_ANKLE_R = 28;
 // threshold used for the skeleton edges above so a dropped ankle
 // doesn't pull the metrics into nonsense.
 const VIS_FLOOR = 0.3;
+// Time-averaged slot: how many foot-midpoint samples we keep in the
+// rolling buffer. 240 samples / 2-per-frame / ~30fps ≈ 4 seconds of
+// dance. Long enough for the PCA fit to settle (a whip + anchor is
+// ~3s) but short enough that a slot change between songs / between
+// pattern-blocks gets picked up rather than averaged away.
+const SLOT_BUFFER_MAX = 240;
 
 type Landmark = { x: number; y: number; z?: number; visibility?: number };
 
@@ -139,14 +145,10 @@ function findConnection(
   return best;
 }
 
-/** Slot axis derived from both dancers' foot midpoints in the current
- *  frame. Per-frame (not time-averaged), so the line follows the
- *  dancers — when both drift together, the slot drifts with them.
- *  Catching a slot violation in one frame still works: one dancer
- *  off the line is visible against the other dancer who's still on it.
- *  Time-averaged slot is a follow-up.
- */
-function computeSlot(
+/** Foot-midpoints for both dancers in the current frame. Returns
+ *  null when either ankle pair isn't visible enough to trust. The
+ *  slot fitter buffers these over a rolling window. */
+function footMidpoints(
   a: Landmark[],
   b: Landmark[]
 ): { ax: number; ay: number; bx: number; by: number } | null {
@@ -163,11 +165,70 @@ function computeSlot(
   ) {
     return null;
   }
-  const ax = (aL.x + aR.x) / 2;
-  const ay = (aL.y + aR.y) / 2;
-  const bx = (bL.x + bR.x) / 2;
-  const by = (bL.y + bR.y) / 2;
-  return { ax, ay, bx, by };
+  return {
+    ax: (aL.x + aR.x) / 2,
+    ay: (aL.y + aR.y) / 2,
+    bx: (bL.x + bR.x) / 2,
+    by: (bL.y + bR.y) / 2,
+  };
+}
+
+/** Fit a line to a set of 2D points via PCA. Returns the principal
+ *  axis as a point + unit-direction; callers extend through the
+ *  point in both directions to draw the slot. Returns null when the
+ *  buffer is too sparse or all points are essentially the same
+ *  (variance ≈ 0), in which case the per-frame fallback below
+ *  handles the render. */
+function fitLinePCA(points: Array<{ x: number; y: number }>): {
+  cx: number;
+  cy: number;
+  dx: number;
+  dy: number;
+} | null {
+  if (points.length < 8) return null;
+  let sumX = 0;
+  let sumY = 0;
+  for (const p of points) {
+    sumX += p.x;
+    sumY += p.y;
+  }
+  const cx = sumX / points.length;
+  const cy = sumY / points.length;
+  let sxx = 0;
+  let sxy = 0;
+  let syy = 0;
+  for (const p of points) {
+    const dx = p.x - cx;
+    const dy = p.y - cy;
+    sxx += dx * dx;
+    sxy += dx * dy;
+    syy += dy * dy;
+  }
+  // 2×2 covariance [[sxx, sxy], [sxy, syy]]. Closed-form
+  // eigendecomposition: trace = sxx+syy, det = sxx*syy - sxy^2.
+  const trace = sxx + syy;
+  if (trace < 1e-6) return null;
+  const diff = Math.sqrt(Math.max(0, (sxx - syy) ** 2 + 4 * sxy * sxy));
+  const lambdaMax = (trace + diff) / 2;
+  // Eigenvector for the largest eigenvalue. Pick the more numerically
+  // stable form depending on which diagonal element is larger.
+  let vx: number;
+  let vy: number;
+  if (Math.abs(sxx - syy) > Math.abs(sxy) * 2 || sxy === 0) {
+    if (sxx >= syy) {
+      vx = lambdaMax - syy;
+      vy = sxy;
+    } else {
+      vx = sxy;
+      vy = lambdaMax - sxx;
+    }
+  } else {
+    vx = sxy;
+    vy = lambdaMax - sxx;
+  }
+  const norm = Math.hypot(vx, vy);
+  if (norm < 1e-6) return null;
+  return { cx, cy, dx: vx / norm, dy: vy / norm };
 }
 
 /** Derive coaching metrics from a single pose. Returns null when the
@@ -255,6 +316,12 @@ export const PoseOverlay = forwardRef<PoseOverlayHandle, PoseOverlayProps>(
     const landmarkerRef = useRef<PoseLandmarker | null>(null);
     const rafRef = useRef<number | null>(null);
     const lastVideoTimeRef = useRef<number>(-1);
+    // Rolling buffer of foot-midpoint samples for the time-averaged
+    // slot fit. Each entry is one of the two dancers' foot midpoints
+    // — we push both per frame. Capped at SLOT_BUFFER_MAX so the
+    // PCA stays O(N) per draw and the line tracks recent movement
+    // instead of being anchored to the start of the dance.
+    const slotSamplesRef = useRef<Array<{ x: number; y: number }>>([]);
 
     const setEnabled = (next: boolean) => {
       setEnabledState(next);
@@ -439,29 +506,60 @@ export const PoseOverlay = forwardRef<PoseOverlayHandle, PoseOverlayProps>(
 
           // Slot axis first (under the connection line so a tight
           // overlap reads as "connection on top of slot").
-          const slot = computeSlot(a, b);
-          if (slot) {
-            // Extend the line a touch past each foot-midpoint so the
-            // slot reads as an axis rather than a line-segment-
-            // between-two-points. 0.25 = ~quarter of the segment
-            // length on each side, scale-invariant.
-            const dx = slot.bx - slot.ax;
-            const dy = slot.by - slot.ay;
-            const extX0 = slot.ax - dx * 0.25;
-            const extY0 = slot.ay - dy * 0.25;
-            const extX1 = slot.bx + dx * 0.25;
-            const extY1 = slot.by + dy * 0.25;
-            ctx.save();
-            ctx.strokeStyle = SLOT_COLOR;
-            ctx.globalAlpha = 0.35;
-            ctx.lineWidth = Math.max(1, Math.min(w, h) / 350);
-            ctx.setLineDash([10, 6]);
-            ctx.beginPath();
-            ctx.moveTo(extX0 * w, extY0 * h);
-            ctx.lineTo(extX1 * w, extY1 * h);
-            ctx.stroke();
-            ctx.restore();
+          //
+          // Two-phase: collect samples of both dancers' foot
+          // midpoints into a rolling buffer, then fit a 2D line
+          // through them via PCA. Buffer caps at SLOT_BUFFER_MAX so
+          // the fit stays current — when the couple moves to a new
+          // slot the line follows after ~4 seconds rather than
+          // averaging across both forever.
+          //
+          // Fallback to the per-frame line-through-foot-midpoints
+          // for the first second or so before the buffer has enough
+          // samples to fit. PCA needs ~8 points to behave; we get
+          // 2 per frame, so the fallback covers the first ~4 frames
+          // and the fit kicks in thereafter.
+          const mids = footMidpoints(a, b);
+          if (mids) {
+            const buf = slotSamplesRef.current;
+            buf.push({ x: mids.ax, y: mids.ay });
+            buf.push({ x: mids.bx, y: mids.by });
+            while (buf.length > SLOT_BUFFER_MAX) buf.shift();
           }
+
+          const slotFit = fitLinePCA(slotSamplesRef.current);
+          ctx.save();
+          ctx.strokeStyle = SLOT_COLOR;
+          ctx.globalAlpha = 0.35;
+          ctx.lineWidth = Math.max(1, Math.min(w, h) / 350);
+          ctx.setLineDash([10, 6]);
+          if (slotFit) {
+            // PCA gives a centerpoint + unit direction. To draw the
+            // axis we just extend it generously in both directions —
+            // half the frame's diagonal in each direction always
+            // exits both edges of the canvas, so the line reads as
+            // an axis rather than a segment. The canvas clips
+            // anything outside [0, 1].
+            const reach = Math.SQRT2; // diagonal of [0,1]×[0,1]
+            const x0 = slotFit.cx - slotFit.dx * reach;
+            const y0 = slotFit.cy - slotFit.dy * reach;
+            const x1 = slotFit.cx + slotFit.dx * reach;
+            const y1 = slotFit.cy + slotFit.dy * reach;
+            ctx.beginPath();
+            ctx.moveTo(x0 * w, y0 * h);
+            ctx.lineTo(x1 * w, y1 * h);
+            ctx.stroke();
+          } else if (mids) {
+            // Per-frame fallback — used during the brief warm-up
+            // window before the PCA buffer has enough samples.
+            const dx = mids.bx - mids.ax;
+            const dy = mids.by - mids.ay;
+            ctx.beginPath();
+            ctx.moveTo((mids.ax - dx * 0.25) * w, (mids.ay - dy * 0.25) * h);
+            ctx.lineTo((mids.bx + dx * 0.25) * w, (mids.by + dy * 0.25) * h);
+            ctx.stroke();
+          }
+          ctx.restore();
 
           // Connection line — drawn solid because connection IS the
           // signal (the slot is geometry; the connection is the
@@ -546,12 +644,29 @@ export const PoseOverlay = forwardRef<PoseOverlayHandle, PoseOverlayProps>(
         landmarkerRef.current = null;
       }
       setStatus("off");
+      slotSamplesRef.current = [];
       const canvas = canvasRef.current;
       if (canvas) {
         const ctx = canvas.getContext("2d");
         ctx?.clearRect(0, 0, canvas.width, canvas.height);
       }
     }, [enabled]);
+
+    // Reset the slot buffer on seek. A scrub backwards in the dance
+    // shouldn't average yesterday's slot into today's frame, and a
+    // jump to a different section likely lands on a different slot
+    // orientation. The buffer rebuilds in ~half a second of play.
+    useEffect(() => {
+      const v = videoRef.current;
+      if (!v) return;
+      const onSeeked = () => {
+        slotSamplesRef.current = [];
+      };
+      v.addEventListener("seeked", onSeeked);
+      return () => {
+        v.removeEventListener("seeked", onSeeked);
+      };
+    }, [videoRef]);
 
     useEffect(() => {
       return () => {
