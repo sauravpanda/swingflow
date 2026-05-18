@@ -12,6 +12,9 @@ import {
   Crosshair,
   RotateCcw,
   Drum,
+  Repeat,
+  ChevronFirst,
+  ChevronLast,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useVideoBeatClick } from "@/hooks/use-video-beat-click";
@@ -194,6 +197,62 @@ export function TimelineView({
     playing,
   });
 
+  // Loop a section — coaches drill the same 2-3 second move over and
+  // over to spot a weight-transfer issue. Hot keys `[` / `]` set the
+  // in/out points at the current playhead, `\` clears, and the loop
+  // boundary check is wired into the existing timeupdate listener
+  // below. Persisted per-analysisId so a coach's loop survives a
+  // refresh while they take a note.
+  const [loopStart, setLoopStartState] = useState<number | null>(null);
+  const [loopEnd, setLoopEndState] = useState<number | null>(null);
+  useEffect(() => {
+    if (!analysisId || typeof window === "undefined") {
+      setLoopStartState(null);
+      setLoopEndState(null);
+      return;
+    }
+    const raw = window.localStorage.getItem(
+      `swingflow:loop:${analysisId}`
+    );
+    if (!raw) {
+      setLoopStartState(null);
+      setLoopEndState(null);
+      return;
+    }
+    try {
+      const parsed = JSON.parse(raw) as {
+        start?: number | null;
+        end?: number | null;
+      };
+      setLoopStartState(
+        typeof parsed.start === "number" && parsed.start >= 0
+          ? parsed.start
+          : null
+      );
+      setLoopEndState(
+        typeof parsed.end === "number" && parsed.end > 0 ? parsed.end : null
+      );
+    } catch {
+      setLoopStartState(null);
+      setLoopEndState(null);
+    }
+  }, [analysisId]);
+
+  const persistLoop = useCallback(
+    (start: number | null, end: number | null) => {
+      setLoopStartState(start);
+      setLoopEndState(end);
+      if (!analysisId || typeof window === "undefined") return;
+      const key = `swingflow:loop:${analysisId}`;
+      if (start == null && end == null) {
+        window.localStorage.removeItem(key);
+      } else {
+        window.localStorage.setItem(key, JSON.stringify({ start, end }));
+      }
+    },
+    [analysisId]
+  );
+
   // Detail shown below the bar. Manual intent (hover / tap-select)
   // wins. Otherwise track whatever pattern the video is currently
   // playing through so a user just pressing play watches the detail
@@ -212,10 +271,32 @@ export function TimelineView({
     return Math.max(fromPatterns, 1);
   }, [videoDuration, duration, result.patterns_identified]);
 
+  // Refs that stay in lockstep with state so the timeupdate handler
+  // doesn't have to be re-registered (and re-bound on every render)
+  // when the loop changes. The listener reads through the refs.
+  const loopStartRef = useRef<number | null>(null);
+  const loopEndRef = useRef<number | null>(null);
+  useEffect(() => {
+    loopStartRef.current = loopStart;
+  }, [loopStart]);
+  useEffect(() => {
+    loopEndRef.current = loopEnd;
+  }, [loopEnd]);
+
   useEffect(() => {
     const v = videoRef.current;
     if (!v) return;
-    const onTime = () => setCurrentTime(v.currentTime);
+    const onTime = () => {
+      // Loop snap-back: when both points are set and the playhead
+      // crosses the out-point, jump back to the in-point. Reading
+      // through refs keeps the listener stable across loop edits.
+      const ls = loopStartRef.current;
+      const le = loopEndRef.current;
+      if (le != null && v.currentTime >= le) {
+        v.currentTime = ls ?? 0;
+      }
+      setCurrentTime(v.currentTime);
+    };
     const onPlay = () => setPlaying(true);
     const onPause = () => setPlaying(false);
     const onLoadedMetadata = () => {
@@ -301,6 +382,88 @@ export function TimelineView({
       v.pause();
     }
   };
+
+  // Coach-mode shortcuts. YouTube convention:
+  //   K (or space): play/pause
+  //   J / L:        skip ±5s
+  //   , / .:        step ±1 frame (assuming 30fps; the only universal
+  //                  number we can pick without per-clip metadata)
+  //   [ / ]:        set loop in / out at the current playhead
+  //   \:            clear the loop
+  // Registered on document so the user doesn't have to click into the
+  // timeline first — they can scrub with J/L while reading the
+  // strengths panel. Skipped when the target is a form input so
+  // typing in the label editor or peer-review form isn't hijacked.
+  useEffect(() => {
+    const FRAME_SEC = 1 / 30;
+    const SKIP_SEC = 5;
+    const onKey = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (target) {
+        const tag = target.tagName;
+        if (
+          tag === "INPUT" ||
+          tag === "TEXTAREA" ||
+          tag === "SELECT" ||
+          target.isContentEditable
+        ) {
+          return;
+        }
+      }
+      // Don't fight other handlers that already use modifiers.
+      if (e.altKey || e.metaKey || e.ctrlKey) return;
+      const v = videoRef.current;
+      if (!v) return;
+      switch (e.key) {
+        case "k":
+        case "K":
+          e.preventDefault();
+          togglePlay();
+          break;
+        case "j":
+        case "J":
+          e.preventDefault();
+          seek(v.currentTime - SKIP_SEC);
+          break;
+        case "l":
+        case "L":
+          e.preventDefault();
+          seek(v.currentTime + SKIP_SEC);
+          break;
+        case ",":
+          // Only step frames when paused; stepping while playing
+          // produces a stutter that feels like a bug, not a tool.
+          if (!v.paused) return;
+          e.preventDefault();
+          seek(v.currentTime - FRAME_SEC);
+          break;
+        case ".":
+          if (!v.paused) return;
+          e.preventDefault();
+          seek(v.currentTime + FRAME_SEC);
+          break;
+        case "[":
+          e.preventDefault();
+          persistLoop(v.currentTime, loopEndRef.current);
+          break;
+        case "]":
+          e.preventDefault();
+          persistLoop(loopStartRef.current, v.currentTime);
+          break;
+        case "\\":
+          e.preventDefault();
+          persistLoop(null, null);
+          break;
+      }
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+    // `seek`, `togglePlay`, `persistLoop` reference `videoRef.current`
+    // through closures that are recreated each render; the listener
+    // body re-reads from refs each time. Re-binding on every render
+    // would be wasteful, so depend only on the stable persistLoop.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [persistLoop]);
 
   // Effective dance-start: user override wins over the model's
   // estimate. All downstream timeline rendering (pre-dance band,
@@ -432,6 +595,56 @@ export function TimelineView({
               />
             )}
             <div className="ml-auto flex items-center gap-1">
+              {/* Loop controls — set in/out points at the current
+                  playhead. Once both are set the timeupdate handler
+                  snaps the video back to the in-point on each cross.
+                  Repeat icon lights emerald when active so coaches
+                  can see at a glance whether a loop is armed. */}
+              <button
+                type="button"
+                onClick={() => {
+                  const v = videoRef.current;
+                  if (v) persistLoop(v.currentTime, loopEnd);
+                }}
+                className="text-white/70 hover:text-white p-1 rounded transition-colors"
+                aria-label="Set loop in-point at current time ([)"
+                title="Loop IN at current time ( [ )"
+              >
+                <ChevronFirst className="h-4 w-4" />
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const v = videoRef.current;
+                  if (v) persistLoop(loopStart, v.currentTime);
+                }}
+                className="text-white/70 hover:text-white p-1 rounded transition-colors"
+                aria-label="Set loop out-point at current time (])"
+                title="Loop OUT at current time ( ] )"
+              >
+                <ChevronLast className="h-4 w-4" />
+              </button>
+              <button
+                type="button"
+                onClick={() => persistLoop(null, null)}
+                disabled={loopStart == null && loopEnd == null}
+                className={cn(
+                  "p-1 rounded transition-colors disabled:opacity-30 disabled:cursor-not-allowed",
+                  loopStart != null || loopEnd != null
+                    ? "text-emerald-400 hover:text-emerald-300"
+                    : "text-white/40"
+                )}
+                aria-label="Clear loop (\\)"
+                title={
+                  loopStart != null && loopEnd != null
+                    ? `Looping ${formatTime(loopStart)}–${formatTime(loopEnd)} · click to clear ( \\ )`
+                    : loopStart != null || loopEnd != null
+                    ? "Loop partially set · click to clear ( \\ )"
+                    : "Set loop with [ and ] (or buttons to the left)"
+                }
+              >
+                <Repeat className="h-4 w-4" />
+              </button>
               <SpeedSelector rate={playbackRate} onChange={applyRate} />
               {result.beat_grid && (
                 <button
@@ -589,6 +802,21 @@ export function TimelineView({
             }
           }}
         >
+          {/* Loop region — translucent emerald band over the section
+              between the in / out points. Drawn under everything else
+              (no z-index) so pattern blocks, off-beats, pins, and the
+              playhead all remain interactive. */}
+          {loopStart != null && loopEnd != null && loopEnd > loopStart && (
+            <div
+              className="absolute top-0 h-full bg-emerald-400/15 border-l-2 border-r-2 border-emerald-400/60 pointer-events-none"
+              style={{
+                left: `${Math.max(0, (loopStart / effectiveDuration) * 100)}%`,
+                width: `${Math.min(100, ((loopEnd - loopStart) / effectiveDuration) * 100)}%`,
+              }}
+              aria-label={`Looping ${formatTime(loopStart)} to ${formatTime(loopEnd)}`}
+            />
+          )}
+
           {/* Pre-dance / post-dance bands. Rendered under the
               pattern blocks so stray out-of-window entries (if any
               slip through the backend sanitizer) still show on top.
