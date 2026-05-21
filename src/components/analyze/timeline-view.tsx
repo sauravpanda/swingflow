@@ -223,13 +223,23 @@ export function TimelineView({
   const [frameError, setFrameError] = useState<string | null>(null);
   const handleSaveFrame = useCallback(() => {
     const v = videoRef.current;
-    if (!v || !v.videoWidth || !v.videoHeight) return;
     setFrameError(null);
+    // Surface preconditions inline rather than no-op'ing — a silent
+    // return on click makes the button feel broken.
+    if (!v || !v.videoWidth || !v.videoHeight) {
+      setFrameError("Frame export unavailable until the video has loaded.");
+      return;
+    }
     const out = document.createElement("canvas");
     out.width = v.videoWidth;
     out.height = v.videoHeight;
     const ctx = out.getContext("2d");
-    if (!ctx) return;
+    if (!ctx) {
+      setFrameError(
+        "Frame export failed — couldn't acquire a 2D canvas context."
+      );
+      return;
+    }
     try {
       ctx.drawImage(v, 0, 0, out.width, out.height);
       const poseCanvas = poseRef.current?.getCanvas();
