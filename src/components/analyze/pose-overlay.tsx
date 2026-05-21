@@ -291,6 +291,10 @@ function computeMetrics(person: Landmark[]): PoseMetrics | null {
 export type PoseOverlayHandle = {
   setEnabled: (next: boolean) => void;
   enabled: boolean;
+  /** Current overlay canvas, or null when the overlay isn't mounted.
+   *  Used by the frame-export button to composite the skeleton on
+   *  top of the video frame without piercing the canvas ref. */
+  getCanvas: () => HTMLCanvasElement | null;
 };
 
 type PoseOverlayProps = {
@@ -332,7 +336,11 @@ export const PoseOverlay = forwardRef<PoseOverlayHandle, PoseOverlayProps>(
 
     useImperativeHandle(
       ref,
-      () => ({ setEnabled, enabled }),
+      () => ({
+        setEnabled,
+        enabled,
+        getCanvas: () => canvasRef.current,
+      }),
       [enabled]
     );
 
