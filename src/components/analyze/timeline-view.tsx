@@ -16,6 +16,7 @@ import {
   ChevronFirst,
   ChevronLast,
   PersonStanding,
+  Camera,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useVideoBeatClick } from "@/hooks/use-video-beat-click";
@@ -206,6 +207,66 @@ export function TimelineView({
     poseRef.current?.setEnabled(next);
     setPoseEnabledMirror(next);
   };
+
+  // Frame export — snapshot the current video frame with the pose
+  // overlay (if on) baked in, downloaded as PNG. Coaches share
+  // screenshots constantly; an annotated frame keeps the context
+  // (skeleton, plumb, slot, loaded foot) along with the moment.
+  //
+  // CORS gotcha: `drawImage(video)` taints the destination canvas
+  // unless the R2 bucket sends Access-Control-Allow-Origin headers
+  // for video responses. We DON'T set crossOrigin on the <video>
+  // because that would break playback for clips on a bucket without
+  // CORS. Instead we attempt the export and surface a friendly
+  // error if the canvas turns out tainted (the user can add R2
+  // CORS configuration to enable the feature).
+  const [frameError, setFrameError] = useState<string | null>(null);
+  const handleSaveFrame = useCallback(() => {
+    const v = videoRef.current;
+    if (!v || !v.videoWidth || !v.videoHeight) return;
+    setFrameError(null);
+    const out = document.createElement("canvas");
+    out.width = v.videoWidth;
+    out.height = v.videoHeight;
+    const ctx = out.getContext("2d");
+    if (!ctx) return;
+    try {
+      ctx.drawImage(v, 0, 0, out.width, out.height);
+      const poseCanvas = poseRef.current?.getCanvas();
+      if (poseCanvas && poseCanvas.width > 0 && poseCanvas.height > 0) {
+        ctx.drawImage(poseCanvas, 0, 0, out.width, out.height);
+      }
+      out.toBlob((blob) => {
+        if (!blob) {
+          setFrameError("Frame export failed — browser returned no blob.");
+          return;
+        }
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        const ts = Math.floor(v.currentTime);
+        a.download = `swingflow_frame_${ts}s.png`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        // Slight delay before revoking so Safari finishes the
+        // download. URL.revokeObjectURL synchronously aborts an
+        // in-flight fetch by some browsers' downloaders.
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+      }, "image/png");
+    } catch (err) {
+      // SecurityError on tainted canvas — the video came from a
+      // bucket without CORS. Friendly message + log the cause.
+      const msg =
+        err instanceof Error && err.name === "SecurityError"
+          ? "Frame export needs R2 CORS configured (Access-Control-Allow-Origin on video responses)."
+          : err instanceof Error
+          ? err.message
+          : "Frame export failed";
+      console.warn("frame-export failed", err);
+      setFrameError(msg);
+    }
+  }, []);
 
   // Audible beat click — Web Audio metronome that fires on each beat
   // extracted from the song (#168-pivot). The video player handles
@@ -685,6 +746,19 @@ export function TimelineView({
                 <Repeat className="h-4 w-4" />
               </button>
               <SpeedSelector rate={playbackRate} onChange={applyRate} />
+              {/* Save annotated frame. PNG download of the current
+                  video frame composited with the pose overlay (when
+                  on). Always available — even without pose, a
+                  bare-frame screenshot is useful for sharing. */}
+              <button
+                type="button"
+                onClick={handleSaveFrame}
+                className="text-white/70 hover:text-white p-1 rounded transition-colors"
+                aria-label="Download annotated frame as PNG"
+                title="Save current frame as PNG (with pose overlay if on)"
+              >
+                <Camera className="h-4 w-4" />
+              </button>
               {/* Pose-skeleton overlay toggle. Hidden when there's
                   no video src — toggle while video is missing would
                   have nothing to draw on. Icon lights cyan when on. */}
@@ -760,6 +834,18 @@ export function TimelineView({
               </button>
             </div>
           </div>
+          {frameError && (
+            <div className="px-2 py-1.5 text-[11px] text-amber-200 bg-amber-900/40 border-t border-amber-700/40">
+              {frameError}
+              <button
+                type="button"
+                onClick={() => setFrameError(null)}
+                className="ml-2 underline hover:no-underline"
+              >
+                dismiss
+              </button>
+            </div>
+          )}
         </div>
       )}
 
