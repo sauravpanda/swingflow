@@ -270,9 +270,28 @@ export function PeerReviewsSection({ analysisId }: { analysisId: string }) {
                     <code className="text-xs text-muted-foreground truncate block">
                       {url}
                     </code>
-                    <p className="text-[11px] text-muted-foreground mt-0.5">
-                      Requested{" "}
-                      {new Date(r.requested_at).toLocaleDateString()}
+                    {/* Echo the brief so the owner can tell multiple
+                        outstanding requests apart ("the anchor one"
+                        vs "the connection one"). */}
+                    {r.requester_prompt && (
+                      <p className="text-[11px] text-foreground/80 mt-1 line-clamp-2">
+                        &ldquo;{r.requester_prompt}&rdquo;
+                      </p>
+                    )}
+                    <p className="text-[11px] text-muted-foreground mt-0.5 flex items-center gap-1.5 flex-wrap">
+                      <span>
+                        Requested{" "}
+                        {new Date(r.requested_at).toLocaleDateString()}
+                      </span>
+                      {(r.focus_categories ?? []).map((c) => (
+                        <Badge
+                          key={c}
+                          variant="outline"
+                          className="text-[9px] px-1 py-0 h-3.5 capitalize"
+                        >
+                          {c}
+                        </Badge>
+                      ))}
                     </p>
                   </div>
                   <Button
@@ -422,6 +441,14 @@ function ReviewCard({
           <X className="h-3.5 w-3.5" />
         </Button>
       </div>
+
+      {/* What the owner asked for, alongside the answer — reviews
+          only make sense against the question that prompted them. */}
+      {review.requester_prompt && (
+        <p className="text-xs text-muted-foreground border-l-2 border-border pl-2 italic">
+          You asked: &ldquo;{review.requester_prompt}&rdquo;
+        </p>
+      )}
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
         {CATEGORIES.map((c) => {

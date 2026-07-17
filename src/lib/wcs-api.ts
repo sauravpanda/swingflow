@@ -591,6 +591,14 @@ export type PeerReview = {
   overall_notes: string | null;
   per_moment_notes: Array<{ timestamp_sec: number; note: string }>;
   submitted_at: string | null;
+  // The brief the requester attached ("what do you want feedback
+  // on?"). Shown back on pending/submitted rows so the owner can
+  // tell multiple outstanding requests apart. Optional: rows from
+  // before the API returned these fields simply omit them.
+  requester_prompt?: string | null;
+  focus_categories?: Array<
+    "timing" | "technique" | "teamwork" | "presentation"
+  > | null;
 };
 
 export type PeerReviewList = {

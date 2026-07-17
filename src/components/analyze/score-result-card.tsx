@@ -394,6 +394,48 @@ export function ScoreResultCard({
                       {cat.notes}
                     </p>
                   )}
+                  {/* Category-specific prose the model already emits
+                      (and we already pay tokens for) — surfaced
+                      instead of silently dropped. */}
+                  {key === "timing" && cat.rhythm_consistency && (
+                    <p className="text-xs text-muted-foreground pt-0.5">
+                      <span className="font-medium text-foreground">
+                        Rhythm:
+                      </span>{" "}
+                      {cat.rhythm_consistency}
+                    </p>
+                  )}
+                  {key === "teamwork" && cat.connection && (
+                    <p className="text-xs text-muted-foreground pt-0.5">
+                      <span className="font-medium text-foreground">
+                        Connection:
+                      </span>{" "}
+                      {cat.connection}
+                    </p>
+                  )}
+                  {key === "presentation" && cat.musicality && (
+                    <p className="text-xs text-muted-foreground pt-0.5">
+                      <span className="font-medium text-foreground">
+                        Musicality:
+                      </span>{" "}
+                      {cat.musicality}
+                    </p>
+                  )}
+                  {cat.reasoning && (
+                    <details className="group pt-0.5">
+                      <summary className="cursor-pointer text-xs text-muted-foreground hover:text-foreground list-none inline-flex items-center gap-1">
+                        <span className="group-open:hidden">
+                          Why this score ▾
+                        </span>
+                        <span className="hidden group-open:inline">
+                          Why this score ▴
+                        </span>
+                      </summary>
+                      <p className="text-xs text-muted-foreground pt-1.5 whitespace-pre-wrap">
+                        {cat.reasoning}
+                      </p>
+                    </details>
+                  )}
                   {key === "technique" && (
                     <TechniqueBreakdown technique={cat} />
                   )}
@@ -641,7 +683,7 @@ function formatInitiativeTime(sec: number): string {
   return `${m}:${s.toString().padStart(2, "0")}`;
 }
 
-function FollowerInitiativeCard({
+export function FollowerInitiativeCard({
   initiative,
 }: {
   initiative: FollowerInitiative[];

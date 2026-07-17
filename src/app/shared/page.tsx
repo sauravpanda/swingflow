@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { fetchSharedAnalysis, type SharedAnalysis } from "@/lib/wcs-api";
 import { TimelineView } from "@/components/analyze/timeline-view";
+import { FollowerInitiativeCard } from "@/components/analyze/score-result-card";
 import {
   PatternSummaryCard,
   derivePatternSummary,
@@ -176,6 +177,14 @@ function SharedAnalysisContent() {
                 <span className="text-2xl text-muted-foreground">/10</span>
               </div>
               <Badge className="text-sm px-3 py-0.5">{overall.grade}</Badge>
+              {result.observed_level && (
+                <span className="text-xs text-muted-foreground">
+                  Scored as{" "}
+                  <span className="font-medium text-foreground">
+                    {result.observed_level}
+                  </span>
+                </span>
+              )}
               {overall.impression && (
                 <p className="text-sm text-muted-foreground italic text-center max-w-lg pt-1">
                   <Quote className="inline h-3 w-3 mr-1 -mt-0.5 opacity-50" />
@@ -238,6 +247,16 @@ function SharedAnalysisContent() {
             <PatternSummaryCard summary={summary} />
           ) : null;
         })()}
+
+        {/* Follower voice — the moments the follower authored are
+            among the most shareable insights; the owner view has
+            always shown them, so the shared view should too. */}
+        {result.follower_initiative &&
+          result.follower_initiative.length > 0 && (
+            <FollowerInitiativeCard
+              initiative={result.follower_initiative}
+            />
+          )}
 
         {/* Strengths */}
         {Array.isArray(result.strengths) && result.strengths.length > 0 && (

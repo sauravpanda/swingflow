@@ -131,7 +131,8 @@ async def list_for_analysis(
                 f"&requester_user_id=eq.{user_id}"
                 "&select=id,token,requested_at,reviewer_name,reviewer_role,"
                 "timing_score,technique_score,teamwork_score,presentation_score,"
-                "overall_notes,per_moment_notes,submitted_at"
+                "overall_notes,per_moment_notes,submitted_at,"
+                "requester_prompt,focus_categories"
                 "&order=requested_at.desc"
             ),
             headers=_headers(),
