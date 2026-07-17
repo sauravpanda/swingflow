@@ -214,7 +214,12 @@ export default function AnalyzePage() {
       if (quota) {
         try {
           const dur = await probeDuration(f);
-          if (dur > quota.max_seconds) {
+          // Some MOV/WebM files report duration === Infinity until a
+          // seek. Only reject on a real finite over-limit reading —
+          // otherwise this guard blocked valid clips with "Video is
+          // Infinitys". Non-finite probes fall through to the
+          // server-side enforcement, same as a failed probe.
+          if (Number.isFinite(dur) && dur > quota.max_seconds) {
             setLocalError(
               `Video is ${Math.round(dur)}s; clips must be ${quota.max_seconds}s or less.`
             );
@@ -535,6 +540,19 @@ export default function AnalyzePage() {
       {/* Result */}
       {state.status === "success" && state.result && (
         <>
+          {/* The analysis ran (and the credit was spent) but the DB
+              insert failed, so this result exists only on this page.
+              Without a warning the user refreshes, loses it, and
+              can't tell why their history is missing an entry. */}
+          {!state.result.analysis_id && (
+            <Card className="border-amber-500/40 bg-amber-500/10">
+              <CardContent className="py-3 text-sm text-amber-300">
+                This analysis couldn&apos;t be saved to your history — it
+                will disappear when you leave this page. Screenshot or
+                copy anything you want to keep.
+              </CardContent>
+            </Card>
+          )}
           <ScoreResultCard
             result={state.result.result}
             duration={state.result.duration}

@@ -10,10 +10,21 @@ export default function SettingsPage() {
   const handleClearData = () => {
     if (
       confirm(
-        "This will reset all your progress (review deck, checklists, streaks, practice history). Are you sure?"
+        "This will reset all your progress (review deck, checklists, streaks, practice history) and local preferences. Are you sure?"
       )
     ) {
-      localStorage.removeItem("swingflow-data");
+      // The app writes under two prefixes ("swingflow-data",
+      // "swingflow-rhythm-history") plus colon-namespaced keys
+      // ("swingflow:playbackRate", per-analysis loop / dance-start
+      // overrides, overlay toggles). Sweep them all — removing only
+      // swingflow-data left rhythm history and every preference
+      // behind, which broke the promise this dialog makes.
+      const doomed: string[] = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && key.startsWith("swingflow")) doomed.push(key);
+      }
+      doomed.forEach((key) => localStorage.removeItem(key));
       window.location.reload();
     }
   };
