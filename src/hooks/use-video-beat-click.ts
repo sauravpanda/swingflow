@@ -58,6 +58,10 @@ export function useVideoBeatClick({
   // cycle so a single beat doesn't get queued twice when the lookahead
   // window slides over it on consecutive ticks.
   const scheduledIdxRef = useRef<Set<number>>(new Set());
+  // Oscillators queued but not yet finished. Kept so pause / rate
+  // changes can cancel in-flight clicks — without this, up to a full
+  // lookahead window of clicks keeps ticking after the video freezes.
+  const scheduledNodesRef = useRef<Set<OscillatorNode>>(new Set());
   const audioCtxRef = useRef<AudioContext | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const downbeatSetRef = useRef<Set<number>>(new Set());
@@ -81,6 +85,20 @@ export function useVideoBeatClick({
     downbeatSetRef.current = new Set(downbeats ?? []);
   }, [downbeats]);
 
+  // Silence any clicks already queued into the audio graph. Used on
+  // pause/teardown (so clicks stop with the video) and on playback-
+  // rate changes (queued clicks carry the old rate's spacing).
+  const cancelQueuedClicks = useCallback(() => {
+    for (const osc of scheduledNodesRef.current) {
+      try {
+        osc.stop();
+      } catch {
+        // already stopped — fine
+      }
+    }
+    scheduledNodesRef.current.clear();
+  }, []);
+
   // Stop scheduler + reset state. Idempotent so we can call it from
   // any of the effects that might tear things down.
   const teardown = useCallback(() => {
@@ -89,7 +107,8 @@ export function useVideoBeatClick({
       timerRef.current = null;
     }
     scheduledIdxRef.current = new Set();
-  }, []);
+    cancelQueuedClicks();
+  }, [cancelQueuedClicks]);
 
   // Schedule a single click at a precise AudioContext time. Square
   // wave on a fast envelope reads as a clean "tick" without the
@@ -107,6 +126,11 @@ export function useVideoBeatClick({
       gainNode.gain.exponentialRampToValueAtTime(0.001, atTime + CLICK_DURATION);
       osc.start(atTime);
       osc.stop(atTime + CLICK_DURATION);
+      scheduledNodesRef.current.add(osc);
+      osc.onended = () => {
+        scheduledNodesRef.current.delete(osc);
+        gainNode.disconnect();
+      };
     },
     []
   );
@@ -127,7 +151,18 @@ export function useVideoBeatClick({
     //   audioNow + (T - videoNow) / rate
     // Anything ≤ audioNow has already been missed; skip it.
     const audioNow = ctx.currentTime;
-    const lookaheadVideoEnd = videoNow + SCHEDULER_LOOKAHEAD_SEC * rate;
+    // ctx.currentTime is the render-graph clock; sound physically
+    // leaves the device outputLatency later (tens of ms on speakers,
+    // 150-300ms on Bluetooth). Schedule early by that much so the
+    // audible click lands on the on-screen beat instead of trailing
+    // it. Safari has no outputLatency — baseLatency is the best
+    // available stand-in there.
+    const latency = ctx.outputLatency || ctx.baseLatency || 0;
+    // Widen the video-side window by the same amount, otherwise the
+    // latency shift would push every beat near the front of the
+    // window into the past and the defense below would drop it.
+    const lookaheadVideoEnd =
+      videoNow + (SCHEDULER_LOOKAHEAD_SEC + latency) * rate;
 
     // Binary search for the first beat >= videoNow. Beats are sorted.
     let lo = 0;
@@ -142,7 +177,7 @@ export function useVideoBeatClick({
       const beatTime = beats[i];
       if (beatTime > lookaheadVideoEnd) break;
       if (scheduledIdxRef.current.has(i)) continue;
-      const audioTime = audioNow + (beatTime - videoNow) / rate;
+      const audioTime = audioNow + (beatTime - videoNow) / rate - latency;
       // Past-time defense: occasionally a tick wakes late and the beat
       // has slid into the past. Drop it rather than fire instantly.
       if (audioTime < audioNow) {
@@ -205,17 +240,28 @@ export function useVideoBeatClick({
   // Seeking inside a play cycle resets the schedule set — we may
   // have jumped past beats that are still in scheduledIdxRef, and
   // we may have jumped backward to beats we'd marked as done.
+  // A rate change additionally cancels the queued clicks: they were
+  // scheduled with the old rate's spacing, so letting them play out
+  // produces a burst of mistimed ticks against the new tempo. The
+  // next scheduler tick re-queues everything at the new rate.
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
     const onSeeked = () => {
       scheduledIdxRef.current = new Set();
+      cancelQueuedClicks();
+    };
+    const onRateChange = () => {
+      scheduledIdxRef.current = new Set();
+      cancelQueuedClicks();
     };
     video.addEventListener("seeked", onSeeked);
+    video.addEventListener("ratechange", onRateChange);
     return () => {
       video.removeEventListener("seeked", onSeeked);
+      video.removeEventListener("ratechange", onRateChange);
     };
-  }, [videoRef]);
+  }, [videoRef, cancelQueuedClicks]);
 
   // Cleanup on unmount: close the AudioContext so we don't leak
   // audio devices when the user navigates away.

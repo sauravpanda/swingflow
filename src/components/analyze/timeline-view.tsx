@@ -430,14 +430,20 @@ export function TimelineView({
     if (!videoSrc) return;
     if (seekedForKeyRef.current === initialSeekKey) return;
     seekedForKeyRef.current = initialSeekKey;
-    seek(initialSeekSec);
+    seek(initialSeekSec, { autoplay: true });
     // `seek` is referenced via closure and its identity changes per
     // render; we intentionally only re-run when the deep-link key
     // (videoSrc + target) changes, not on unrelated re-renders.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialSeekKey]);
 
-  const seek = (t: number) => {
+  // autoplay: start playback after landing the seek. On for "go
+  // watch this moment" intents (pattern block, reviewer pin, bar
+  // click); off for positioning intents (J/L skip, frame-step,
+  // arrow-key scrub) — a paused frame-step that silently resumes
+  // playback blows away the exact frame the user was inspecting.
+  const seek = (t: number, opts?: { autoplay?: boolean }) => {
+    const autoplay = opts?.autoplay ?? false;
     const clamped = Math.max(0, Math.min(t, effectiveDuration));
     setCurrentTime(clamped);
     const v = videoRef.current;
@@ -449,7 +455,7 @@ export function TimelineView({
         const onReady = () => {
           v.currentTime = clamped;
           v.removeEventListener("loadedmetadata", onReady);
-          if (!playing) {
+          if (autoplay && !playing) {
             v.play().catch(() => {
               /* user gesture required */
             });
@@ -459,7 +465,7 @@ export function TimelineView({
         return;
       }
       v.currentTime = clamped;
-      if (!playing) {
+      if (autoplay && !playing) {
         v.play().catch(() => {
           /* user gesture required */
         });
@@ -525,15 +531,16 @@ export function TimelineView({
           seek(v.currentTime + SKIP_SEC);
           break;
         case ",":
-          // Only step frames when paused; stepping while playing
-          // produces a stutter that feels like a bug, not a tool.
-          if (!v.paused) return;
+          // Frame-step pauses first (NLE convention) — stepping
+          // implies the user wants to inspect a single frame, and
+          // stepping mid-playback would otherwise read as a stutter.
           e.preventDefault();
+          if (!v.paused) v.pause();
           seek(v.currentTime - FRAME_SEC);
           break;
         case ".":
-          if (!v.paused) return;
           e.preventDefault();
+          if (!v.paused) v.pause();
           seek(v.currentTime + FRAME_SEC);
           break;
         case "[":
@@ -618,7 +625,7 @@ export function TimelineView({
       0,
       Math.min(1, (e.clientX - rect.left) / rect.width)
     );
-    seek(pct * effectiveDuration);
+    seek(pct * effectiveDuration, { autoplay: true });
   };
 
   const toggleMute = () => {
@@ -628,16 +635,38 @@ export function TimelineView({
     setMuted(v.muted);
   };
 
-  const restart = () => seek(0);
+  const restart = () => seek(0, { autoplay: true });
 
+  // Fullscreen targets the whole player box (video + pose-overlay
+  // canvas + control row), not the bare <video>. Fullscreening only
+  // the video element drops the overlay canvas — it's an absolute
+  // *sibling*, not a child — so the skeleton/plumb/slot lines the
+  // coach was studying silently vanish in fullscreen.
+  const playerBoxRef = useRef<HTMLDivElement>(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  useEffect(() => {
+    const onChange = () =>
+      setIsFullscreen(document.fullscreenElement === playerBoxRef.current);
+    document.addEventListener("fullscreenchange", onChange);
+    return () => document.removeEventListener("fullscreenchange", onChange);
+  }, []);
   const toggleFullscreen = () => {
-    const v = videoRef.current;
-    if (!v) return;
-    if (document.fullscreenElement === v) {
+    if (document.fullscreenElement) {
       document.exitFullscreen().catch(() => {});
-    } else {
-      v.requestFullscreen?.().catch(() => {});
+      return;
     }
+    const box = playerBoxRef.current;
+    if (box?.requestFullscreen) {
+      box.requestFullscreen().catch(() => {});
+      return;
+    }
+    // iPhone Safari has no element fullscreen — fall back to the
+    // video's native fullscreen (overlay won't show there, but a
+    // fullscreen video beats a dead button).
+    const v = videoRef.current as
+      | (HTMLVideoElement & { webkitEnterFullscreen?: () => void })
+      | null;
+    v?.webkitEnterFullscreen?.();
   };
 
   return (
@@ -647,15 +676,28 @@ export function TimelineView({
         // have two scrubbers that don't align), custom control row,
         // then the pattern timeline as the only scrubber. max-h caps
         // the video so portrait clips don't dominate the viewport.
-        <div className="rounded-md bg-black overflow-hidden">
-          <div className="relative">
+        <div
+          ref={playerBoxRef}
+          className={cn(
+            "rounded-md bg-black overflow-hidden",
+            // In fullscreen the box is the viewport: stack video area
+            // over the control row and let the video take the rest.
+            isFullscreen && "flex flex-col"
+          )}
+        >
+          <div className={cn("relative", isFullscreen && "flex-1 min-h-0")}>
             <video
               ref={videoRef}
               src={videoSrc}
               preload="metadata"
               playsInline
               onClick={togglePlay}
-              className="w-full max-h-[60vh] sm:max-h-[520px] object-contain cursor-pointer"
+              className={cn(
+                "w-full object-contain cursor-pointer",
+                isFullscreen
+                  ? "h-full max-h-none"
+                  : "max-h-[60vh] sm:max-h-[520px]"
+              )}
             />
             {/* Pose-skeleton overlay (#168-pivot PR 3). Rendered as
                 an absolute sibling of the video so the canvas
@@ -837,8 +879,8 @@ export function TimelineView({
                 type="button"
                 onClick={toggleFullscreen}
                 className="text-white/70 hover:text-white p-1 rounded transition-colors"
-                aria-label="Fullscreen"
-                title="Fullscreen"
+                aria-label={isFullscreen ? "Exit fullscreen" : "Fullscreen"}
+                title={isFullscreen ? "Exit fullscreen" : "Fullscreen"}
               >
                 <Maximize className="h-4 w-4" />
               </button>
@@ -868,7 +910,7 @@ export function TimelineView({
         <MusicalityStrip
           moments={result.musical_moments ?? []}
           effectiveDuration={effectiveDuration}
-          onSeek={seek}
+          onSeek={(t) => seek(t, { autoplay: true })}
         />
       )}
 
@@ -885,7 +927,7 @@ export function TimelineView({
         effectiveDuration={effectiveDuration}
         currentTime={currentTime}
         playbackRate={playbackRate}
-        onSeek={seek}
+        onSeek={(t) => seek(t, { autoplay: true })}
       />
 
       {/* Pattern timeline = the scrubber (single source of truth) */}
@@ -1059,7 +1101,7 @@ export function TimelineView({
                   // should seek to that pattern's start, not the
                   // block's click x-position.
                   e.stopPropagation();
-                  seek(start);
+                  seek(start, { autoplay: true });
                   setSelected(p);
                 }}
                 onMouseEnter={() => setHovered(p)}
@@ -1102,7 +1144,7 @@ export function TimelineView({
                 title={`${author}${pin.reviewer_role ? ` (${pin.reviewer_role})` : ""} @ ${formatTime(pin.timestamp_sec)}: ${pin.note}`}
                 onClick={(e) => {
                   e.stopPropagation();
-                  seek(pin.timestamp_sec);
+                  seek(pin.timestamp_sec, { autoplay: true });
                 }}
                 aria-label={`Jump to reviewer comment at ${formatTime(pin.timestamp_sec)}`}
               />
