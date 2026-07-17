@@ -17,6 +17,10 @@ import {
   ChevronLast,
   PersonStanding,
   Camera,
+  Keyboard,
+  Loader2,
+  StepBack,
+  StepForward,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useVideoBeatClick } from "@/hooks/use-video-beat-click";
@@ -202,11 +206,23 @@ export function TimelineView({
     if (typeof window === "undefined") return false;
     return window.localStorage.getItem("swingflow:pose-overlay-enabled") === "true";
   });
+  // Overlay lifecycle status, mirrored up so the toggle button can
+  // show "loading model" and "failed" instead of lying cyan while
+  // nothing draws (the ~12MB model fetch can take seconds — or fail
+  // outright behind a blocking proxy).
+  const [poseStatus, setPoseStatus] = useState<
+    "off" | "loading" | "active" | "error"
+  >("off");
   const togglePose = () => {
     const next = !poseEnabled;
     poseRef.current?.setEnabled(next);
     setPoseEnabledMirror(next);
   };
+
+  // Keyboard cheat-sheet popover. The whole coach-mode shortcut set
+  // was previously invisible — documented only in a code comment —
+  // so for most users the flagship controls didn't exist.
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
 
   // Frame export — snapshot the current video frame with the pose
   // overlay (if on) baked in, downloaded as PNG. Coaches share
@@ -555,6 +571,10 @@ export function TimelineView({
           e.preventDefault();
           persistLoop(null, null);
           break;
+        case "?":
+          e.preventDefault();
+          setShortcutsOpen((o) => !o);
+          break;
       }
     };
     document.addEventListener("keydown", onKey);
@@ -581,7 +601,10 @@ export function TimelineView({
   // filter them out so the user isn't told they did a "sugar push"
   // at 0:08 while still in closed position. Patterns that straddle
   // the boundary get visually clamped in the render below.
-  const allPatterns = result.patterns_identified ?? [];
+  const allPatterns = useMemo(
+    () => result.patterns_identified ?? [],
+    [result.patterns_identified]
+  );
   const patterns = useMemo(
     () =>
       allPatterns.filter((p) => {
@@ -616,16 +639,87 @@ export function TimelineView({
   // the click's x-position against the bar's bounding box so the
   // seek is accurate regardless of the bar's width.
   const barRef = useRef<HTMLDivElement>(null);
-  const scrubToClick = (e: React.MouseEvent<HTMLDivElement>) => {
+  const pctFromClientX = (clientX: number): number | null => {
     const bar = barRef.current;
-    if (!bar) return;
+    if (!bar) return null;
     const rect = bar.getBoundingClientRect();
-    if (rect.width <= 0) return;
-    const pct = Math.max(
-      0,
-      Math.min(1, (e.clientX - rect.left) / rect.width)
-    );
+    if (rect.width <= 0) return null;
+    return Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+  };
+  const scrubToClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    // A drag that just ended fires a synthetic click on release —
+    // swallow it so the release point isn't re-seeked with autoplay.
+    if (justDraggedRef.current) {
+      justDraggedRef.current = false;
+      return;
+    }
+    const pct = pctFromClientX(e.clientX);
+    if (pct == null) return;
     seek(pct * effectiveDuration, { autoplay: true });
+  };
+
+  // Drag-to-scrub. Pointer Events give mouse + touch + pen in one
+  // handler, which also makes the bar scrubbable on phones (it was
+  // click-only before — the single most common review gesture,
+  // dragging the playhead back and forth over a 2-second move,
+  // didn't exist on touch).
+  //
+  // The drag only engages after ~5px of travel so plain clicks —
+  // on the bar, on pattern blocks, on reviewer pins — behave
+  // exactly as before. While dragging we pause (standard scrubber
+  // behavior, and it keeps pose detection in step frame-by-frame),
+  // then restore the previous play state on release.
+  const dragStateRef = useRef<{
+    pointerId: number;
+    startX: number;
+    dragging: boolean;
+    wasPlaying: boolean;
+  } | null>(null);
+  const justDraggedRef = useRef(false);
+  const DRAG_THRESHOLD_PX = 5;
+  const [hoverPct, setHoverPct] = useState<number | null>(null);
+
+  const onBarPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.pointerType === "mouse" && e.button !== 0) return;
+    dragStateRef.current = {
+      pointerId: e.pointerId,
+      startX: e.clientX,
+      dragging: false,
+      wasPlaying: playing,
+    };
+  };
+  const onBarPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    // Hover ghost — mouse/pen only; a finger covers the bar anyway.
+    if (e.pointerType !== "touch" && !dragStateRef.current?.dragging) {
+      setHoverPct(pctFromClientX(e.clientX));
+    }
+    const st = dragStateRef.current;
+    if (!st || st.pointerId !== e.pointerId) return;
+    if (!st.dragging) {
+      if (Math.abs(e.clientX - st.startX) < DRAG_THRESHOLD_PX) return;
+      st.dragging = true;
+      justDraggedRef.current = true;
+      barRef.current?.setPointerCapture(e.pointerId);
+      videoRef.current?.pause();
+    }
+    const pct = pctFromClientX(e.clientX);
+    if (pct != null) seek(pct * effectiveDuration);
+  };
+  const endBarDrag = (e: React.PointerEvent<HTMLDivElement>) => {
+    const st = dragStateRef.current;
+    if (!st || st.pointerId !== e.pointerId) return;
+    dragStateRef.current = null;
+    if (!st.dragging) return;
+    try {
+      barRef.current?.releasePointerCapture(e.pointerId);
+    } catch {
+      // capture may already be released
+    }
+    if (st.wasPlaying) {
+      videoRef.current?.play().catch(() => {
+        /* user gesture required */
+      });
+    }
   };
 
   const toggleMute = () => {
@@ -636,6 +730,17 @@ export function TimelineView({
   };
 
   const restart = () => seek(0, { autoplay: true });
+
+  // On-screen frame stepping. The `,`/`.` keys already do this, but
+  // keys are invisible and phones don't have them — frame-by-frame
+  // technique review is the coach-mode differentiator, so it gets
+  // real buttons. Same pause-first behavior as the keys.
+  const frameStep = (dir: 1 | -1) => {
+    const v = videoRef.current;
+    if (!v) return;
+    if (!v.paused) v.pause();
+    seek(v.currentTime + dir * (1 / 30));
+  };
 
   // Fullscreen targets the whole player box (video + pose-overlay
   // canvas + control row), not the bare <video>. Fullscreening only
@@ -708,6 +813,7 @@ export function TimelineView({
               ref={poseRef}
               videoRef={videoRef}
               playing={playing}
+              onStatusChange={setPoseStatus}
             />
           </div>
           {/* Custom control row — play, restart, time, mute, fullscreen.
@@ -736,6 +842,24 @@ export function TimelineView({
               title="Restart"
             >
               <SkipBack className="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() => frameStep(-1)}
+              className="text-white/70 hover:text-white p-1 rounded transition-colors"
+              aria-label="Step back one frame"
+              title="Previous frame ( , )"
+            >
+              <StepBack className="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() => frameStep(1)}
+              className="text-white/70 hover:text-white p-1 rounded transition-colors"
+              aria-label="Step forward one frame"
+              title="Next frame ( . )"
+            >
+              <StepForward className="h-4 w-4" />
             </button>
             <span className="font-mono tabular-nums text-white/80 text-[11px]">
               {formatTime(currentTime)} / {formatTime(effectiveDuration)}
@@ -797,7 +921,9 @@ export function TimelineView({
               >
                 <Repeat className="h-4 w-4" />
               </button>
+              <span className="h-4 w-px bg-white/15" aria-hidden />
               <SpeedSelector rate={playbackRate} onChange={applyRate} />
+              <span className="h-4 w-px bg-white/15" aria-hidden />
               {/* Save annotated frame. PNG download of the current
                   video frame composited with the pose overlay (when
                   on). Always available — even without pose, a
@@ -819,7 +945,9 @@ export function TimelineView({
                 onClick={togglePose}
                 className={cn(
                   "p-1 rounded transition-colors",
-                  poseEnabled
+                  poseEnabled && poseStatus === "error"
+                    ? "text-rose-400 hover:text-rose-300"
+                    : poseEnabled
                     ? "text-cyan-300 hover:text-cyan-200"
                     : "text-white/70 hover:text-white"
                 )}
@@ -830,12 +958,20 @@ export function TimelineView({
                 }
                 aria-pressed={poseEnabled}
                 title={
-                  poseEnabled
+                  poseEnabled && poseStatus === "error"
+                    ? "Pose model failed to load — toggle off and on to retry"
+                    : poseEnabled && poseStatus === "loading"
+                    ? "Loading pose model…"
+                    : poseEnabled
                     ? "Body skeleton on — tap to hide"
                     : "Body skeleton off — tap to overlay pose detection on the video"
                 }
               >
-                <PersonStanding className="h-4 w-4" />
+                {poseEnabled && poseStatus === "loading" ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <PersonStanding className="h-4 w-4" />
+                )}
               </button>
               {result.beat_grid && (
                 <button
@@ -862,6 +998,7 @@ export function TimelineView({
                   <Drum className="h-4 w-4" />
                 </button>
               )}
+              <span className="h-4 w-px bg-white/15" aria-hidden />
               <button
                 type="button"
                 onClick={toggleMute}
@@ -884,6 +1021,10 @@ export function TimelineView({
               >
                 <Maximize className="h-4 w-4" />
               </button>
+              <ShortcutsPopover
+                open={shortcutsOpen}
+                onOpenChange={setShortcutsOpen}
+              />
             </div>
           </div>
           {frameError && (
@@ -969,15 +1110,20 @@ export function TimelineView({
 
         <div
           ref={barRef}
-          className="relative h-12 sm:h-14 rounded-md bg-muted/30 overflow-hidden border border-border cursor-pointer group/bar focus:outline-none focus-visible:ring-2 focus-visible:ring-foreground/40"
+          className="relative h-12 sm:h-14 rounded-md bg-muted/30 overflow-hidden border border-border cursor-pointer group/bar focus:outline-none focus-visible:ring-2 focus-visible:ring-foreground/40 touch-pan-y"
           role="slider"
           tabIndex={0}
-          aria-label="Pattern timeline — click or use arrow keys to scrub"
+          aria-label="Pattern timeline — click, drag, or use arrow keys to scrub"
           aria-valuemin={0}
           aria-valuemax={Math.round(effectiveDuration)}
           aria-valuenow={Math.round(currentTime)}
           aria-valuetext={`${formatTime(currentTime)} of ${formatTime(effectiveDuration)}`}
           onClick={scrubToClick}
+          onPointerDown={onBarPointerDown}
+          onPointerMove={onBarPointerMove}
+          onPointerUp={endBarDrag}
+          onPointerCancel={endBarDrag}
+          onPointerLeave={() => setHoverPct(null)}
           onKeyDown={(e) => {
             // Arrow-key scrubbing. Step sizes tuned for reviewing
             // technique: 1s fine step catches a single beat at most
@@ -1101,6 +1247,10 @@ export function TimelineView({
                   // should seek to that pattern's start, not the
                   // block's click x-position.
                   e.stopPropagation();
+                  if (justDraggedRef.current) {
+                    justDraggedRef.current = false;
+                    return;
+                  }
                   seek(start, { autoplay: true });
                   setSelected(p);
                 }}
@@ -1144,12 +1294,40 @@ export function TimelineView({
                 title={`${author}${pin.reviewer_role ? ` (${pin.reviewer_role})` : ""} @ ${formatTime(pin.timestamp_sec)}: ${pin.note}`}
                 onClick={(e) => {
                   e.stopPropagation();
+                  if (justDraggedRef.current) {
+                    justDraggedRef.current = false;
+                    return;
+                  }
                   seek(pin.timestamp_sec, { autoplay: true });
                 }}
                 aria-label={`Jump to reviewer comment at ${formatTime(pin.timestamp_sec)}`}
               />
             );
           })}
+
+          {/* Ghost playhead — shows where a click would land while
+              the mouse hunts for a moment, with a time readout so
+              the user doesn't have to click-check-reclick. */}
+          {hoverPct != null && (
+            <div
+              className="absolute top-0 h-full w-px bg-foreground/40 pointer-events-none"
+              style={{ left: `${hoverPct * 100}%` }}
+            >
+              <span
+                className="absolute -top-[18px] px-1 py-[1px] text-[9px] font-mono tabular-nums rounded-sm bg-muted text-muted-foreground whitespace-nowrap pointer-events-none"
+                style={{
+                  transform:
+                    hoverPct * 100 < 4
+                      ? "translate(0%, 0)"
+                      : hoverPct * 100 > 96
+                      ? "translate(-100%, 0)"
+                      : "translate(-50%, 0)",
+                }}
+              >
+                {formatTime(hoverPct * effectiveDuration)}
+              </span>
+            </div>
+          )}
 
           {/* Playhead with floating time tag */}
           <div
@@ -1473,6 +1651,74 @@ function MusicalityStrip({
               {hover.caught_how}
             </div>
           )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+const SHORTCUTS: Array<{ keys: string; action: string }> = [
+  { keys: "Space / K", action: "Play or pause" },
+  { keys: "J / L", action: "Skip back / forward 5s" },
+  { keys: ", / .", action: "Step one frame back / forward" },
+  { keys: "[ / ]", action: "Set loop in / out point" },
+  { keys: "\\", action: "Clear the loop" },
+  { keys: "← / →", action: "Scrub 1s (Shift: 5s) on the timeline" },
+  { keys: "?", action: "Show or hide this list" },
+];
+
+function ShortcutsPopover({
+  open,
+  onOpenChange,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const rootRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: PointerEvent) => {
+      if (!rootRef.current?.contains(e.target as Node)) onOpenChange(false);
+    };
+    document.addEventListener("pointerdown", onDown);
+    return () => document.removeEventListener("pointerdown", onDown);
+  }, [open, onOpenChange]);
+  return (
+    <div className="relative" ref={rootRef}>
+      <button
+        type="button"
+        onClick={() => onOpenChange(!open)}
+        className={cn(
+          "p-1 rounded transition-colors",
+          open ? "text-white" : "text-white/70 hover:text-white"
+        )}
+        aria-label="Keyboard shortcuts"
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        title="Keyboard shortcuts ( ? )"
+      >
+        <Keyboard className="h-4 w-4" />
+      </button>
+      {open && (
+        <div
+          role="dialog"
+          aria-label="Keyboard shortcuts"
+          className="absolute right-0 bottom-full mb-1 w-60 rounded-md border border-border bg-black/95 shadow-lg p-2.5 z-20 space-y-1.5"
+        >
+          <div className="text-[10px] font-medium uppercase tracking-wide text-white/60 pb-0.5">
+            Keyboard shortcuts
+          </div>
+          {SHORTCUTS.map((s) => (
+            <div
+              key={s.keys}
+              className="flex items-center justify-between gap-2 text-[11px]"
+            >
+              <span className="text-white/80">{s.action}</span>
+              <kbd className="font-mono tabular-nums text-white bg-white/10 rounded px-1.5 py-0.5 whitespace-nowrap">
+                {s.keys}
+              </kbd>
+            </div>
+          ))}
         </div>
       )}
     </div>
