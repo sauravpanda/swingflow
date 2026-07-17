@@ -494,6 +494,10 @@ export type PoseOverlayHandle = {
 type PoseOverlayProps = {
   videoRef: React.RefObject<HTMLVideoElement | null>;
   playing: boolean;
+  // Mirrors the overlay's lifecycle status up to the parent so the
+  // toolbar toggle can show loading/error instead of claiming the
+  // overlay is on while nothing draws.
+  onStatusChange?: (status: Status) => void;
 };
 
 // Loading state surfaced to the parent so the toggle button can
@@ -504,12 +508,15 @@ type Status = "off" | "loading" | "active" | "error";
 const STORAGE_KEY = "swingflow:pose-overlay-enabled";
 
 export const PoseOverlay = forwardRef<PoseOverlayHandle, PoseOverlayProps>(
-  function PoseOverlay({ videoRef, playing }, ref) {
+  function PoseOverlay({ videoRef, playing, onStatusChange }, ref) {
     const [enabled, setEnabledState] = useState<boolean>(() => {
       if (typeof window === "undefined") return false;
       return window.localStorage.getItem(STORAGE_KEY) === "true";
     });
     const [status, setStatus] = useState<Status>("off");
+    useEffect(() => {
+      onStatusChange?.(status);
+    }, [status, onStatusChange]);
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const landmarkerRef = useRef<PoseLandmarker | null>(null);
     const rafRef = useRef<number | null>(null);
