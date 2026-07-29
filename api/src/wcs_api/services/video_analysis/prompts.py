@@ -21,6 +21,17 @@ from .response_sanitizer import _sanitize_user_field
 # below already model the convention.
 
 
+# Version stamp for the scoring prompt. Stored inside every
+# analysis's result jsonb (result.analysis_meta.prompt_version) so
+# score distributions are comparable across prompt revisions — without
+# this, a rubric edit silently mixes old- and new-prompt scores in
+# every trend chart and calibration query.
+#
+# BUMP THIS whenever a change to this file could shift what the model
+# emits: rubric wording, schema fields, calibration anchors, example
+# changes. Formatting-only edits (comments, whitespace) don't count.
+PROMPT_VERSION = "v1"
+
 # Song-style labels we recognize from user-supplied tags. Keys are the
 # lowercased tokens we match against; values are the canonical label
 # we surface in the UI and hand to the prompt. `mix` is deliberately

@@ -39,6 +39,7 @@ from .media_context import (
 from .prompts import (
     GEMINI_VIDEO_PROMPT,
     PATTERN_SEGMENTATION_PROMPT,
+    PROMPT_VERSION,
     _build_sanity_retry_prompt,
     _build_user_context,
     _format_pattern_timeline,
@@ -508,6 +509,7 @@ def analyze_video_path(
         beat_grid=beat_grid,
         beat_grid_error=beat_grid_error,
         user_song_style=user_song_style,
+        prompt_version=PROMPT_VERSION,
     )
 
 
