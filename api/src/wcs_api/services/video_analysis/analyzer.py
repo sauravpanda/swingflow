@@ -39,6 +39,7 @@ from .media_context import (
 from .prompts import (
     GEMINI_VIDEO_PROMPT,
     PATTERN_SEGMENTATION_PROMPT,
+    PROMPT_VERSION,
     _build_sanity_retry_prompt,
     _build_user_context,
     _format_pattern_timeline,
@@ -211,6 +212,11 @@ def analyze_video_path(
     total_response_tokens = 0
 
     sanity_warnings: list[str] = []
+    # Whether the corrective retry call actually fired — distinct from
+    # sanity_warnings, which holds only the RESIDUAL issues. A retry
+    # that fully fixed the response leaves warnings empty but must
+    # still be recorded (it cost a call and shaped the result).
+    sanity_retry_attempted = False
 
     try:
         # Poll until the file is ACTIVE on Gemini's side. Inside the
@@ -439,6 +445,7 @@ def analyze_video_path(
                 dance_start_sec=dance_start_sec,
                 dance_end_sec=dance_end_sec,
             )
+            sanity_retry_attempted = True
             try:
                 # Preserve the full original prompt context on retry:
                 # user metadata, beat context, motion-floor note, and
@@ -491,7 +498,7 @@ def analyze_video_path(
             settings.gemini_model, total_prompt_tokens, total_response_tokens
         ),
         "pricing_updated_on": pricing_updated_on(),
-        "sanity_retry": bool(sanity_warnings),
+        "sanity_retry": sanity_retry_attempted,
     }
 
     from .prompts import extract_song_style_from_tags
@@ -508,6 +515,8 @@ def analyze_video_path(
         beat_grid=beat_grid,
         beat_grid_error=beat_grid_error,
         user_song_style=user_song_style,
+        prompt_version=PROMPT_VERSION,
+        sanity_retry_attempted=sanity_retry_attempted,
     )
 
 

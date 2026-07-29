@@ -207,3 +207,75 @@ def test_merge_unique_preserves_primary_order_unchanged():
     primary = ["x", "y"]
     fallback = ["z"]
     assert _merge_unique(primary, fallback) == ["x", "y", "z"]
+
+
+# ─── _shape_response: analysis_meta provenance stamp ────────────────
+
+
+def _minimal_parsed() -> dict:
+    return {
+        "timing": {"score": 6.0},
+        "technique": {"score": 6.0},
+        "teamwork": {"score": 6.0},
+        "presentation": {"score": 6.0},
+    }
+
+
+def test_shape_response_stamps_prompt_version_and_retry_flag():
+    from wcs_api.services.video_analysis.response_sanitizer import (
+        _shape_response,
+    )
+
+    shaped = _shape_response(
+        _minimal_parsed(),
+        sanity_warnings=["patterns before dance_start"],
+        prompt_version="v-test",
+        sanity_retry_attempted=True,
+    )
+    assert shaped["analysis_meta"] == {
+        "prompt_version": "v-test",
+        "sanity_retry": True,
+    }
+
+
+def test_shape_response_records_fully_successful_retry():
+    # A retry that fixed every issue leaves sanity_warnings empty but
+    # must still be stamped — it fired a corrective call and shaped
+    # the result. Deriving the flag from residual warnings (the old
+    # behavior) records exactly the successful case as False.
+    from wcs_api.services.video_analysis.response_sanitizer import (
+        _shape_response,
+    )
+
+    shaped = _shape_response(
+        _minimal_parsed(),
+        sanity_warnings=[],
+        prompt_version="v-test",
+        sanity_retry_attempted=True,
+    )
+    assert shaped["analysis_meta"]["sanity_retry"] is True
+    assert shaped["sanity_warnings"] == []
+
+
+def test_shape_response_meta_defaults_without_retry():
+    from wcs_api.services.video_analysis.response_sanitizer import (
+        _shape_response,
+    )
+
+    shaped = _shape_response(_minimal_parsed())
+    assert shaped["analysis_meta"]["sanity_retry"] is False
+    assert shaped["analysis_meta"]["prompt_version"] is None
+
+
+def test_analyzer_passes_real_prompt_version():
+    # The analyzer must forward prompts.PROMPT_VERSION — guard against
+    # the stamp silently going stale if the call site is refactored.
+    import inspect
+
+    from wcs_api.services.video_analysis import analyzer
+    from wcs_api.services.video_analysis.prompts import PROMPT_VERSION
+
+    src = inspect.getsource(analyzer)
+    assert "prompt_version=PROMPT_VERSION" in src
+    assert "sanity_retry_attempted=sanity_retry_attempted" in src
+    assert PROMPT_VERSION  # non-empty
