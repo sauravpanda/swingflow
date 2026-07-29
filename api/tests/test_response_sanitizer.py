@@ -279,3 +279,84 @@ def test_analyzer_passes_real_prompt_version():
     assert "prompt_version=PROMPT_VERSION" in src
     assert "sanity_retry_attempted=sanity_retry_attempted" in src
     assert PROMPT_VERSION  # non-empty
+
+
+# ─── score_low/high enforcement + technique reconciliation ──────────
+
+
+def test_coerce_category_widens_inverted_bounds():
+    from wcs_api.services.video_analysis.response_sanitizer import (
+        _coerce_category,
+    )
+
+    cat = _coerce_category(
+        {"score": 6.0, "score_low": 7.0, "score_high": 5.0}
+    )
+    # The point estimate is the committed answer; the interval widens
+    # to include it rather than rendering as a nonsense band.
+    assert cat["score_low"] <= cat["score"] <= cat["score_high"]
+    assert cat["score_low"] == 6.0
+    assert cat["score_high"] == 6.0
+
+
+def test_coerce_category_keeps_valid_bounds():
+    from wcs_api.services.video_analysis.response_sanitizer import (
+        _coerce_category,
+    )
+
+    cat = _coerce_category(
+        {"score": 6.0, "score_low": 5.5, "score_high": 7.0}
+    )
+    assert cat["score_low"] == 5.5
+    assert cat["score_high"] == 7.0
+
+
+def _parsed_with_technique(score: float, subs: float) -> dict:
+    return {
+        "timing": {"score": 6.0},
+        "technique": {
+            "score": score,
+            "posture": {"score": subs},
+            "extension": {"score": subs},
+            "footwork": {"score": subs},
+            "slot": {"score": subs},
+        },
+        "teamwork": {"score": 6.0},
+        "presentation": {"score": 6.0},
+    }
+
+
+def test_technique_subscore_divergence_warns():
+    from wcs_api.services.video_analysis.response_sanitizer import (
+        _shape_response,
+    )
+
+    shaped = _shape_response(_parsed_with_technique(7.5, 5.0))
+    assert any(
+        "diverges from its own sub-scores" in w
+        for w in shaped["sanity_warnings"]
+    )
+
+
+def test_technique_subscore_agreement_stays_silent():
+    from wcs_api.services.video_analysis.response_sanitizer import (
+        _shape_response,
+    )
+
+    shaped = _shape_response(_parsed_with_technique(6.0, 5.5))
+    assert not any(
+        "diverges" in w for w in shaped["sanity_warnings"]
+    )
+
+
+def test_prompt_anchors_are_role_neutral():
+    # House rule: never gendered pronouns anywhere the model reads.
+    import re
+
+    from wcs_api.services.video_analysis.prompts import SYSTEM_PROMPT
+
+    banned = re.compile(
+        r"\b(he|she|him|her|his|hers|man's|woman's|ladies|gentlemen)\b",
+        re.IGNORECASE,
+    )
+    assert not banned.search(SYSTEM_PROMPT)
