@@ -247,9 +247,16 @@ async def get_analysis_eval_row(analysis_ref: str) -> dict[str, Any] | None:
 
     Accepts either the row UUID or the original filename / clip id.
     Returns the stored result blob plus basic identifiers so CLI
-    tooling can print clear output.
+    tooling can print clear output. Also carries object_key + the
+    user-context columns so the score-consistency eval can re-run
+    the stored clip through the analyzer with the same metadata the
+    original run saw.
     """
-    select = "id,filename,result,created_at"
+    select = (
+        "id,filename,result,created_at,object_key,duration,"
+        "role,competition_level,event_name,event_date,stage,tags,"
+        "dancer_description"
+    )
     # video_analyses.id is a uuid column — PostgREST returns 400 if we
     # filter it with a non-UUID string, which would shadow the filename
     # fallback the CLI relies on for clip-name refs like IMG_9577.
@@ -299,6 +306,36 @@ async def get_pattern_labels(analysis_id: str) -> list[dict[str, Any]]:
                     "count,source,notes,updated_at"
                 ),
                 "order": "start_time.asc",
+            },
+        )
+        r.raise_for_status()
+        rows = r.json()
+        return rows if isinstance(rows, list) else []
+
+
+async def list_consented_reviews(limit: int = 500) -> list[dict[str, Any]]:
+    """Service-role read of submitted peer reviews whose reviewer opted
+    into training use. This is the first consumer of the
+    peer_reviews_training_idx partial index (schema.sql) — the rows
+    carry the human 4-T scores alongside ai_result_snapshot, the AI
+    result frozen at review time, so the (human, AI) pair can't be
+    desynced by a later re-analysis. Used by the score-calibration
+    eval (wcs_api.evals.scores).
+    """
+    async with httpx.AsyncClient(timeout=15) as client:
+        r = await client.get(
+            _rest("peer_reviews"),
+            headers=_headers(),
+            params={
+                "select": (
+                    "id,analysis_id,reviewer_role,submitted_at,"
+                    "timing_score,technique_score,teamwork_score,"
+                    "presentation_score,ai_result_snapshot"
+                ),
+                "submitted_at": "not.is.null",
+                "training_consent": "is.true",
+                "order": "submitted_at.desc",
+                "limit": str(limit),
             },
         )
         r.raise_for_status()
