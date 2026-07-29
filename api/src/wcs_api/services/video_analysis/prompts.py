@@ -30,7 +30,7 @@ from .response_sanitizer import _sanitize_user_field
 # BUMP THIS whenever a change to this file could shift what the model
 # emits: rubric wording, schema fields, calibration anchors, example
 # changes. Formatting-only edits (comments, whitespace) don't count.
-PROMPT_VERSION = "v1"
+PROMPT_VERSION = "v2"  # v2: per-category behavioral score anchors
 
 # Song-style labels we recognize from user-supplied tags. Keys are the
 # lowercased tokens we match against; values are the canonical label
@@ -233,12 +233,71 @@ SCORING RULES
    who declared Champion should be scored against Novice expectations with \
    a note that they're over-declared.
 
-6. **Score scale 1–10:**
-   - 1–3: Foundational issues (off-time, no frame, broken partnership)
-   - 4–5: Basics present but inconsistent
-   - 6–7: Solid with room for improvement
-   - 8–9: Polished and consistent at division tier
-   - 10: Exceptional, at-or-beyond division ceiling
+6. **Score scale 1–10, anchored per category.** The anchors below \
+   describe OBSERVED BEHAVIOR on an absolute WCS skill continuum — \
+   the division-typical ranges above tell you where each division \
+   usually lands on it. Match the video to the closest anchor first, \
+   then interpolate (a 6 sits between the 5 and 7 descriptions; use \
+   the division ranges to break ties, never to override what you saw).
+
+   **Timing & Rhythm**
+   - 3: Repeatedly off the music's beat — weight changes land between \
+     beats for whole phrases; triples collapse into two steps; the \
+     anchor leaves before count 6; the partners' pulses visibly disagree.
+   - 5: On beat through most basics, but timing degrades under load — \
+     turns and redirections rush ahead of the pulse, anchors clip early \
+     on roughly a quarter of patterns, triples land but even-weighted \
+     ("flat") rather than articulated.
+   - 7: Secure shared pulse through the full pattern vocabulary and \
+     tempo shifts; anchors settle through 5-and-6; triples show three \
+     distinct weight changes; the residual flaw is an occasional rushed \
+     exit at speed.
+   - 9: Rhythm is a tool, not a task — deliberate syncopations, delays, \
+     and double-time phrases that resolve back onto the partnership's \
+     shared pulse cleanly; the pair plays with the beat without ever \
+     losing it.
+
+   **Technique**
+   - 3: Posture collapses forward; steps land flat-footed; no visible \
+     stretch at the anchor; frame comes from gripping arms; turns end \
+     off balance.
+   - 5: Neutral spine most of the time but it breaks during turns or \
+     stretch; heel-toe roll on basics that flattens at speed; anchor \
+     stretch appears inconsistently; occasional post-turn wobble.
+   - 7: Consistent posture and rolling footwork across the vocabulary; \
+     visible stretch through the slot and settled anchors; turns finish \
+     balanced; remaining flaws are refinement-level (extension shortens \
+     at speed, toe-heel choices).
+   - 9: Controlled body flight at every tempo — clean spirals and \
+     pivots, full extension without frame distortion, footwork \
+     precision preserved through styling and syncopations.
+
+   **Teamwork**
+   - 3: Connection drops or turns into pulling and pushing; one partner \
+     visibly late or guessing; mismatches cause full stops.
+   - 5: Stable elastic connection on standard patterns; compression and \
+     leverage read correctly at moderate complexity; recoveries happen \
+     but visibly; the conversation is mostly one-directional.
+   - 7: A continuous shared-weight conversation — invitations offered \
+     and answered; the follow authors moments through the connection \
+     that mesh with the lead's phrase; recoveries are nearly invisible.
+   - 9: The partnership reads as one organism — counter-balance and \
+     shared momentum through complex shapes; either partner can \
+     redirect mid-pattern and the other absorbs it seamlessly; a \
+     mismatch is indistinguishable from choreography.
+
+   **Presentation**
+   - 3: Eyes down; movement noise without intent; no visible \
+     relationship to the music's phrasing or dynamics.
+   - 5: Confident execution with some styling, but the styling sits \
+     alongside the music rather than expressing it; phrase changes \
+     pass unmarked.
+   - 7: Musical interpretation is visible — hits caught, dynamics \
+     matched (smooth vs. sharp), styling reads as chosen; phrase tops \
+     acknowledged.
+   - 9: Commands attention — micro- and macro-musicality (individual \
+     hits AND phrase-level arcs), contrast deployed deliberately, \
+     presence projecting to the room without breaking the partnership.
 
 ═══════════════════════════════════════════════════════════════
 OUTPUT DISCIPLINE

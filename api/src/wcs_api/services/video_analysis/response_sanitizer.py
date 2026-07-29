@@ -1072,6 +1072,15 @@ def _coerce_category(cat: Any) -> dict[str, Any]:
         out["score_low"] = _coerce_score(cat.get("score_low"), default=out["score"])
     if "score_high" in cat:
         out["score_high"] = _coerce_score(cat.get("score_high"), default=out["score"])
+    # The prompt asks for score_low <= score <= score_high but nothing
+    # enforced it, so an inverted interval rendered as a nonsense
+    # uncertainty band. Widen the bounds to include the score — the
+    # point estimate is the model's committed answer; the interval is
+    # commentary on it.
+    if "score_low" in out and out["score_low"] > out["score"]:
+        out["score_low"] = out["score"]
+    if "score_high" in out and out["score_high"] < out["score"]:
+        out["score_high"] = out["score"]
     # Nested sub-scores on technique; shape is {score, notes}.
     for sub_key in ("posture", "extension", "footwork", "slot"):
         sub = cat.get(sub_key)
@@ -1176,6 +1185,31 @@ def _shape_response(
             "pattern from the video. Treat the pattern labels as "
             "low-confidence."
         )
+
+    # Internal-consistency check: technique.score is model-emitted
+    # independently of its own posture/extension/footwork/slot
+    # sub-scores, so nothing stopped a 7.5 technique sitting on
+    # sub-scores averaging 5.0. We don't overwrite the score (the
+    # category score legitimately weighs more than four sub-axes),
+    # but a divergence past 1.5 points means one of the two is
+    # unreliable — surface it.
+    technique = categories.get("technique") or {}
+    sub_scores = [
+        technique[key]["score"]
+        for key in ("posture", "extension", "footwork", "slot")
+        if isinstance(technique.get(key), dict)
+        and isinstance(technique[key].get("score"), (int, float))
+    ]
+    if sub_scores and isinstance(technique.get("score"), (int, float)):
+        sub_mean = sum(sub_scores) / len(sub_scores)
+        divergence = abs(float(technique["score"]) - sub_mean)
+        if divergence > 1.5:
+            extra_warnings.append(
+                f"Technique score ({float(technique['score']):.1f}) "
+                f"diverges from its own sub-scores (posture/extension/"
+                f"footwork/slot average {sub_mean:.1f}) — treat the "
+                "technique number as low-confidence."
+            )
 
     # Subject tracking + multi-couple drift detection. On crowded
     # floors the model sometimes slides its focus from the intended
