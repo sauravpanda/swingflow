@@ -230,11 +230,31 @@ def test_shape_response_stamps_prompt_version_and_retry_flag():
         _minimal_parsed(),
         sanity_warnings=["patterns before dance_start"],
         prompt_version="v-test",
+        sanity_retry_attempted=True,
     )
     assert shaped["analysis_meta"] == {
         "prompt_version": "v-test",
         "sanity_retry": True,
     }
+
+
+def test_shape_response_records_fully_successful_retry():
+    # A retry that fixed every issue leaves sanity_warnings empty but
+    # must still be stamped — it fired a corrective call and shaped
+    # the result. Deriving the flag from residual warnings (the old
+    # behavior) records exactly the successful case as False.
+    from wcs_api.services.video_analysis.response_sanitizer import (
+        _shape_response,
+    )
+
+    shaped = _shape_response(
+        _minimal_parsed(),
+        sanity_warnings=[],
+        prompt_version="v-test",
+        sanity_retry_attempted=True,
+    )
+    assert shaped["analysis_meta"]["sanity_retry"] is True
+    assert shaped["sanity_warnings"] == []
 
 
 def test_shape_response_meta_defaults_without_retry():
@@ -257,4 +277,5 @@ def test_analyzer_passes_real_prompt_version():
 
     src = inspect.getsource(analyzer)
     assert "prompt_version=PROMPT_VERSION" in src
+    assert "sanity_retry_attempted=sanity_retry_attempted" in src
     assert PROMPT_VERSION  # non-empty

@@ -1094,6 +1094,7 @@ def _shape_response(
     beat_grid_error: str | None = None,
     user_song_style: str | None = None,
     prompt_version: str | None = None,
+    sanity_retry_attempted: bool = False,
 ) -> dict[str, Any]:
     """Map Gemini's rich response into the API's return shape.
 
@@ -1263,10 +1264,13 @@ def _shape_response(
         # the DB insert — cost data stays admin-only), this block is
         # deliberately kept INSIDE the stored result jsonb so any
         # calibration/eval query can group scores by prompt revision
-        # and see whether a sanity retry shaped the run.
+        # and see whether a sanity retry shaped the run. sanity_retry
+        # records that the corrective call FIRED — not whether issues
+        # remain (that's sanity_warnings): a retry that fully fixed
+        # the response must still be attributable.
         "analysis_meta": {
             "prompt_version": prompt_version,
-            "sanity_retry": bool(sanity_warnings),
+            "sanity_retry": sanity_retry_attempted,
         },
         "usage": usage,
     }
