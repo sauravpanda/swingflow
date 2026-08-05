@@ -33,12 +33,18 @@ export function SidebarNav() {
   const { user, signOut } = useUser();
   const [signingOut, setSigningOut] = useState(false);
 
+  const [signOutError, setSignOutError] = useState(false);
   const handleSignOut = async () => {
     setSigningOut(true);
+    setSignOutError(false);
     try {
       await signOut();
-    } finally {
       router.replace("/login");
+    } catch {
+      // Navigating anyway would show the login screen while the
+      // session may still be alive — stay put and say it failed.
+      setSigningOut(false);
+      setSignOutError(true);
     }
   };
 
@@ -97,6 +103,11 @@ export function SidebarNav() {
           )}
           Sign out
         </button>
+        {signOutError && (
+          <p className="px-3 pt-1 text-xs text-destructive">
+            Sign-out failed — check your connection and try again.
+          </p>
+        )}
       </div>
     </aside>
   );

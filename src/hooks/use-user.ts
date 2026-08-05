@@ -72,7 +72,11 @@ export function useUser() {
 
   const signOut = useCallback(async () => {
     const sb = getSupabase();
-    await sb.auth.signOut();
+    // supabase-js reports failures via the return value, not by
+    // throwing — surface them so callers don't redirect to /login
+    // pretending the sign-out worked when the session may persist.
+    const { error } = await sb.auth.signOut();
+    if (error) throw error;
   }, []);
 
   return {
