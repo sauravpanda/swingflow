@@ -18,16 +18,23 @@ export default function SettingsPage() {
   const { user, signOut } = useUser();
   const router = useRouter();
   const [signingOut, setSigningOut] = useState(false);
+  const [signOutError, setSignOutError] = useState(false);
   // Reset feedback: before this banner existed, a successful reset
   // looked identical to a no-op (analyses live in the account, so a
   // user who hadn't touched the practice features saw nothing change
   // after the reload and reasonably concluded the button was broken).
-  const [justReset] = useState<boolean>(() => {
-    if (typeof window === "undefined") return false;
-    return !!window.sessionStorage.getItem(RESET_FLAG);
-  });
+  //
+  // Read the flag in an effect, not a lazy initializer: the server
+  // prerender has no sessionStorage, so an initializer would hydrate
+  // a different tree (banner present client-side, absent in server
+  // HTML) and React 19 logs a mismatch error.
+  const [justReset, setJustReset] = useState(false);
   useEffect(() => {
-    window.sessionStorage.removeItem(RESET_FLAG);
+    if (window.sessionStorage.getItem(RESET_FLAG)) {
+      window.sessionStorage.removeItem(RESET_FLAG);
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- client-only sessionStorage flag can't be read during SSR render; one post-mount pass is the hydration-safe pattern
+      setJustReset(true);
+    }
   }, []);
 
   const handleClearData = () => {
@@ -53,10 +60,13 @@ export default function SettingsPage() {
 
   const handleSignOut = async () => {
     setSigningOut(true);
+    setSignOutError(false);
     try {
       await signOut();
-    } finally {
       router.replace("/login");
+    } catch {
+      setSigningOut(false);
+      setSignOutError(true);
     }
   };
 
@@ -107,6 +117,11 @@ export default function SettingsPage() {
             )}
             Sign out
           </Button>
+          {signOutError && (
+            <p className="w-full text-xs text-destructive">
+              Sign-out failed — check your connection and try again.
+            </p>
+          )}
         </CardContent>
       </Card>
 
