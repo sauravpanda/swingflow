@@ -7,6 +7,7 @@ import {
   Timer,
   Music,
   Video,
+  Settings,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -15,6 +16,9 @@ const mobileNavItems = [
   { href: "/rhythm", label: "Rhythm", icon: Music },
   { href: "/analyze", label: "Analyze", icon: Video },
   { href: "/practice", label: "Practice", icon: Timer },
+  // Settings was unreachable on phones (no sidebar there) — which
+  // also made Sign out unreachable, since it lives in Settings.
+  { href: "/settings", label: "Settings", icon: Settings },
 ];
 
 export function MobileNav() {
