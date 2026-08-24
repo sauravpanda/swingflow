@@ -21,43 +21,18 @@ function rateDelta(ms: number): TapRating {
 
 export function useTapTracker(
   audioContextRef: RefObject<AudioContext | null>,
-  scheduledBeatsRef: RefObject<ScheduledBeat[]>
+  scheduledBeatsRef: RefObject<ScheduledBeat[]>,
+  // When populated, taps are graded against these beats (real beats of a
+  // loaded song, in AudioContext time) instead of the metronome's clock.
+  songBeatsRef?: RefObject<ScheduledBeat[]>
 ) {
   const [results, setResults] = useState<TapResult[]>([]);
 
-  const playFeedback = useCallback(
-    (rating: TapRating) => {
-      const ctx = audioContextRef.current;
-      if (!ctx) return;
-
-      const freqMap: Record<TapRating, number> = {
-        perfect: 1200,
-        good: 900,
-        ok: 600,
-        miss: 300,
-      };
-
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-
-      osc.frequency.value = freqMap[rating];
-      osc.type = "sine";
-
-      const now = ctx.currentTime;
-      gain.gain.setValueAtTime(0.15, now);
-      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.08);
-
-      osc.start(now);
-      osc.stop(now + 0.08);
-    },
-    [audioContextRef]
-  );
-
   const handleTap = useCallback(() => {
     const ctx = audioContextRef.current;
-    const beats = scheduledBeatsRef.current;
+    const beats = songBeatsRef?.current?.length
+      ? songBeatsRef.current
+      : scheduledBeatsRef.current;
     if (!ctx || beats.length === 0) return;
 
     const tapTime = ctx.currentTime;
@@ -78,9 +53,9 @@ export function useTapTracker(
     const signedDeltaMs = (tapTime - nearestBeat.time) * 1000; // negative = early
     const rating = rateDelta(deltaMs);
 
-    playFeedback(rating);
-
-    // Haptic feedback
+    // Haptic feedback only — no audio. Rating tones over the music (or even
+    // the bare metronome) were more distracting than helpful; the tap area
+    // gives visual feedback instead.
     if (typeof navigator !== "undefined" && navigator.vibrate) {
       navigator.vibrate(HAPTIC_PATTERNS[rating]);
     }
@@ -96,7 +71,7 @@ export function useTapTracker(
     setResults((prev) => [result, ...prev].slice(0, 50));
 
     return result;
-  }, [audioContextRef, scheduledBeatsRef, playFeedback]);
+  }, [audioContextRef, scheduledBeatsRef, songBeatsRef]);
 
   const getAccuracyPercent = useCallback(() => {
     if (results.length === 0) return 0;

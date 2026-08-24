@@ -1,13 +1,25 @@
 "use client";
 
-import { useEffect, useCallback } from "react";
+import { useEffect, useCallback, useState, useRef } from "react";
 import { cn } from "@/lib/utils";
 import {
   type TapResult,
+  type TapRating,
   type SubdivisionIndex,
   SUBDIVISION_LABELS,
   RATING_COLORS,
 } from "@/lib/rhythm-constants";
+
+// Brief full-area flash per rating — the audible feedback tones were removed
+// (they played over the music), so the flash carries the instant feedback.
+const FLASH_CLASSES: Record<TapRating, string> = {
+  perfect: "bg-emerald-400/20 border-emerald-400 border-solid",
+  good: "bg-blue-400/20 border-blue-400 border-solid",
+  ok: "bg-yellow-400/20 border-yellow-400 border-solid",
+  miss: "bg-red-400/20 border-red-400 border-solid",
+};
+
+const FLASH_DURATION_MS = 180;
 
 type TapAreaProps = {
   results: TapResult[];
@@ -26,12 +38,26 @@ export function TapArea({
   onTargetHit,
   challengeLabel,
 }: TapAreaProps) {
+  const [flash, setFlash] = useState<TapRating | null>(null);
+  const flashTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const handleTap = useCallback(() => {
     const result = onTap();
+    if (result) {
+      setFlash(result.rating);
+      if (flashTimerRef.current) clearTimeout(flashTimerRef.current);
+      flashTimerRef.current = setTimeout(() => setFlash(null), FLASH_DURATION_MS);
+    }
     if (result && targetSubdivision != null && onTargetHit) {
       onTargetHit(result);
     }
   }, [onTap, targetSubdivision, onTargetHit]);
+
+  useEffect(() => {
+    return () => {
+      if (flashTimerRef.current) clearTimeout(flashTimerRef.current);
+    };
+  }, []);
 
   // Keyboard support
   useEffect(() => {
@@ -86,8 +112,9 @@ export function TapArea({
           "w-full min-h-[200px] rounded-xl border-2 border-dashed border-border",
           "flex flex-col items-center justify-center gap-2",
           "select-none touch-none cursor-pointer",
-          "transition-colors active:bg-primary/10 active:border-primary",
-          "hover:border-muted-foreground/50"
+          "transition-colors duration-150",
+          "hover:border-muted-foreground/50",
+          flash && FLASH_CLASSES[flash]
         )}
       >
         {lastResult ? (

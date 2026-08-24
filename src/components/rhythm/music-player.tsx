@@ -27,6 +27,7 @@ type MusicPlayerProps = {
   onLoadFile: (file: File) => void;
   onLoadUrl: (url: string) => void;
   onUnload: () => void;
+  onSeek: (seconds: number) => void;
   onVolumeChange: (v: number) => void;
   onBpmSelect: (bpm: number) => void;
   muteClicks: boolean;
@@ -59,6 +60,7 @@ export function MusicPlayer({
   onLoadFile,
   onLoadUrl,
   onUnload,
+  onSeek,
   onVolumeChange,
   onBpmSelect,
   muteClicks,
@@ -69,6 +71,17 @@ export function MusicPlayer({
 }: MusicPlayerProps) {
   const [urlInput, setUrlInput] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
+  // Position being dragged on the scrubber; null when not dragging. The
+  // seek only fires on release so we don't restart the source every pixel.
+  const [scrubTime, setScrubTime] = useState<number | null>(null);
+
+  // Drop an in-flight drag when playback stops (render-time state
+  // adjustment — the drag's commit never fires once the slider disables).
+  const [wasPlaying, setWasPlaying] = useState(playerState.isPlaying);
+  if (wasPlaying !== playerState.isPlaying) {
+    setWasPlaying(playerState.isPlaying);
+    if (!playerState.isPlaying) setScrubTime(null);
+  }
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -106,14 +119,32 @@ export function MusicPlayer({
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
-          {/* File info */}
-          <div className="flex items-center justify-between text-sm">
-            <span className="text-muted-foreground truncate max-w-[200px]">
+          {/* File info + transport */}
+          <div className="space-y-2">
+            <div className="text-sm text-muted-foreground truncate">
               {playerState.fileName}
-            </span>
-            <span className="text-muted-foreground tabular-nums">
-              {formatDuration(playerState.duration)}
-            </span>
+            </div>
+            <Slider
+              value={[scrubTime ?? playerState.currentTime]}
+              min={0}
+              max={Math.max(playerState.duration, 0.1)}
+              step={0.1}
+              disabled={!playerState.isPlaying}
+              onValueChange={([v]) => setScrubTime(v)}
+              onValueCommit={([v]) => {
+                setScrubTime(null);
+                onSeek(v);
+              }}
+            />
+            <div className="flex items-center justify-between text-xs text-muted-foreground tabular-nums">
+              <span>
+                {formatDuration(scrubTime ?? playerState.currentTime)}
+              </span>
+              <span className="font-normal">
+                {playerState.isPlaying ? "drag to jump" : "press Start to play"}
+              </span>
+              <span>{formatDuration(playerState.duration)}</span>
+            </div>
           </div>
 
           {/* Detected BPM */}
@@ -188,47 +219,48 @@ export function MusicPlayer({
             </div>
           )}
 
-          {/* Precise analysis (cloud, librosa) */}
+          {/* Precise beat analysis (cloud, librosa) — runs automatically on
+              upload; the button only shows as a retry after a failure. */}
           {analysisState && onAnalyzePrecise && (
             <div className="space-y-2">
               <Separator />
-              {analysisState.status === "idle" && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-8 w-full"
-                  onClick={onAnalyzePrecise}
-                  disabled={disabled}
-                >
-                  <Sparkles className="mr-2 h-3.5 w-3.5" />
-                  Analyze precisely (cloud)
-                </Button>
-              )}
-              {analysisState.status === "loading" && (
+              {(analysisState.status === "idle" ||
+                analysisState.status === "loading") && (
                 <div className="flex items-center justify-center gap-2 py-1 text-xs text-muted-foreground">
                   <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  Analyzing (~5s)…
+                  Finding the beat… (~5s)
                 </div>
               )}
               {analysisState.status === "success" && analysisState.result && (
                 <div className="space-y-0.5 text-xs text-muted-foreground">
                   <div>
                     <span className="font-semibold text-foreground">
-                      Precise BPM:
+                      Synced to song
                     </span>{" "}
-                    <span className="font-mono">
-                      {Math.round(analysisState.result.bpm)}
-                    </span>
+                    · <span className="font-mono">{Math.round(analysisState.result.bpm)}</span> BPM
                   </div>
                   <div>
                     {analysisState.result.downbeats.length} downbeats ·{" "}
                     {analysisState.result.phrases.length} × 8-count phrases ·{" "}
                     {analysisState.result.anchor_beats.length} anchors
                   </div>
+                  <div>Taps in Tap mode are graded against these beats.</div>
                 </div>
               )}
               {analysisState.status === "error" && (
-                <p className="text-xs text-destructive">{analysisState.error}</p>
+                <div className="space-y-2">
+                  <p className="text-xs text-destructive">{analysisState.error}</p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8 w-full"
+                    onClick={onAnalyzePrecise}
+                    disabled={disabled}
+                  >
+                    <Sparkles className="mr-2 h-3.5 w-3.5" />
+                    Retry beat analysis
+                  </Button>
+                </div>
               )}
             </div>
           )}
@@ -247,13 +279,14 @@ export function MusicPlayer({
           </div>
 
           {/* Metronome click toggle — prominent so users find it.
-              Auto-defaults to muted when a song is loaded. */}
+              Auto-defaults to muted when a song is loaded. Deliberately never
+              disabled: the scheduler reads the flag live, so toggling the
+              click on or off mid-song works and should stay available. */}
           <Button
             variant="outline"
             size="sm"
             className="h-9 w-full justify-start"
             onClick={onMuteClicksToggle}
-            disabled={disabled}
           >
             {muteClicks ? (
               <BellOff className="mr-2 h-4 w-4" />

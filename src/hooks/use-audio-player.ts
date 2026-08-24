@@ -35,6 +35,10 @@ export function useAudioPlayer() {
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [volume, setVolumeState] = useState(0.8);
+  // Bumped every time playback (re)starts or seeks, i.e. whenever the
+  // song-time → context-time mapping changes. Lets effects that depend on
+  // that mapping know to recompute.
+  const [playbackEpoch, setPlaybackEpoch] = useState(0);
 
   const audioBufferRef = useRef<AudioBuffer | null>(null);
   const sourceNodeRef = useRef<AudioBufferSourceNode | null>(null);
@@ -152,9 +156,58 @@ export function useAudioPlayer() {
 
       source.start(0);
       setIsPlaying(true);
+      setPlaybackEpoch((e) => e + 1);
       rafRef.current = requestAnimationFrame(updateTime);
     },
     [volume, updateTime, stopRaf]
+  );
+
+  /**
+   * Jump to a position (in seconds) while a song is playing. Buffer sources
+   * are one-shot, so this swaps in a new source at the new offset on the
+   * same AudioContext — the metronome keeps running untouched.
+   */
+  const seek = useCallback(
+    (seconds: number) => {
+      const ctx = playbackContextRef.current;
+      const buffer = audioBufferRef.current;
+      const gain = gainNodeRef.current;
+      if (!ctx || !buffer || !gain) return;
+
+      const offset = Math.max(0, Math.min(seconds, buffer.duration - 0.05));
+
+      if (sourceNodeRef.current) {
+        try {
+          sourceNodeRef.current.onended = null;
+          sourceNodeRef.current.stop();
+          sourceNodeRef.current.disconnect();
+        } catch {
+          // source may already be stopped
+        }
+      }
+
+      const source = ctx.createBufferSource();
+      source.buffer = buffer;
+      source.connect(gain);
+
+      sourceNodeRef.current = source;
+      startTimeRef.current = ctx.currentTime;
+      startOffsetRef.current = offset;
+
+      source.onended = () => {
+        setIsPlaying(false);
+        stopRaf();
+        sourceNodeRef.current = null;
+      };
+
+      source.start(0, offset);
+      setCurrentTime(offset);
+      setIsPlaying(true);
+      setPlaybackEpoch((e) => e + 1);
+      stopRaf();
+      rafRef.current = requestAnimationFrame(updateTime);
+    },
+    [updateTime, stopRaf]
   );
 
   const stop = useCallback(() => {
@@ -186,6 +239,16 @@ export function useAudioPlayer() {
     }
   }, []);
 
+  /**
+   * AudioContext time at which second 0 of the song plays. Lets callers map
+   * song-time events (e.g. analyzed beat timestamps) into context time.
+   * Null when nothing is playing.
+   */
+  const getSongStartContextTime = useCallback(() => {
+    if (!playbackContextRef.current || !sourceNodeRef.current) return null;
+    return startTimeRef.current - startOffsetRef.current;
+  }, []);
+
   const unload = useCallback(() => {
     stop();
     audioBufferRef.current = null;
@@ -213,12 +276,15 @@ export function useAudioPlayer() {
     isPlaying,
     currentTime,
     volume,
+    playbackEpoch,
     // Actions
     loadFile,
     loadUrl,
     play,
+    seek,
     stop,
     setVolume,
     unload,
+    getSongStartContextTime,
   };
 }
