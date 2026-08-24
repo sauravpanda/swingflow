@@ -74,23 +74,24 @@ export function useMetronome() {
 
     // Downbeat = first subdivision of any beat (every 4th subdivision)
     const isDownbeat = subdivisionIndex % 4 === 0;
-    const frequency = isDownbeat ? 1000 : 880;
-    const gain = isDownbeat ? 0.5 : 0.3;
 
+    // Woodblock-style "tock": a sine with a fast downward pitch sweep and a
+    // short decay reads as percussive without the harshness of a square wave.
     const osc = ctx.createOscillator();
     const gainNode = ctx.createGain();
 
     osc.connect(gainNode);
     gainNode.connect(ctx.destination);
 
-    osc.frequency.value = frequency;
-    osc.type = "square";
+    osc.type = "sine";
+    osc.frequency.setValueAtTime(isDownbeat ? 1600 : 1100, time);
+    osc.frequency.exponentialRampToValueAtTime(isDownbeat ? 700 : 500, time + 0.025);
 
-    gainNode.gain.setValueAtTime(gain, time);
-    gainNode.gain.exponentialRampToValueAtTime(0.001, time + 0.03);
+    gainNode.gain.setValueAtTime(isDownbeat ? 0.35 : 0.2, time);
+    gainNode.gain.exponentialRampToValueAtTime(0.001, time + 0.05);
 
     osc.start(time);
-    osc.stop(time + 0.03);
+    osc.stop(time + 0.06);
   }, []);
 
   const scheduler = useCallback(() => {

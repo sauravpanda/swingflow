@@ -13,8 +13,9 @@ import { TimingVisualization } from "@/components/rhythm/timing-visualization";
 import { AccuracyHeatmap } from "@/components/rhythm/accuracy-heatmap";
 import { TempoRampControls } from "@/components/rhythm/tempo-ramp-controls";
 import { MusicPlayer } from "@/components/rhythm/music-player";
-import { useMetronome } from "@/hooks/use-metronome";
+import { useMetronome, type ScheduledBeat } from "@/hooks/use-metronome";
 import { useAudioPlayer } from "@/hooks/use-audio-player";
+import type { MusicAnalysisResult } from "@/lib/wcs-api";
 import { useTapTracker } from "@/hooks/use-tap-tracker";
 import { useAccuracyHistory } from "@/hooks/use-accuracy-history";
 import { useTempoRamp } from "@/hooks/use-tempo-ramp";
@@ -60,6 +61,40 @@ function findCurrentPhrasePosition(
     }
   }
   return { phraseIndex: -1, beatInPhrase: -1 };
+}
+
+/**
+ * Convert cloud-analyzed song beats into ScheduledBeats in AudioContext time
+ * so taps can be graded against the music's real beats — including intros
+ * and tempo drift the free-running metronome can't follow. Each beat is
+ * labeled by its position in the 8-count phrase, mapped onto the active
+ * subdivision grid at quarter-note positions so timing charts still group
+ * taps by beat.
+ */
+function buildSongScheduledBeats(
+  result: MusicAnalysisResult,
+  totalSubdivisions: number,
+  songStartContextTime: number
+): ScheduledBeat[] {
+  const labeled: { time: number; beatInPhrase: number }[] = [];
+  for (const phrase of result.phrases) {
+    phrase.forEach((t, i) => labeled.push({ time: t, beatInPhrase: i }));
+  }
+
+  // Beats before the first phrase (the intro): count backwards from the
+  // first "1" so taps during the intro are still graded fairly.
+  const firstPhraseStart = labeled.length ? labeled[0].time : Infinity;
+  const introBeats = result.beats.filter((t) => t < firstPhraseStart - 1e-3);
+  introBeats.forEach((t, i) => {
+    const beatsUntilOne = introBeats.length - i;
+    labeled.push({ time: t, beatInPhrase: (8 - (beatsUntilOne % 8)) % 8 });
+  });
+  labeled.sort((a, b) => a.time - b.time);
+
+  return labeled.map(({ time, beatInPhrase }) => ({
+    time: songStartContextTime + time,
+    subdivisionIndex: (beatInPhrase * 4) % totalSubdivisions,
+  }));
 }
 
 function getTargetForChallenge(
@@ -114,9 +149,11 @@ export default function RhythmPage() {
   const lastFileRef = useRef<File | null>(null);
   const [hasFile, setHasFile] = useState(false);
   const sharedContextRef = useRef<AudioContext | null>(null);
+  const songBeatsRef = useRef<ScheduledBeat[]>([]);
   const tapTracker = useTapTracker(
     metronome.audioContextRef,
-    metronome.scheduledBeatsRef
+    metronome.scheduledBeatsRef,
+    songBeatsRef
   );
   const accuracyHistory = useAccuracyHistory();
   const tempoRamp = useTempoRamp(metronome.setBpm);
@@ -144,12 +181,46 @@ export default function RhythmPage() {
     }
   }, [musicAnalysis.state.status, musicAnalysis.state.result, metronome.setBpm]);
 
+  // While an analyzed song plays in tap mode, grade taps against the song's
+  // real beats. The metronome starts at second 0 of the file and free-runs,
+  // so it is not phase-aligned with the music — intros and tempo drift put
+  // it out of phase with what the user actually hears. Challenge mode still
+  // grades against the metronome grid (its targets are 16th subdivisions,
+  // finer than the analyzed quarter-note beats).
+  const analysisResult = musicAnalysis.state.result;
+  useEffect(() => {
+    if (mode === "tap" && analysisResult && audioPlayer.isPlaying) {
+      const songStart = audioPlayer.getSongStartContextTime();
+      if (songStart != null) {
+        songBeatsRef.current = buildSongScheduledBeats(
+          analysisResult,
+          metronome.totalSubdivisions,
+          songStart
+        );
+        return;
+      }
+    }
+    songBeatsRef.current = [];
+  }, [
+    mode,
+    analysisResult,
+    audioPlayer.isPlaying,
+    audioPlayer.playbackEpoch,
+    audioPlayer.getSongStartContextTime,
+    metronome.totalSubdivisions,
+  ]);
+
   const handleLoadFile = useCallback(
     (file: File) => {
       lastFileRef.current = file;
       setHasFile(true);
       musicAnalysis.reset();
       audioPlayer.loadFile(file);
+      // Run beat analysis right away — it powers song-synced grading, so it
+      // shouldn't hide behind a button.
+      if (musicAnalysis.isConfigured) {
+        musicAnalysis.analyze(file);
+      }
     },
     [audioPlayer, musicAnalysis]
   );
@@ -303,8 +374,8 @@ export default function RhythmPage() {
 
   // Song-synced phrase visualization — only populated when precise cloud
   // analysis has run on the loaded song.
-  const analysisResult = musicAnalysis.state.result;
   const analyzedPhrases = analysisResult?.phrases ?? [];
+  const songSyncActive = !!analysisResult && audioPlayer.isPlaying;
   const { phraseIndex, beatInPhrase } =
     analysisResult && audioPlayer.isPlaying
       ? findCurrentPhrasePosition(audioPlayer.currentTime, analyzedPhrases)
@@ -383,6 +454,7 @@ export default function RhythmPage() {
         onLoadFile={handleLoadFile}
         onLoadUrl={handleLoadUrl}
         onUnload={handleUnloadFile}
+        onSeek={audioPlayer.seek}
         onVolumeChange={audioPlayer.setVolume}
         onBpmSelect={metronome.setBpm}
         muteClicks={metronome.muteClicks}
@@ -461,6 +533,11 @@ export default function RhythmPage() {
         <TabsContent value="tap" className="space-y-4">
           {metronome.isPlaying ? (
             <>
+              {songSyncActive && (
+                <p className="text-center text-xs text-muted-foreground">
+                  ♪ Taps are graded against the song&apos;s real beats
+                </p>
+              )}
               <TapArea
                 results={tapTracker.results}
                 onTap={handleTapInTapMode}
